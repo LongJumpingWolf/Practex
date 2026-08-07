@@ -24,14 +24,21 @@ just drag-and-drop the HTML file in, no build step needed since it's a single st
 2. Copy the **Project URL** (looks like `https://abcdefghijk.supabase.co`).
 3. Copy the **anon / public** key under "Project API keys" (a long JWT-looking string).
    Do *not* use the `service_role` key — that one must never go in client-side code.
-4. Open `Practex.html`, find this block near the top of the `<script>` section:
+4. In this folder, copy `config.example.js` to a new file named `config.js` (same
+   folder as `index.html`), and fill in your two values:
    ```js
-   var SUPABASE_URL = 'YOUR_SUPABASE_PROJECT_URL';
-   var SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+   window.PRACTEX_CONFIG = {
+     SUPABASE_URL: 'https://abcdefghijk.supabase.co',
+     SUPABASE_ANON_KEY: 'eyJ...'
+   };
    ```
-   Paste your values in. The anon key is safe to ship in client code — it only grants
-   what your Row Level Security policies allow (which is: a user can only ever touch
-   their own rows — see the schema file).
+   `config.js` is deliberately a separate file from `index.html` — set it up once and
+   you never have to touch it again, even if `index.html` gets updated later. The anon
+   key is safe to ship in client code — it only grants what your Row Level Security
+   policies allow (which is: a user can only ever touch their own rows — see the
+   schema file). Make sure `index.html` actually has a
+   `<script src="config.js">` tag before its main script — it's already there if
+   you're using the file as provided.
 
 ## 3. Run the database schema
 

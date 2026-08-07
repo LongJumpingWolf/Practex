@@ -593,17 +593,24 @@ textarea.ingest-area{
 <div id="modalRoot"></div>
 <input type="file" id="importFileInput" accept="application/json,.json" style="display:none">
 
+<!-- config.js sets window.PRACTEX_CONFIG — see config.example.js. This tag is safe to
+     leave in place even before config.js exists; the app just shows a "not configured"
+     message on the sign-in screen if the file (or the browser 404s on it) is missing. -->
+<script src="config.js" onerror="console.warn('config.js not found — copy config.example.js to config.js and fill in your Supabase keys.')"></script>
+
 <script>
 (function(){
 
 /* ================= Supabase config =================
-   Fill these in from your Supabase project dashboard: Settings → API.
-   The anon key is meant to be public/client-side — it only grants whatever your
-   Row Level Security policies allow, so it's safe to ship inside this file.
-   See the setup guide for how to create the project, tables, and Google OAuth. */
-var SUPABASE_URL = 'YOUR_SUPABASE_PROJECT_URL';       // e.g. https://abcdefghijk.supabase.co
-var SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';     // Settings → API → Project API keys → anon public
-var SUPABASE_CONFIGURED = SUPABASE_URL.indexOf('YOUR_SUPABASE') === -1 && SUPABASE_ANON_KEY.indexOf('YOUR_SUPABASE') === -1;
+   Reads from window.PRACTEX_CONFIG, set by config.js (a separate file, not this one —
+   see config.example.js). Keeping config out of this file means re-downloading or
+   editing index.html never wipes out your keys; config.js is the one file you set up
+   once and never touch again. The anon key is meant to be public/client-side — it only
+   grants whatever your Row Level Security policies allow. */
+var _cfg = window.PRACTEX_CONFIG || {};
+var SUPABASE_URL = _cfg.SUPABASE_URL || '';
+var SUPABASE_ANON_KEY = _cfg.SUPABASE_ANON_KEY || '';
+var SUPABASE_CONFIGURED = !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
 var supabaseClient = (SUPABASE_CONFIGURED && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 /* ===================================================== */
 
@@ -3001,9 +3008,9 @@ function renderAuthGateBody(){
   if (!body) return;
   if (!SUPABASE_CONFIGURED) {
     body.innerHTML =
-      '<div class="auth-config-warning">Supabase isn\'t configured yet. Open this file and set ' +
-      '<code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> near the top of the ' +
-      '<code>&lt;script&gt;</code> block — see the setup guide for where to find them.</div>';
+      '<div class="auth-config-warning">Supabase isn\'t configured yet. Copy <code>config.example.js</code> ' +
+      'to <code>config.js</code> in this same folder and fill in your project URL and anon key — see the ' +
+      'setup guide for where to find them.</div>';
     return;
   }
   body.innerHTML =
