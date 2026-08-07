@@ -213,6 +213,28 @@ input,textarea,select{font-family:inherit;color:inherit;}
 .option-edit-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
 .option-edit-row .opt-letter{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--rule-strong);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;}
 .option-edit-row label{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--ink-soft);flex-shrink:0;}
+
+/* Image assignment grid (Edit modal) */
+.mcq-image-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
+.mcq-image-thumb{position:relative;width:76px;height:76px;border-radius:8px;overflow:hidden;border:1px solid var(--rule-strong);background:var(--paper);}
+.mcq-image-thumb img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in;background:var(--paper);}
+.mcq-image-thumb.broken::after{content:'⚠';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--pen-red);}
+.mcq-image-remove-btn{position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:5px;background:rgba(20,20,20,0.65);color:#fff;display:flex;align-items:center;justify-content:center;}
+.mcq-image-remove-btn:hover{background:rgba(20,20,20,0.85);}
+.mcq-image-add-tile{width:76px;height:76px;border-radius:8px;border:1.5px dashed var(--rule-strong);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-soft);font-size:10px;font-weight:600;}
+.mcq-image-add-tile:hover{border-color:var(--cover);color:var(--cover);background:var(--pen-blue-bg);}
+
+/* Question images (practice view) */
+.qimage-grid{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0;}
+.qimage-thumb{max-width:min(320px,100%);border-radius:8px;overflow:hidden;border:1px solid var(--rule);}
+.qimage-thumb img{max-width:100%;max-height:280px;display:block;cursor:zoom-in;background:var(--paper);}
+.qimage-thumb.broken{padding:20px;text-align:center;color:var(--ink-faint);font-size:12px;}
+
+/* Full-size image lightbox */
+.image-lightbox{position:fixed;inset:0;background:rgba(10,12,14,0.9);display:flex;align-items:center;justify-content:center;z-index:110;padding:30px;}
+.image-lightbox img{max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.5);cursor:zoom-out;}
+.image-lightbox-close{position:absolute;top:18px;right:18px;background:rgba(255,255,255,0.15);color:#fff;}
+.image-lightbox-close:hover{background:rgba(255,255,255,0.3);color:#fff;}
 .history-item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--rule);font-size:12.5px;}
 .history-item:last-child{border-bottom:none;}
 .history-verdict{font-weight:600;padding:2px 8px;border-radius:99px;font-size:10.5px;}
@@ -453,6 +475,7 @@ textarea.ingest-area{
   padding:14px;font-size:12.5px;color:var(--ink-soft);margin:10px 0;
 }
 
+.multi-select-hint{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--cover);background:var(--pen-blue-bg);padding:6px 10px;border-radius:7px;margin-bottom:10px;}
 .bubbles{display:flex;flex-direction:column;gap:10px;}
 .bubble{
   display:flex;align-items:center;gap:12px;text-align:left;width:100%;
@@ -482,6 +505,7 @@ textarea.ingest-area{
 .reveal-verdict{font-size:14px;font-weight:600;margin-bottom:8px;}
 .reveal-verdict.correct{color:var(--pen-green);}
 .reveal-verdict.wrong{color:var(--pen-red);}
+.reveal-verdict.pending{color:var(--cover);}
 .reveal-explain{font-size:13.5px;line-height:1.65;color:var(--ink-soft);}
 .reveal-explain p{margin-bottom:6px;}
 
@@ -636,7 +660,9 @@ var state = {
   pendingNav: null,
   clipboardNode: null,
   pendingDeckDelete: null,
-  currentUser: null
+  currentUser: null,
+  imageUrlMap: {}, /* hash -> ImgBB URL, the only image-related thing that ever reaches Supabase (plain text) */
+  editingMcqId: null
 };
 
 var PALETTE = ['#2F5C7A','#B23A2E','#2F6E45','#8B5E9C','#C77B2E','#3D7D8C','#9C4F6E','#5C6B2F'];
@@ -650,6 +676,179 @@ function colorForSource(name){
 }
 
 function uid(){ return 'm_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
+
+/* ================= Image storage (ImgBB via a server relay, never Supabase) =================
+   Same architecture as Kardex's image pipeline: compress client-side, cache locally in
+   IndexedDB (instant redraws, works offline), and mirror to ImgBB through a server-side
+   relay so any signed-in device can pull the same image down later via a plain URL.
+   Only that {hash: url} map is ever synced to Supabase — as plain text in the
+   mcq_image_urls table — never raw image bytes. The actual ImgBB call happens in
+   /api/upload-image.js (a Vercel serverless function, not in this file) so the ImgBB
+   API key stays a server-side secret instead of sitting in this page's source. See
+   SUPABASE_SETUP.md for how to deploy that function and set IMGBB_API_KEY. */
+var IMAGE_DB_NAME = 'practex_images_v1';
+var IMAGE_STORE_NAME = 'images';
+var IMAGE_MAX_DIM = 1600;   // longest edge, in px, after resize
+var IMAGE_QUALITY = 0.82;   // WebP/JPEG quality, 0-1
+var imageDbPromise = null;
+
+function requestToPromise(request){
+  return new Promise(function(resolve, reject){
+    request.onsuccess = function(){ resolve(request.result); };
+    request.onerror = function(){ reject(request.error || new Error('IndexedDB request failed')); };
+  });
+}
+function openImageDb(){
+  if (imageDbPromise) return imageDbPromise;
+  imageDbPromise = new Promise(function(resolve, reject){
+    var req = indexedDB.open(IMAGE_DB_NAME, 1);
+    req.onupgradeneeded = function(){
+      var db = req.result;
+      if (!db.objectStoreNames.contains(IMAGE_STORE_NAME)) db.createObjectStore(IMAGE_STORE_NAME, { keyPath: 'hash' });
+    };
+    req.onsuccess = function(){ resolve(req.result); };
+    req.onerror = function(){ reject(req.error || new Error('Could not open image store')); };
+  });
+  return imageDbPromise;
+}
+function readFileAsDataUrl(file){
+  return new Promise(function(resolve, reject){
+    var reader = new FileReader();
+    reader.onload = function(){ resolve(reader.result); };
+    reader.onerror = function(){ reject(new Error('Could not read image')); };
+    reader.readAsDataURL(file);
+  });
+}
+async function computeSha256(buffer){
+  var hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(hashBuffer)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+}
+/* Resizes + re-encodes before anything is ever stored, so bandwidth and storage stay
+   cheap without the person having to think about it. Falls back to the original file
+   untouched if compression fails or doesn't actually help. */
+async function compressImageForUpload(file){
+  var originalMime = file.type || 'image/png';
+  try {
+    if (!('createImageBitmap' in window)) return { blob: file, mimeType: originalMime };
+    if (originalMime === 'image/gif') return { blob: file, mimeType: originalMime }; // don't destroy animation
+    var bitmap = await createImageBitmap(file);
+    var width = bitmap.width, height = bitmap.height;
+    var scale = Math.min(1, IMAGE_MAX_DIM / Math.max(width, height));
+    width = Math.max(1, Math.round(width * scale));
+    height = Math.max(1, Math.round(height * scale));
+    var canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    if (bitmap.close) bitmap.close();
+    var targetMime = 'image/webp';
+    var blob = await new Promise(function(resolve){ canvas.toBlob(resolve, targetMime, IMAGE_QUALITY); });
+    if (!blob) return { blob: file, mimeType: originalMime };
+    if (scale < 1 || blob.size < file.size) return { blob: blob, mimeType: targetMime };
+    return { blob: file, mimeType: originalMime }; // compression didn't help — keep original
+  } catch(err) {
+    console.warn('Image compression skipped, using original', err);
+    return { blob: file, mimeType: originalMime };
+  }
+}
+var imageCloudSyncWarnedOnce = false;
+function warnImageCloudSyncFailed(err){
+  if (imageCloudSyncWarnedOnce) return;
+  imageCloudSyncWarnedOnce = true;
+  console.warn('Image cloud sync failed — images are still saved locally on this device. ' +
+    '(Check that IMGBB_API_KEY is set on your hosting provider and /api/upload-image is deployed.)', err);
+}
+/* Fire-and-forget: uploads a locally-cached image to ImgBB so other devices can find
+   it, then records the resulting URL. Safe to call repeatedly — a hash that already
+   has a URL is a no-op rather than a duplicate upload. */
+async function uploadImageToCloud(hash, mimeType, blob){
+  if (!state.currentUser) return; // not signed in — local-only, nothing to sync to
+  if (state.imageUrlMap[hash]) return;
+  try {
+    var dataUrl = await readFileAsDataUrl(blob);
+    var base64 = (dataUrl.split(',')[1]) || '';
+    if (!base64) throw new Error('Could not read image data for upload');
+    var res = await fetch('/api/upload-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64: base64 })
+    });
+    var data = await res.json().catch(function(){ return null; });
+    if (res.ok && data && data.url) {
+      state.imageUrlMap[hash] = data.url;
+      saveImageUrl(hash, data.url);
+    } else {
+      warnImageCloudSyncFailed(data && data.error ? data.error : ('HTTP ' + res.status));
+    }
+  } catch(err) {
+    warnImageCloudSyncFailed(err);
+  }
+}
+async function saveImageUrl(hash, url){
+  if (!state.currentUser || !supabaseClient) return;
+  try {
+    var res = await supabaseClient.from('mcq_image_urls').upsert({ hash: hash, user_id: state.currentUser.id, url: url });
+    if (res.error) throw res.error;
+  } catch(err) { console.error('saveImageUrl:', err); }
+}
+async function loadImageUrlMap(){
+  state.imageUrlMap = {};
+  if (!state.currentUser || !supabaseClient) return;
+  try {
+    var res = await supabaseClient.from('mcq_image_urls').select('hash,url').eq('user_id', state.currentUser.id);
+    if (res.error) throw res.error;
+    (res.data || []).forEach(function(row){ state.imageUrlMap[row.hash] = row.url; });
+  } catch(err) { console.error('loadImageUrlMap:', err); }
+}
+async function downloadImageFromCloud(hash){
+  var url = state.imageUrlMap[hash];
+  if (!url) return null;
+  try {
+    var res = await fetch(url);
+    if (!res.ok) return null;
+    var blob = await res.blob();
+    return { blob: blob, mimeType: blob.type || undefined };
+  } catch(err) { return null; }
+}
+async function storeImageFromFile(file){
+  var compressed = await compressImageForUpload(file);
+  var blob = compressed.blob, mimeType = compressed.mimeType;
+  var dataUrl = await readFileAsDataUrl(blob);
+  var buffer = await blob.arrayBuffer();
+  var hash = await computeSha256(buffer);
+  var db = await openImageDb();
+  var tx = db.transaction(IMAGE_STORE_NAME, 'readwrite');
+  var store = tx.objectStore(IMAGE_STORE_NAME);
+  var existing = await requestToPromise(store.get(hash));
+  if (!existing) await requestToPromise(store.put({ hash: hash, mimeType: mimeType, dataUrl: dataUrl }));
+  uploadImageToCloud(hash, mimeType, blob); // background — don't block the UI on network
+  return hash;
+}
+async function getImageRecord(hash){
+  if (!hash) return null;
+  var db = await openImageDb();
+  var tx = db.transaction(IMAGE_STORE_NAME, 'readonly');
+  return requestToPromise(tx.objectStore(IMAGE_STORE_NAME).get(hash));
+}
+/* Returns a displayable data URL for a hash — local cache first (instant), falling
+   back to the ImgBB URL (and re-caching locally) for images synced in from another
+   device that this browser hasn't seen yet. */
+async function resolveImageRef(hash){
+  if (!hash) return null;
+  var record = await getImageRecord(hash);
+  if (record) return record.dataUrl;
+  var cloud = await downloadImageFromCloud(hash);
+  if (!cloud) return null;
+  var dataUrl = await readFileAsDataUrl(cloud.blob);
+  try {
+    var db = await openImageDb();
+    var tx = db.transaction(IMAGE_STORE_NAME, 'readwrite');
+    await requestToPromise(tx.objectStore(IMAGE_STORE_NAME).put({ hash: hash, mimeType: cloud.mimeType || 'application/octet-stream', dataUrl: dataUrl }));
+  } catch(err) {}
+  return dataUrl;
+}
+/* =============================================================================== */
+
 
 function escapeHtml(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -680,6 +879,7 @@ var ICON_PATHS = {
   'trash-2': '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
   'corner-up-right': '<polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/>',
   clipboard: '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
+  image: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
   folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
   list: '<path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/>'
 };
@@ -722,6 +922,7 @@ async function loadLibrary(){
   } catch(e) {
     console.error('loadLibrary (settings):', e);
   }
+  await loadImageUrlMap();
 }
 /* All the small per-user preferences live in one row so toggling any of them is a
    single upsert rather than a separate table/network round trip each. */
@@ -825,6 +1026,23 @@ async function importLibraryFromFile(file){
     incoming.forEach(function(m){
       if (!m || !m.id) return;
       if (existingIds[m.id]) return; // skip exact duplicates by id
+      /* Defend against hand-edited/malformed import files — a normal export→import
+         round trip already has all of this, but nothing stops someone from feeding in
+         a hand-crafted or corrupted JSON file, and several render paths assume these
+         fields exist without guarding (e.g. m.learning.history.length). */
+      if (!m.learning || typeof m.learning !== 'object') {
+        m.learning = { due: Date.now(), interval: 0, history: [], lastReviewed: null, fsrs: null };
+      } else if (!Array.isArray(m.learning.history)) {
+        m.learning.history = [];
+      }
+      if (!Array.isArray(m.tags)) m.tags = [];
+      if (!Array.isArray(m.images)) m.images = [];
+      if (!Array.isArray(m.options)) m.options = [];
+      if (!Array.isArray(m.answer) || !m.answer.length) m.answer = ['UNKNOWN'];
+      if (!m.subject) m.subject = 'Unsorted';
+      if (!Array.isArray(m.chapterPath) || !m.chapterPath.length) m.chapterPath = ['Unsorted'];
+      if (typeof m.question !== 'string') m.question = '';
+      if (typeof m.source !== 'string') m.source = 'Imported';
       state.mcqs.push(m);
       existingIds[m.id] = true;
       added++;
@@ -850,8 +1068,67 @@ function showRichModal(innerHtml, size){
   var root=document.getElementById('modalRoot');
   var sizeClass = size === 'narrow' ? 'narrow' : 'wide';
   root.innerHTML='<div class="modal-backdrop" data-action="modal-backdrop-close"><div class="modal-card '+sizeClass+'" data-stop-close>'+innerHtml+'</div></div>';
+  hydrateImages();
 }
-function closeModal(){ document.getElementById('modalRoot').innerHTML=''; state.activeModal=null; }
+function closeModal(){ document.getElementById('modalRoot').innerHTML=''; state.activeModal=null; state.editingMcqId=null; }
+
+/* Any <img data-hash-src="HASH"> anywhere in the current DOM gets its real src filled
+   in asynchronously — local IndexedDB cache first (instant), falling back to the
+   cloud URL. Called after every render() and showRichModal(), so any view that wants
+   to show an attached image just needs to render the placeholder tag; this fills it. */
+function hydrateImages(){
+  document.querySelectorAll('img[data-hash-src]').forEach(function(imgEl){
+    var hash = imgEl.getAttribute('data-hash-src');
+    if (imgEl.getAttribute('data-hydrated') === hash) return; // already loaded, skip
+    resolveImageRef(hash).then(function(src){
+      if (src) { imgEl.src = src; imgEl.setAttribute('data-hydrated', hash); }
+      else { imgEl.closest('.mcq-image-thumb,.qimage-thumb') && imgEl.closest('.mcq-image-thumb,.qimage-thumb').classList.add('broken'); }
+    });
+  });
+}
+
+/* ---------------- Image assignment (Edit modal) ---------------- */
+function renderMcqImageGrid(m){
+  var grid = document.getElementById('mcqImageGrid');
+  if (!grid) return;
+  var imgs = m.images || [];
+  var html = imgs.map(function(hash){
+    return '<div class="mcq-image-thumb">' +
+      '<img data-hash-src="' + escapeHtml(hash) + '" data-action="view-mcq-image" data-hash="' + escapeHtml(hash) + '" alt="">' +
+      '<button class="mcq-image-remove-btn" data-action="remove-mcq-image" data-id="' + escapeHtml(m.id) + '" data-hash="' + escapeHtml(hash) + '" title="Remove image" aria-label="Remove image">' + icon('x',12) + '</button>' +
+      '</div>';
+  }).join('');
+  html += '<button class="mcq-image-add-tile" data-action="add-mcq-image" data-id="' + escapeHtml(m.id) + '">' + icon('upload',18) + '<span>Add image</span></button>';
+  grid.innerHTML = html;
+  hydrateImages();
+}
+async function attachImageToMcq(mcqId, file){
+  if (!file || file.type.indexOf('image/') !== 0) { showToast('That file isn\'t an image.'); return; }
+  var m = state.mcqs.find(function(x){ return x.id === mcqId; });
+  if (!m) return;
+  showToast('Uploading image…');
+  try {
+    var hash = await storeImageFromFile(file);
+    if (!m.images) m.images = [];
+    if (m.images.indexOf(hash) === -1) m.images.push(hash);
+    await saveLibrary();
+    renderMcqImageGrid(m);
+    showToast('Image added.');
+  } catch(err) {
+    console.error('attachImageToMcq:', err);
+    showToast('Could not add that image.');
+  }
+}
+async function openImageLightbox(hash){
+  var src = await resolveImageRef(hash);
+  if (!src) { showToast('Could not load that image.'); return; }
+  var root = document.getElementById('modalRoot');
+  root.innerHTML = '<div class="image-lightbox" data-action="close-lightbox">' +
+    '<button class="modal-close-btn image-lightbox-close" data-action="close-lightbox" title="Close" aria-label="Close">' + icon('x',20) + '</button>' +
+    '<img src="' + src + '" alt="">' +
+    '</div>';
+  state.activeModal = 'lightbox';
+}
 
 /* ---------------- Settings modal ---------------- */
 function openSettingsModal(){
@@ -1020,6 +1297,11 @@ function openEditModal(id){
     html += '</div>';
   }
   html += '<div class="form-field"><label>Explanation</label><textarea id="editExplanation" rows="3">' + escapeHtml(m.explanation||'') + '</textarea></div>';
+  html += '<div class="form-field"><label>Images</label>' +
+    '<div class="mcq-image-grid" id="mcqImageGrid"></div>' +
+    '<input type="file" id="mcqImageFileInput" accept="image/*" multiple style="display:none">' +
+    '<div class="view-sub" style="margin-top:6px;">Click "Add image" to upload, or paste (Ctrl/Cmd+V) a screenshot while this window is open.</div>' +
+    '</div>';
   html += '<div class="form-field"><label>Subject</label><input type="text" id="editSubject" value="' + escapeHtml(m.subject||'') + '"></div>';
   html += '<div class="form-field"><label>Chapter path (use &gt; to separate levels)</label><input type="text" id="editChapter" value="' + escapeHtml((m.chapterPath||[]).join(' > ')) + '"></div>';
   html += '<div class="form-field"><label>Tags (comma-separated)</label><input type="text" id="editTags" value="' + escapeHtml((m.tags||[]).join(', ')) + '"></div>';
@@ -1027,6 +1309,15 @@ function openEditModal(id){
     '<button class="btn btn-primary" data-action="save-edit-mcq" data-id="' + m.id + '">Save changes</button>' +
     '<button class="btn btn-ghost" data-action="close-modal">Cancel</button></div>';
   showRichModal(html);
+  state.editingMcqId = id;
+  renderMcqImageGrid(m);
+  var fileInput = document.getElementById('mcqImageFileInput');
+  if (fileInput) {
+    fileInput.addEventListener('change', function(e){
+      Array.prototype.slice.call(e.target.files || []).forEach(function(f){ attachImageToMcq(id, f); });
+      e.target.value = '';
+    });
+  }
 }
 async function saveEditMcq(id){
   var m = state.mcqs.find(function(x){ return x.id === id; });
@@ -1223,6 +1514,7 @@ function parseLibraryText(raw, sourceOverride){
           explanation: explanation,
           tags: tags,
           flagged: false,
+          images: [],
           addedAt: Date.now(),
           learning: {
             due: Date.now(),
@@ -1458,6 +1750,7 @@ function render(){
       renderMain() +
     '</main>';
   bindEvents();
+  hydrateImages();
   if (state.activeModal === 'settings') renderSettingsModalContent();
 }
 
@@ -1892,6 +2185,7 @@ function renderQuestionList(tree, node, searchAll){
         '<div class="mcq-row-text">' + escapeHtml(snippet) + (m.question.length > 140 ? '…' : '') +
         '<div class="mcq-row-meta">' +
         '<span class="source-pill" style="background:' + colorForSource(m.source) + '">' + escapeHtml(m.source) + '</span>' +
+        (m.images && m.images.length ? '<span class="tag-pill icon-inline" title="' + m.images.length + ' image' + (m.images.length===1?'':'s') + ' attached">' + icon('image',11) + ' ' + m.images.length + '</span>' : '') +
         m.tags.slice(0,2).map(function(t){ return '<span class="tag-pill">' + escapeHtml(t) + '</span>'; }).join('') +
         (m.tags.length > 2 ? '<span class="tag-pill-more">+' + (m.tags.length-2) + '</span>' : '') +
         '</div></div>' +
@@ -2332,6 +2626,7 @@ function startPractice(ids){
     index: 0,
     selected: null,
     revealed: false,
+    shortAnswerCorrect: null,
     results: [],
     undoStack: [],
     stats: { correct:0, wrong:0, misconception:0, learning:0, mastered:0, noconcept:0 }
@@ -2368,6 +2663,11 @@ function renderPractice(){
 
   if (m.passage) html += '<div class="passage-box">' + renderContent(m.passage) + '</div>';
   html += '<div class="qtext">' + renderContent(m.question) + '</div>';
+  if (m.images && m.images.length) {
+    html += '<div class="qimage-grid">' + m.images.map(function(hash){
+      return '<div class="qimage-thumb"><img data-hash-src="' + escapeHtml(hash) + '" data-action="view-mcq-image" data-hash="' + escapeHtml(hash) + '" alt=""></div>';
+    }).join('') + '</div>';
+  }
 
   if (m.isShortAnswer) {
     html += '<div class="short-answer-box"><textarea id="shortAnswerInput" placeholder="Type your answer, then reveal to check yourself" ' + (s.revealed ? 'disabled' : '') + '>' + (s.selected||'') + '</textarea></div>';
@@ -2375,6 +2675,9 @@ function renderPractice(){
       html += '<div class="answer-footer" style="justify-content:flex-end;"><button class="btn btn-primary" data-action="reveal-short">Reveal answer</button></div>';
     }
   } else {
+    if (m.answer.length > 1) {
+      html += '<div class="multi-select-hint">' + icon('check-circle',13) + ' Select all that apply — ' + m.answer.length + ' correct answers</div>';
+    }
     html += '<div class="bubbles">';
     m.options.forEach(function(opt){
       var isSelected = s.selected && s.selected.indexOf(opt.letter) !== -1;
@@ -2399,9 +2702,14 @@ function renderPractice(){
   }
 
   if (s.revealed) {
+    var needsSelfGrade = m.isShortAnswer && s.shortAnswerCorrect === null;
     var isCorrect = evaluateCorrect(m, s.selected);
     html += '<div class="reveal-panel">';
-    html += '<div class="reveal-verdict ' + (isCorrect ? 'correct' : 'wrong') + '">' + (isCorrect ? 'Correct' : (m.answer[0]==='UNKNOWN' ? 'No answer key on record' : 'Not quite')) + '</div>';
+    if (needsSelfGrade) {
+      html += '<div class="reveal-verdict pending">Grade yourself</div>';
+    } else {
+      html += '<div class="reveal-verdict ' + (isCorrect ? 'correct' : 'wrong') + '">' + (isCorrect ? 'Correct' : (m.answer[0]==='UNKNOWN' ? 'No answer key on record' : 'Not quite')) + '</div>';
+    }
     if (!m.isShortAnswer && m.answer[0] !== 'UNKNOWN') {
       html += '<div class="view-sub" style="margin-bottom:8px;">Correct answer: ' + m.answer.join(', ') + '</div>';
     }
@@ -2409,8 +2717,15 @@ function renderPractice(){
       html += '<div class="view-sub" style="margin-bottom:8px;">Answer on record: ' + escapeHtml(m.answer[0]) + '</div>';
     }
     html += renderReveal(m);
-    html += '<div class="answer-footer" style="justify-content:flex-end;">' +
-      '<button class="btn btn-primary" data-action="next-question">' + (s.index + 1 < s.ids.length ? 'Next question' : 'Finish session') + '</button></div>';
+    if (needsSelfGrade) {
+      html += '<div class="view-sub" style="margin-top:14px;">Compare your answer above with the record — did you get it right?</div>';
+      html += '<div class="answer-footer" style="justify-content:flex-end;gap:10px;">' +
+        '<button class="btn btn-danger" data-action="self-grade" data-correct="false">' + icon('x',15) + ' I was wrong</button>' +
+        '<button class="btn btn-primary" data-action="self-grade" data-correct="true">' + icon('check-circle',15) + ' I was right</button></div>';
+    } else {
+      html += '<div class="answer-footer" style="justify-content:flex-end;">' +
+        '<button class="btn btn-primary" data-action="next-question">' + (s.index + 1 < s.ids.length ? 'Next question' : 'Finish session') + '</button></div>';
+    }
     html += '</div>';
   }
 
@@ -2418,9 +2733,25 @@ function renderPractice(){
   return html;
 }
 
+/* Multi-answer ("select all that apply") questions toggle each option in/out of the
+   selection; single-answer questions replace the whole selection with just this one. */
+function toggleOptionSelection(m, s, letter){
+  if (m.answer.length > 1) {
+    var sel = s.selected ? s.selected.slice() : [];
+    var idx = sel.indexOf(letter);
+    if (idx === -1) sel.push(letter); else sel.splice(idx, 1);
+    s.selected = sel;
+  } else {
+    s.selected = [letter];
+  }
+}
+
 function evaluateCorrect(m, selected){
   if (!selected) return false;
-  if (m.isShortAnswer) return true;
+  if (m.isShortAnswer) {
+    var sg = state.session && state.session.shortAnswerCorrect;
+    return sg === true ? true : (sg === false ? false : null); /* null = not self-graded yet */
+  }
   if (m.answer.indexOf('UNKNOWN') !== -1) return null;
   var a = selected.slice().sort().join(',');
   var b = m.answer.slice().sort().join(',');
@@ -2461,7 +2792,7 @@ async function advanceAfterReveal(){
   bumpStreak();
   await saveLibrary();
 
-  s.index++; s.selected = null; s.revealed = false;
+  s.index++; s.selected = null; s.revealed = false; s.shortAnswerCorrect = null;
   if (s.index >= s.ids.length) state.view = 'summary';
   render();
 }
@@ -2477,6 +2808,7 @@ async function undoLastAnswer(){
   s.index = last.index;
   s.selected = last.selected;
   s.revealed = true;
+  s.shortAnswerCorrect = null; /* re-grade on the way back in, rather than trusting a stale self-grade */
   await saveLibrary();
   render();
 }
@@ -2796,6 +3128,29 @@ async function onClick(e){
   if (action === 'edit-mcq') { openEditModal(el.getAttribute('data-id')); return; }
   if (action === 'save-edit-mcq') { saveEditMcq(el.getAttribute('data-id')); return; }
 
+  if (action === 'add-mcq-image') {
+    var fi = document.getElementById('mcqImageFileInput');
+    if (fi) fi.click();
+    return;
+  }
+  if (action === 'remove-mcq-image') {
+    var rmId = el.getAttribute('data-id'), rmHash = el.getAttribute('data-hash');
+    var rmM = state.mcqs.find(function(x){ return x.id === rmId; });
+    if (rmM && rmM.images) {
+      rmM.images = rmM.images.filter(function(h){ return h !== rmHash; });
+      await saveLibrary();
+      renderMcqImageGrid(rmM);
+      showToast('Image removed.');
+    }
+    return;
+  }
+  if (action === 'view-mcq-image') { openImageLightbox(el.getAttribute('data-hash')); return; }
+  if (action === 'close-lightbox') {
+    if (state.editingMcqId) openEditModal(state.editingMcqId);
+    else closeModal();
+    return;
+  }
+
   if (action === 'open-deck-menu') { openDeckMenu(el.getAttribute('data-path')); return; }
 
   if (action === 'deck-rename') { openRenameDeckModal(el.getAttribute('data-path')); return; }
@@ -2926,7 +3281,8 @@ async function onClick(e){
   if (action === 'select-option') {
     if (state.session.revealed) return;
     var letter = el.getAttribute('data-letter');
-    state.session.selected = [letter];
+    var curM = state.mcqs.find(function(x){ return x.id === state.session.ids[state.session.index]; });
+    if (curM) toggleOptionSelection(curM, state.session, letter);
     render();
     return;
   }
@@ -2941,6 +3297,12 @@ async function onClick(e){
   }
 
   if (action === 'next-question') { advanceAfterReveal(); return; }
+
+  if (action === 'self-grade') {
+    if (state.session) state.session.shortAnswerCorrect = el.getAttribute('data-correct') === 'true';
+    advanceAfterReveal();
+    return;
+  }
 
   if (action === 'undo-answer') { undoLastAnswer(); return; }
 
@@ -2982,7 +3344,7 @@ async function signInWithGoogle(){
   try {
     var res = await supabaseClient.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.href }
+      options: { redirectTo: window.location.origin + window.location.pathname } /* deliberately NOT window.location.href — that can carry forward a stale #hash from a previous sign-in and produce a malformed "##" redirect that Supabase's own client fails to parse */
     });
     if (res.error) throw res.error;
     /* Browser navigates to Google's consent screen and back — nothing else to do here. */
@@ -2999,7 +3361,10 @@ async function signOutUser(){
     console.error('signOutUser:', e);
   }
   state.currentUser = null;
-  state.mcqs = []; state.sources = {}; state.selectedPath = null; state.session = null;
+  state.mcqs = []; state.sources = {}; state.selectedPath = null; state.session = null; state.imageUrlMap = {};
+  if (window.location.hash) {
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
   closeModal();
   showAuthGate();
 }
@@ -3046,6 +3411,20 @@ async function init(){
       e.target.value = '';
     });
   }
+  /* Paste a screenshot (Ctrl/Cmd+V) straight into the Edit Question modal to attach it —
+     bound once here rather than per modal-open, same reasoning as the click delegation
+     above: re-binding on every openEditModal() call would stack duplicate listeners. */
+  document.addEventListener('paste', function(e){
+    if (!state.editingMcqId) return;
+    var items = (e.clipboardData && e.clipboardData.items) || [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type && items[i].type.indexOf('image/') === 0) {
+        var file = items[i].getAsFile();
+        if (file) { e.preventDefault(); attachImageToMcq(state.editingMcqId, file); }
+        break;
+      }
+    }
+  });
 
   if (!supabaseClient) {
     document.getElementById('loadingScreen').style.display = 'none';
@@ -3077,10 +3456,20 @@ async function init(){
       if (authInitialized && state.currentUser && state.currentUser.id === session.user.id) return; /* e.g. TOKEN_REFRESHED for the same user — already loaded, don't reload */
       authInitialized = true;
       state.currentUser = session.user;
+      /* Explicitly wipe any #access_token=... fragment once it's been consumed, rather
+         than assuming the client library already did — leaving it in the address bar is
+         what let a stale hash ride along into the next sign-in's redirectTo and produce
+         a malformed "##" URL that fails to parse. */
+      if (window.location.hash) {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
       showApp();
     } else {
       authInitialized = true;
       state.currentUser = null;
+      if (window.location.hash) {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
       showAuthGate();
     }
   });
@@ -3099,7 +3488,7 @@ document.addEventListener('keydown', function(e){
   /* Number keys 1-9 select the corresponding option (pre-reveal only) */
   if(/^[1-9]$/.test(e.key) && !s.revealed && !m.isShortAnswer){
     var idx=parseInt(e.key,10)-1;
-    if(m.options[idx]){ e.preventDefault(); s.selected=[m.options[idx].letter]; render(); }
+    if(m.options[idx]){ e.preventDefault(); toggleOptionSelection(m, s, m.options[idx].letter); render(); }
     return;
   }
 
@@ -3107,7 +3496,7 @@ document.addEventListener('keydown', function(e){
   if(/^[a-zA-Z]$/.test(e.key) && !s.revealed && !m.isShortAnswer){
     var letter=e.key.toUpperCase();
     var match=m.options.filter(function(o){ return o.letter===letter; })[0];
-    if(match){ e.preventDefault(); s.selected=[letter]; render(); return; }
+    if(match){ e.preventDefault(); toggleOptionSelection(m, s, letter); render(); return; }
   }
 
   /* F toggles bookmark */
@@ -3129,6 +3518,7 @@ document.addEventListener('keydown', function(e){
       }
       revealCurrent();
     } else {
+      if (m.isShortAnswer && s.shortAnswerCorrect === null) return; /* must self-grade via the buttons first — otherwise this would silently record as wrong */
       advanceAfterReveal();
     }
     return;

@@ -71,3 +71,34 @@ create policy "Users can update their own settings"
 -- Note: user_settings never needs a delete policy from the app itself; if you want
 -- a user to be able to fully erase their account data, add one, or just rely on
 -- `on delete cascade` when the underlying auth.users row is deleted.
+
+
+-- 3) Image URL lookup — one row per (image hash, user). Only ever holds plain text:
+--    the SHA-256 hash Practex computed client-side, and the URL ImgBB returned after
+--    upload. No image bytes are ever stored in Supabase — see api/upload-image.js and
+--    the "Image storage" section of index.html's <script> for the full pipeline.
+create table if not exists public.mcq_image_urls (
+  hash text not null,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  url text not null,
+  updated_at timestamptz not null default now(),
+  primary key (hash, user_id)
+);
+
+create index if not exists mcq_image_urls_user_id_idx on public.mcq_image_urls (user_id);
+
+alter table public.mcq_image_urls enable row level security;
+
+create policy "Users can view their own image urls"
+  on public.mcq_image_urls for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert their own image urls"
+  on public.mcq_image_urls for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update their own image urls"
+  on public.mcq_image_urls for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
