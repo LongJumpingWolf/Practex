@@ -3667,28 +3667,30 @@ async function init(){
     return;
   }
 
-  supabaseClient.auth.onAuthStateChange(function(event, session){
-    if (event === 'SIGNED_IN' && session && session.user) {
-      state.currentUser = session.user;
-      showApp();
-    } else if (event === 'SIGNED_OUT') {
-      state.currentUser = null;
-      showAuthGate();
-    }
-  });
-
   var authInitialized = false;
   supabaseClient.auth.onAuthStateChange(function(event, session){
-    /* onAuthStateChange is the ONLY source of truth for whether we're signed in —
-       it fires once on subscribe with whatever the client currently knows (waiting
-       for any OAuth-redirect token in the URL to finish parsing first), and again on
-       every subsequent sign-in/out/refresh. Deliberately not also calling
-       getSession() separately here: racing the two was exactly what caused a signed-in
-       redirect to sometimes land back on the sign-in screen with the raw token still
-       sitting unprocessed in the URL, if getSession() resolved a beat before the
-       library finished parsing the redirect. */
+    /* This is the ONLY onAuthStateChange listener in the app — there used to be a
+       second, older one registered here too, with none of the guards below. That
+       duplicate is why switching tabs (which triggers a background TOKEN_REFRESHED
+       as Supabase silently renews the short-lived access token) was re-triggering
+       the full "Loading your library…" screen: the old listener called showApp()
+       unconditionally on any SIGNED_IN-shaped event, bypassing every safeguard here.
+       TOKEN_REFRESHED/USER_UPDATED should never touch the UI at all — they're pure
+       session housekeeping, not a sign-in or sign-out. */
+    if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+      if (session && session.user) state.currentUser = session.user; // keep the session object current, silently
+      return;
+    }
+    if (event === 'SIGNED_OUT') {
+      authInitialized = true;
+      state.currentUser = null;
+      showAuthGate();
+      return;
+    }
+    /* Remaining events: INITIAL_SESSION (fires once on subscribe, waiting for any
+       OAuth-redirect token in the URL to finish parsing first) and SIGNED_IN. */
     if (session && session.user) {
-      if (authInitialized && state.currentUser && state.currentUser.id === session.user.id) return; /* e.g. TOKEN_REFRESHED for the same user — already loaded, don't reload */
+      if (authInitialized && state.currentUser && state.currentUser.id === session.user.id) { state.currentUser = session.user; return; } // already loaded — don't reload
       authInitialized = true;
       state.currentUser = session.user;
       /* Explicitly wipe any #access_token=... fragment once it's been consumed, rather
