@@ -998,6 +998,35 @@ async function deleteMcqRows(ids){
     showToast('Could not delete those questions on the server.');
   }
 }
+/* Images are content-addressed by hash and can legitimately be shared across multiple
+   questions (the same diagram attached to 3 questions only ever uploads once). So this
+   only actually deletes a hash's local cache entry, cloud URL row, and ImgBB reference
+   record once NOTHING in the current library still points at it — checked fresh against
+   state.mcqs at call time, after whatever removal already happened. Safe to call with
+   hashes that turn out to still be in use; they're just left alone. */
+async function purgeOrphanedImageHashes(candidateHashes){
+  if (!candidateHashes || !candidateHashes.length) return;
+  var stillUsed = {};
+  state.mcqs.forEach(function(m){
+    (m.images || []).forEach(function(h){ stillUsed[h] = true; });
+    (m.answerImages || []).forEach(function(h){ stillUsed[h] = true; });
+  });
+  var orphaned = candidateHashes.filter(function(h, i){ return h && !stillUsed[h] && candidateHashes.indexOf(h) === i; });
+  if (!orphaned.length) return;
+  try {
+    var db = await openImageDb();
+    var tx = db.transaction(IMAGE_STORE_NAME, 'readwrite');
+    var store = tx.objectStore(IMAGE_STORE_NAME);
+    orphaned.forEach(function(h){ store.delete(h); });
+  } catch(err) { console.error('purgeOrphanedImageHashes (local):', err); }
+  orphaned.forEach(function(h){ delete state.imageUrlMap[h]; });
+  if (state.currentUser && supabaseClient) {
+    try {
+      var res = await supabaseClient.from('mcq_image_urls').delete().eq('user_id', state.currentUser.id).in('hash', orphaned);
+      if (res.error) throw res.error;
+    } catch(err) { console.error('purgeOrphanedImageHashes (cloud):', err); }
+  }
+}
 function exportLibrary(){
   var payload = {
     exportedAt: Date.now(),
@@ -1841,11 +1870,11 @@ function duplicateDeck(pathArr){
   return copies.length;
 }
 function deleteDeck(pathArr){
+  var removed = mcqsUnderPath(pathArr);
   var idsSet = {};
-  mcqsUnderPath(pathArr).forEach(function(m){ idsSet[m.id] = true; });
-  var removedIds = Object.keys(idsSet);
+  removed.forEach(function(m){ idsSet[m.id] = true; });
   state.mcqs = state.mcqs.filter(function(m){ return !idsSet[m.id]; });
-  return removedIds;
+  return removed; /* full mcq objects, not just ids — needed to know which image hashes they held */
 }
 
 /* ---------------- Filtering ---------------- */
@@ -3329,6 +3358,7 @@ async function onClick(e){
     if (rmM && rmM[rmField]) {
       rmM[rmField] = rmM[rmField].filter(function(h){ return h !== rmHash; });
       await saveLibrary();
+      await purgeOrphanedImageHashes([rmHash]); /* only actually deletes it if no other question still uses this hash */
       renderMcqImageGrid(rmM, rmField, rmField === 'answerImages' ? 'mcqAnswerImageGrid' : 'mcqImageGrid');
       showToast('Image removed.');
     }
@@ -3436,11 +3466,18 @@ async function onClick(e){
     state.pendingDeckDelete = null;
     if (delPath) {
       var delArr = delPath.split('␟');
-      var removedIds = deleteDeck(delArr);
+      var removedMcqs = deleteDeck(delArr);
+      var removedIds = removedMcqs.map(function(m){ return m.id; });
       if (state.selectedPath && state.selectedPath.join('␟').indexOf(delPath) === 0) {
         state.selectedPath = null; state.forceList = false;
       }
       await deleteMcqRows(removedIds);
+      var candidateHashes = [];
+      removedMcqs.forEach(function(m){
+        (m.images || []).forEach(function(h){ candidateHashes.push(h); });
+        (m.answerImages || []).forEach(function(h){ candidateHashes.push(h); });
+      });
+      await purgeOrphanedImageHashes(candidateHashes);
       closeModal(); render();
       showToast('Deleted ' + removedIds.length + ' question' + (removedIds.length===1?'':'s') + '.');
     } else {
