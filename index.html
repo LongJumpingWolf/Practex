@@ -226,10 +226,18 @@ input,textarea,select{font-family:inherit;color:inherit;}
 .mcq-image-add-tile:hover{border-color:var(--cover);color:var(--cover);background:var(--pen-blue-bg);}
 
 /* Question images (practice view) */
-.qimage-grid{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0;}
-.qimage-thumb{max-width:min(320px,100%);border-radius:8px;overflow:hidden;border:1px solid var(--rule);}
-.qimage-thumb img{max-width:100%;max-height:280px;display:block;cursor:zoom-in;background:var(--paper);}
+.qimage-grid{display:flex;flex-wrap:wrap;gap:12px;margin:14px 0;}
+/* Bounding frame, not a stretch target: large images get capped relative to the
+   viewport height specifically (so they never eat up the whole screen and force
+   heavy scrolling, regardless of their native resolution), while small images are
+   left at their natural size — only max-* constraints are set here, nothing forces
+   a minimum, so nothing ever gets upscaled/blurred to fill the box. Aspect ratio is
+   always preserved either way since width/height are never set explicitly together. */
+.qimage-thumb{display:inline-flex;align-items:center;justify-content:center;max-width:100%;padding:6px;border-radius:10px;border:1px solid var(--rule);background:var(--paper);}
+.qimage-thumb img{display:block;max-width:100%;max-height:clamp(160px,42vh,420px);width:auto;height:auto;border-radius:4px;cursor:zoom-in;}
 .qimage-thumb.broken{padding:20px;text-align:center;color:var(--ink-faint);font-size:12px;}
+.qimage-thumb.broken img{display:none;}
+.qimage-thumb.broken::after{content:'⚠ Image could not load';}
 
 /* Full-size image lightbox */
 .image-lightbox{position:fixed;inset:0;background:rgba(10,12,14,0.9);display:flex;align-items:center;justify-content:center;z-index:110;padding:30px;}
