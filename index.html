@@ -1,0 +1,3159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=3.0, user-scalable=yes, viewport-fit=cover" />
+<title>Practex — MCQ Practice</title>
+<link rel="icon" type="image/x-icon" href="icons/favicon.ico">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="48x48" href="icons/favicon-48x48.png">
+<link rel="icon" type="image/png" sizes="64x64" href="icons/icon-64x64.png">
+<link rel="icon" type="image/png" sizes="128x128" href="icons/icon-128x128.png">
+<link rel="icon" type="image/png" sizes="256x256" href="icons/icon-256x256.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon-180x180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/android-chrome-192x192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icons/android-chrome-512x512.png">
+<meta name="msapplication-TileImage" content="icons/mstile-150x150.png">
+<meta name="theme-color" content="#2F5C7A">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;0,700;1,500&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EEF0E9;
+  --paper-line:#212A32;
+  --card:#FBFAF5;
+  --ink:#1F2A33;
+  --ink-soft:rgba(31,42,51,0.58);
+  --ink-faint:rgba(31,42,51,0.34);
+  --rule:#CDD4C9;
+  --rule-strong:#AAB3A5;
+  --cover:#2F5C7A;
+  --cover-dark:#234A63;
+  --pen-red:#B23A2E;
+  --pen-red-bg:#F5E4E1;
+  --pen-green:#2F6E45;
+  --pen-green-bg:#E4EFE2;
+  --pen-blue:#2F5C7A;
+  --pen-blue-bg:#E6EDF2;
+  --pen-yellow-bg:#FFF8DD;
+  --pen-amber:#8A6D23;
+  --pen-amber-bg:#F1E8CC;
+  --highlighter:#F0C33C;
+  --highlighter-ink:#5B4A0E;
+  --shadow-card:0 1px 0 rgba(31,42,51,0.06), 0 10px 24px rgba(31,42,51,0.08);
+  --radius:10px;
+  /* Fixed "elevated surface" pair for floating UI that must look identical regardless
+     of --paper/--ink/--card/--rule (which flip in dark mode). Never mix a flipping
+     variable with a hardcoded color for the paired bg/text property — either use
+     matching flipping vars (they invert together), matching --overlay vars (fixed),
+     or two hardcoded values together. This pair is intentionally NOT redefined
+     inside body.dark-mode below. */
+  --overlay-bg:#1F2A33;
+  --overlay-ink:#FFFFFF;
+}
+/* FSRS mode re-themes the app (cover/accent colour) so it's visually obvious
+   spaced-repetition scheduling is driving what you see. */
+body.fsrs-mode{
+  --cover:#5C3D80;
+  --cover-dark:#432D5E;
+}
+/* Dark mode: overrides the paper/ink palette; combines with fsrs-mode's accent override. */
+body.dark-mode{
+  --paper:#1B1F23;
+  --paper-line:#3A4149;
+  --card:#252A2F;
+  --ink:#E7E9EA;
+  --ink-soft:rgba(231,233,234,0.62);
+  --ink-faint:rgba(231,233,234,0.38);
+  --rule:#343B41;
+  --rule-strong:#454D55;
+  --pen-red:#E0665A;
+  --pen-red-bg:#3A2320;
+  --pen-green:#4FAE72;
+  --pen-green-bg:#1E3324;
+  --pen-blue:#6FA8D6;
+  --pen-blue-bg:#1B2A38;
+  --pen-yellow-bg:#3A320F;
+  --pen-amber:#D3B15C;
+  --pen-amber-bg:#332A16;
+  --highlighter-ink:#F0C33C;
+}
+body.dark-mode.fsrs-mode{
+  --cover:#8362AD;
+  --cover-dark:#6B4F92;
+}
+body.dark-mode{ background-image: linear-gradient(var(--rule) 1px, transparent 1px); }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;touch-action:manipulation;}
+body{
+  font-family:'IBM Plex Sans',-apple-system,sans-serif;
+  background:var(--paper);
+  color:var(--ink);
+  background-image:
+    linear-gradient(var(--rule) 1px, transparent 1px);
+  background-size: 100% 32px;
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+.serif{font-family:'Fraunces',Georgia,serif;}
+.mono{font-family:'IBM Plex Mono',monospace;}
+button{font-family:inherit;cursor:pointer;background:none;border:none;color:inherit;}
+input,textarea,select{font-family:inherit;color:inherit;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-thumb{background:var(--rule-strong);border-radius:6px;}
+
+.app-shell{
+  display:grid;
+  grid-template-columns:288px 1fr;
+  min-height:100vh;
+}
+
+/* ---------- Sidebar ---------- */
+.sidebar{
+  background:var(--cover);
+  color:#EAF0F5;
+  padding:22px 18px 24px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  position:sticky;
+  top:0;
+  height:100vh;
+  overflow-y:auto;
+}
+.brand{display:flex;align-items:center;gap:10px;}
+.brand-mark{
+  width:34px;height:34px;border-radius:50%;
+  overflow:hidden;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+  background:#fff;
+}
+.brand-mark img{width:100%;height:100%;object-fit:cover;display:block;}
+.brand-name{font-size:19px;font-weight:600;letter-spacing:0.2px;}
+.brand-tag{font-size:10.5px;color:rgba(234,240,245,0.6);text-transform:uppercase;letter-spacing:1px;margin-top:1px;}
+
+.nav-tabs{display:flex;gap:6px;background:rgba(255,255,255,0.08);padding:4px;border-radius:8px;}
+.nav-tab{flex:1;padding:8px 6px;font-size:12.5px;font-weight:600;border-radius:6px;color:rgba(234,240,245,0.72);text-align:center;transition:background .15s,color .15s;}
+.nav-tab.active{background:#EAF0F5;color:var(--cover-dark);}
+
+.side-section-label{font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:rgba(234,240,245,0.55);}
+
+/* FSRS mode switch */
+.fsrs-switch{position:relative;display:inline-block;width:34px;height:19px;flex-shrink:0;}
+.fsrs-switch-track{position:absolute;inset:0;background:rgba(255,255,255,0.22);border-radius:99px;transition:background .15s;}
+.fsrs-switch.on .fsrs-switch-track{background:#F0C33C;}
+.fsrs-switch-thumb{position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#EAF0F5;box-shadow:0 1px 2px rgba(0,0,0,0.3);transition:left .15s;}
+.fsrs-switch.on .fsrs-switch-thumb{left:17px;background:#2F2611;}
+
+/* Collapsible FSRS bar */
+.fsrs-bar{border-radius:10px;overflow:hidden;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);}
+.fsrs-bar-header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;cursor:pointer;color:#EAF0F5;}
+.fsrs-bar-header:hover{background:rgba(255,255,255,.05);}
+.fsrs-bar-body{padding:0 12px 10px;cursor:pointer;color:#EAF0F5;}
+
+/* Main-content search bar (Library view — same viewport as results on all screen sizes) */
+.main-search{position:relative;margin-bottom:16px;}
+.main-search input{
+  width:100%;padding:10px 40px 10px 38px;border-radius:10px;border:1px solid var(--rule-strong);
+  background:var(--card);color:var(--ink);font-size:14px;
+}
+.main-search input::placeholder{color:var(--ink-faint);}
+.main-search input:focus{outline:none;border-color:var(--cover);}
+.main-search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink-soft);pointer-events:none;display:flex;}
+.main-search-clear{position:absolute;right:7px;top:50%;transform:translateY(-50%);width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);}
+.main-search-clear:hover{background:var(--paper);color:var(--ink);}
+
+/* Sidebar settings gear */
+.sidebar-gear-btn{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);color:#EAF0F5;font-size:15px;flex-shrink:0;transition:background .15s,transform .2s;}
+.sidebar-gear-btn:hover{background:rgba(255,255,255,0.2);transform:rotate(20deg);}
+
+/* Settings modal */
+.settings-account{display:flex;align-items:center;gap:12px;padding:14px;background:var(--paper);border-radius:10px;margin-bottom:16px;}
+.settings-avatar{width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,#5C3D80,#2F5C7A);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:17px;flex-shrink:0;letter-spacing:0.5px;}
+.settings-account-info{flex:1;min-width:0;}
+.settings-account-name{font-weight:600;font-size:14px;color:var(--ink);}
+.settings-account-email{font-size:12px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.settings-account-tag{display:inline-block;margin-top:4px;font-size:10px;font-weight:600;color:var(--cover);background:rgba(47,92,122,0.1);padding:2px 8px;border-radius:99px;}
+.settings-section{margin-bottom:18px;}
+.settings-section h4{font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:var(--ink-soft);margin-bottom:8px;}
+.settings-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--rule);font-size:13.5px;}
+.settings-row:last-child{border-bottom:none;}
+.settings-toggle{position:relative;display:inline-block;width:38px;height:21px;flex-shrink:0;}
+.settings-toggle-track{position:absolute;inset:0;background:var(--rule-strong);border-radius:99px;transition:background .15s;}
+.settings-toggle.on .settings-toggle-track{background:var(--cover);}
+.settings-toggle-thumb{position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.3);transition:left .15s;}
+.settings-toggle.on .settings-toggle-thumb{left:19px;}
+.data-btn-row{display:flex;gap:10px;margin-top:2px;}
+.data-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;border-radius:8px;border:1.5px solid var(--rule-strong);font-weight:600;font-size:13px;color:var(--ink);}
+.data-btn:hover{border-color:var(--cover);color:var(--cover);}
+.data-btn.primary{background:var(--cover);color:#fff;border-color:var(--cover);}
+.data-btn.primary:hover{background:var(--cover-dark);color:#fff;}
+
+/* Undo */
+.undo-btn{font-size:11.5px;color:var(--ink-soft);text-decoration:underline;text-underline-offset:2px;}
+.undo-btn:hover{color:var(--ink);}
+
+/* Row icon buttons (edit / history) */
+.mcq-row-actions{display:flex;gap:4px;align-items:flex-start;flex-shrink:0;}
+.mcq-icon-btn{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:13px;}
+.mcq-icon-btn:hover{background:var(--paper);color:var(--ink);}
+
+/* Rich modal (edit / history) */
+.modal-card.wide{width:min(640px,100%);max-height:86vh;overflow-y:auto;}
+.modal-card.narrow{width:min(300px,100%);max-height:86vh;overflow-y:auto;padding:8px;}
+.form-field{margin-bottom:12px;}
+.form-field label{display:block;font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;color:var(--ink-soft);margin-bottom:4px;}
+.form-field input[type=text],.form-field textarea{
+  width:100%;padding:8px 10px;border:1px solid var(--rule-strong);border-radius:6px;background:var(--card);color:var(--ink);font-size:13.5px;
+}
+.form-field textarea{resize:vertical;min-height:60px;}
+.option-edit-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.option-edit-row .opt-letter{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--rule-strong);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;}
+.option-edit-row label{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--ink-soft);flex-shrink:0;}
+.history-item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--rule);font-size:12.5px;}
+.history-item:last-child{border-bottom:none;}
+.history-verdict{font-weight:600;padding:2px 8px;border-radius:99px;font-size:10.5px;}
+.history-verdict.correct{background:var(--pen-green-bg);color:var(--pen-green);}
+.history-verdict.wrong{background:var(--pen-red-bg);color:var(--pen-red);}
+.fsrs-stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
+.fsrs-stat-grid div{background:var(--paper);border-radius:8px;padding:8px;text-align:center;}
+.fsrs-stat-grid .stat-num{font-size:16px;font-weight:700;}
+.fsrs-stat-grid .stat-label{font-size:10px;color:var(--ink-soft);margin-top:2px;}
+
+.toc{display:flex;flex-direction:column;gap:2px;}
+.toc-empty{font-size:12.5px;color:rgba(234,240,245,0.55);line-height:1.5;padding:6px 2px;}
+.toc-node{}
+.toc-row{
+  display:flex;align-items:center;gap:6px;
+  padding:6px 8px;border-radius:6px;font-size:13px;
+  color:#EAF0F5;
+}
+.toc-row:hover{background:rgba(255,255,255,0.08);}
+.toc-row.selected{background:rgba(255,255,255,0.16);}
+.toc-toggle{width:14px;flex-shrink:0;color:rgba(234,240,245,0.6);font-size:10px;display:inline-flex;align-items:center;justify-content:center;}
+.toc-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;}
+.toc-count{font-size:11px;color:rgba(234,240,245,0.55);flex-shrink:0;}
+.toc-node.subject > .toc-row .toc-label{font-weight:600;}
+.toc-children{margin-left:14px;border-left:1px solid rgba(255,255,255,0.14);padding-left:4px;}
+
+.side-footer{margin-top:auto;font-size:11px;color:rgba(234,240,245,0.5);line-height:1.6;}
+
+/* ---------- Main ---------- */
+.main{padding:30px 40px 60px;max-width:960px;}
+.view-head{margin-bottom:22px;}
+.view-title{font-size:clamp(20px,5.5vw,26px);font-weight:600;}
+.view-sub{font-size:13.5px;color:var(--ink-soft);margin-top:4px;}
+
+.breadcrumb{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12.5px;margin-bottom:10px;}
+.breadcrumb-link{color:var(--cover);text-decoration:underline;text-underline-offset:2px;display:inline-flex;align-items:center;gap:2px;}
+.breadcrumb-link:hover{color:var(--cover-dark);}
+.breadcrumb-sep{color:var(--ink-faint);}
+.breadcrumb-current{color:var(--ink-soft);font-weight:600;}
+
+/* Chapter/subject card grid */
+.chapter-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;
+  margin-top:6px;
+}
+.chapter-card{
+  background:var(--card);border:1px solid var(--rule);border-radius:var(--radius);
+  overflow:hidden;cursor:pointer;display:flex;flex-direction:column;position:relative;
+  transition:box-shadow .12s,border-color .12s,opacity .12s;
+}
+.chapter-card:hover{border-color:var(--rule-strong);box-shadow:var(--shadow-card);}
+.chapter-card.asleep{opacity:0.62;}
+.chapter-card-toolbar{position:absolute;top:10px;right:10px;display:flex;gap:4px;z-index:2;}
+.chapter-card-sleep-btn{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--ink-faint);background:var(--paper);}
+.chapter-card-sleep-btn:hover{color:var(--ink);background:var(--rule);}
+.chapter-card-sleep-btn.on{color:var(--cover);background:var(--pen-blue-bg);}
+.chapter-card-sleep-btn.on svg{fill:currentColor;}
+.chapter-card-menu-btn{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--ink-faint);background:var(--paper);}
+.chapter-card-menu-btn:hover{color:var(--ink);background:var(--rule);}
+.sleep-badge{display:inline-block;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:var(--ink-soft);background:var(--paper);padding:2px 6px;border-radius:99px;vertical-align:middle;margin-left:4px;}
+
+/* Folder (has nested chapters — clicking drills into another grid) vs leaf
+   (clicking opens the question list directly) — quick visual distinction. */
+.deck-type-tag{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:99px;margin-bottom:8px;}
+.deck-type-tag.folder{background:var(--pen-amber-bg);color:var(--pen-amber);}
+.deck-type-tag.folder svg{fill:var(--pen-amber);stroke:var(--pen-amber);}
+.deck-type-tag.leaf{background:var(--paper);color:var(--ink-soft);font-weight:600;}
+/* Folder decks (have nested chapters — clicking drills into another grid) get a real
+   manila-folder tint so the distinction reads instantly, not just from a small badge.
+   Leaf decks (clicking opens the question list directly) stay plain paper-white. */
+.chapter-card.is-folder{background:var(--pen-amber-bg);border-color:var(--pen-amber);border-left:3px solid var(--pen-amber);}
+.chapter-card.is-folder .chapter-card-sleep-btn,
+.chapter-card.is-folder .chapter-card-menu-btn{background:var(--card);border:1px solid rgba(0,0,0,0.08);box-shadow:0 1px 2px rgba(0,0,0,0.08);}
+.chapter-card.is-leaf{border-left:3px solid var(--rule-strong);}
+
+/* Deck (subject/chapter) context menu — modal action-sheet style */
+.deck-menu{padding:6px;}
+.deck-menu-item{display:flex;align-items:center;gap:12px;width:100%;padding:11px 12px;border-radius:8px;font-size:14px;font-weight:500;color:var(--ink);text-align:left;}
+.deck-menu-item:hover{background:var(--paper);}
+.deck-menu-item svg{flex-shrink:0;color:var(--ink-soft);}
+.deck-menu-divider{height:1px;background:var(--rule);margin:6px 4px;}
+.deck-menu-item.danger{color:var(--pen-red);}
+.deck-menu-item.danger svg{color:var(--pen-red);}
+.deck-menu-item.danger:hover{background:var(--pen-red-bg);}
+
+/* Paste banner — appears wherever you navigate after cutting a deck */
+.paste-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--pen-blue-bg);border:1px dashed var(--cover);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--ink);}
+.paste-banner strong{color:var(--cover);}
+.chapter-card-body{padding:clamp(12px,4vw,16px) clamp(14px,4vw,18px) clamp(10px,3vw,14px);flex:1;}
+.chapter-card-title{font-family:'Fraunces',Georgia,serif;font-size:17px;font-weight:600;margin-bottom:8px;}
+.chapter-card-stats{font-size:12.5px;color:var(--ink-soft);line-height:1.6;}
+.stat-good{color:var(--pen-green);font-weight:600;}
+.stat-mid{color:var(--highlighter-ink);font-weight:600;}
+.stat-low{color:var(--pen-red);font-weight:600;}
+.chapter-card-view{
+  display:flex;align-items:center;justify-content:center;gap:5px;width:100%;text-align:center;padding:11px 10px;
+  background:rgba(47,92,122,0.08);color:var(--cover);font-weight:600;font-size:13px;
+  border-top:1px solid var(--rule);
+}
+.chapter-card-view:hover{background:rgba(47,92,122,0.16);}
+
+.card{
+  background:var(--card);
+  border:1px solid var(--rule);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-card);
+}
+
+/* Filters — compact single-line toolbar with a collapsible tag panel */
+.filters-bar{margin-bottom:18px;}
+.filter-toolbar{
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+  padding:10px 2px;border-bottom:1px solid var(--rule);
+}
+.filter-toolbar-group{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.filter-divider{width:1px;align-self:stretch;background:var(--rule);margin:2px 2px;}
+.filter-clear-link{
+  font-size:12px;color:var(--ink-soft);text-decoration:underline;text-underline-offset:2px;
+  margin-left:auto;
+}
+.filter-clear-link:hover{color:var(--ink);}
+.chip{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 10px;border-radius:999px;border:1px solid var(--rule-strong);
+  font-size:12px;background:var(--card);color:var(--ink-soft);
+}
+.chip.active{background:var(--ink);color:var(--card);border-color:var(--ink);}
+.chip-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.chip-x{opacity:0.65;font-size:11px;margin-left:1px;}
+.tags-trigger{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 10px;border-radius:999px;border:1px solid var(--rule-strong);
+  font-size:12px;background:var(--card);color:var(--ink-soft);
+}
+.tags-trigger.has-active{border-color:var(--cover);color:var(--cover);}
+.tags-trigger .caret{font-size:9px;opacity:0.7;}
+.tags-trigger .count-badge{
+  background:var(--cover);color:#fff;border-radius:999px;
+  font-size:10px;line-height:1;padding:2px 6px;
+}
+select.status-select{
+  border:1px solid var(--rule-strong);border-radius:999px;padding:5px 22px 5px 10px;font-size:12px;background:var(--card);color:var(--ink-soft);
+}
+.tag-panel{
+  display:flex;flex-wrap:wrap;gap:6px;
+  padding:12px 2px 4px;
+  border-bottom:1px solid var(--rule);
+  margin-bottom:2px;
+}
+.tag-panel-empty{font-size:12.5px;color:var(--ink-faint);padding:6px 0;}
+
+/* MCQ list */
+.mcq-list{display:flex;flex-direction:column;gap:8px;margin-top:14px;}
+.mcq-row{
+  padding:12px 14px;display:flex;align-items:flex-start;gap:11px;cursor:pointer;
+  box-shadow:none;border-color:var(--rule);
+}
+.mcq-row:hover{border-color:var(--rule-strong);box-shadow:var(--shadow-card);}
+.mcq-status-dot{width:8px;height:8px;border-radius:50%;margin-top:6px;flex-shrink:0;background:var(--rule-strong);}
+.mcq-status-dot.correct{background:var(--pen-green);}
+.mcq-status-dot.wrong{background:var(--pen-red);}
+.mcq-status-dot.flagged{background:var(--highlighter);}
+.mcq-row-text{flex:1;font-size:13.5px;line-height:1.5;}
+.mcq-row-meta{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center;}
+.tag-pill{
+  font-size:10.5px;padding:2px 8px;border-radius:999px;
+  background:var(--rule);color:var(--ink-soft);
+}
+.tag-pill-more{font-size:10.5px;color:var(--ink-faint);}
+.source-pill{font-size:10.5px;padding:2px 8px;border-radius:999px;color:#fff;}
+
+.action-row{display:flex;gap:16px;margin:16px 0 4px;flex-wrap:wrap;align-items:center;}
+.link-btn{font-size:13px;color:var(--ink-soft);text-decoration:underline;text-underline-offset:2px;}
+.lucide-icon{flex-shrink:0;vertical-align:middle;}
+.icon-inline{display:inline-flex;align-items:center;gap:5px;vertical-align:middle;}
+.link-btn:hover{color:var(--ink);}
+.btn{
+  padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;
+  border:1px solid var(--rule-strong);background:var(--card);color:var(--ink);
+  display:inline-flex;align-items:center;gap:7px;
+}
+.btn:hover{border-color:var(--ink);}
+.btn-primary{background:var(--cover);color:#fff;border-color:var(--cover);}
+.btn-primary:hover{background:var(--cover-dark);border-color:var(--cover-dark);}
+.btn-danger{color:var(--pen-red);border-color:var(--pen-red);}
+.btn-danger:hover{background:var(--pen-red-bg);}
+.btn-ghost{border-color:transparent;}
+.btn-ghost:hover{background:var(--rule);}
+.btn-sm{padding:6px 11px;font-size:12px;}
+
+.empty-state{padding:40px 20px;text-align:center;color:var(--ink-soft);}
+.empty-state .serif{font-size:18px;color:var(--ink);margin-bottom:6px;display:block;}
+
+/* Add source view */
+.section-block{padding:clamp(14px,4vw,18px) clamp(14px,4vw,20px);margin-bottom:18px;}
+.section-block h3{font-size:14.5px;font-weight:600;margin-bottom:10px;}
+.prompt-box{
+  background:#1B242C;color:#DCE6D9;border-radius:8px;padding:14px 16px;
+  font-size:11.8px;line-height:1.65;max-height:260px;overflow-y:auto;white-space:pre-wrap;
+}
+textarea.ingest-area{
+  width:100%;min-height:220px;border:1px solid var(--rule-strong);border-radius:8px;
+  padding:12px 14px;font-size:13px;line-height:1.6;font-family:'IBM Plex Mono',monospace;
+  background:var(--card);color:var(--ink);resize:vertical;
+}
+.field-row{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;}
+.field{flex:1;min-width:180px;}
+.field label{font-size:11.5px;color:var(--ink-soft);display:block;margin-bottom:4px;}
+.field input{width:100%;border:1px solid var(--rule-strong);border-radius:6px;padding:8px 10px;font-size:13px;background:var(--card);color:var(--ink);}
+.parse-report{margin-top:12px;font-size:13px;}
+.parse-ok{color:var(--pen-green);font-weight:600;}
+.parse-err-list{margin-top:8px;font-size:12px;color:var(--pen-red);line-height:1.6;}
+.source-manage-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--rule);font-size:13px;}
+.source-manage-row:last-child{border-bottom:none;}
+
+/* Practice view */
+.practice-wrap{max-width:720px;}
+.practice-progress{display:flex;align-items:center;gap:12px;margin-bottom:18px;}
+.progress-track{flex:1;height:6px;background:var(--rule);border-radius:99px;overflow:hidden;}
+.progress-fill{height:100%;background:var(--cover);border-radius:99px;transition:width .25s;}
+.progress-label{font-size:12px;color:var(--ink-soft);white-space:nowrap;}
+
+.answer-sheet{padding:clamp(16px,5vw,26px) clamp(16px,5vw,30px) clamp(20px,5vw,30px);}
+.qmeta{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:10px;flex-wrap:wrap;}
+.qnum{font-size:12px;color:var(--ink-soft);}
+.qmeta-tags{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-start;}
+.passage-box{
+  background:var(--paper);border-left:3px solid var(--cover);padding:12px 14px;
+  border-radius:0 6px 6px 0;font-size:13.5px;line-height:1.65;margin-bottom:16px;color:var(--ink-soft);
+}
+.qtext{font-size:clamp(15px,4vw,17px);line-height:1.6;margin-bottom:20px;}
+.qtext p{margin-bottom:8px;}
+.mcq-table{border-collapse:collapse;margin:10px 0;width:100%;font-size:13px;}
+.mcq-table th,.mcq-table td{border:1px solid var(--rule-strong);padding:6px 10px;text-align:left;}
+.mcq-table th{background:var(--paper);}
+.img-placeholder{
+  background:var(--paper);border:1px dashed var(--rule-strong);border-radius:6px;
+  padding:14px;font-size:12.5px;color:var(--ink-soft);margin:10px 0;
+}
+
+.bubbles{display:flex;flex-direction:column;gap:10px;}
+.bubble{
+  display:flex;align-items:center;gap:12px;text-align:left;width:100%;
+  padding:11px 14px;border:1px solid var(--rule-strong);border-radius:9px;background:var(--card);
+  transition:border-color .15s,background .15s;
+}
+.bubble:hover:not(.locked){border-color:var(--ink);}
+.bubble.selected{background:var(--paper);border-color:var(--ink);}
+.bubble-mark{position:relative;width:30px;height:30px;flex-shrink:0;}
+.bubble-ring{position:absolute;inset:-5px;overflow:visible;fill:none;stroke-width:3;opacity:0;transform:scale(0.6);transform-origin:50% 50%;transition:opacity .2s ease, transform .35s cubic-bezier(.34,1.56,.64,1);}
+.bubble.reveal-correct .bubble-ring{stroke:var(--pen-green);opacity:1;transform:scale(1);}
+.bubble.reveal-wrong .bubble-ring{stroke:var(--pen-red);opacity:1;transform:scale(1);}
+.bubble-letter{
+  width:30px;height:30px;border-radius:50%;border:1.5px solid var(--ink-faint);
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;
+  transition:background .15s,color .15s,border-color .15s;
+}
+.bubble.selected .bubble-letter{background:var(--ink);color:var(--card);border-color:var(--ink);}
+.bubble.reveal-correct .bubble-letter{background:var(--pen-green);color:#fff;border-color:var(--pen-green);}
+.bubble.reveal-wrong.selected .bubble-letter{background:var(--pen-red);color:#fff;border-color:var(--pen-red);}
+.bubble-text{font-size:14.5px;line-height:1.5;flex:1;}
+.bubble.locked{cursor:default;}
+
+.short-answer-box textarea{width:100%;min-height:70px;border:1px solid var(--rule-strong);border-radius:8px;padding:10px 12px;font-size:14px;background:var(--card);color:var(--ink);}
+
+.reveal-panel{margin-top:18px;padding-top:16px;border-top:1px dashed var(--rule-strong);}
+.reveal-verdict{font-size:14px;font-weight:600;margin-bottom:8px;}
+.reveal-verdict.correct{color:var(--pen-green);}
+.reveal-verdict.wrong{color:var(--pen-red);}
+.reveal-explain{font-size:13.5px;line-height:1.65;color:var(--ink-soft);}
+.reveal-explain p{margin-bottom:6px;}
+
+.learning-banner{padding:18px;border-radius:12px;margin-bottom:18px;font-size:15px;line-height:1.6;color:var(--ink);}
+.learning-banner.new{background:var(--pen-green-bg);border-left:5px solid var(--pen-green);}
+.learning-banner.noconcept{background:var(--pen-yellow-bg);border-left:5px solid var(--highlighter);}
+.learning-banner.misconception{background:var(--pen-red-bg);border-left:5px solid var(--pen-red);}
+.learning-banner.learning{background:var(--pen-blue-bg);border-left:5px solid var(--pen-blue);}
+.learning-banner.mastered{background:var(--pen-green-bg);border-left:5px solid var(--pen-green);}
+
+.answer-footer{display:flex;justify-content:space-between;align-items:center;margin-top:20px;}
+.bookmark-btn{display:inline-flex;align-items:center;gap:7px;}
+.bookmark-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round;}
+.bookmark-btn.bookmarked{color:#8A6A00;background:#FFF4BF;border-color:#D6A900;}
+.bookmark-btn.bookmarked svg{fill:#F0C33C;stroke:#8A6A00;}
+.paused-card{padding:16px 18px;margin-bottom:18px;border-left:4px solid var(--highlighter);}
+.modal-backdrop{position:fixed;inset:0;background:rgba(20,28,34,.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:100;}
+.modal-card{width:min(520px,100%);background:var(--card);border:1px solid var(--rule-strong);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.22);padding:clamp(16px,5vw,22px);}
+.modal-card h3{font-family:'Fraunces',Georgia,serif;font-size:20px;margin-bottom:8px;}
+.modal-close-btn{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);flex-shrink:0;}
+.modal-close-btn:hover{background:var(--paper);color:var(--ink);}
+.modal-card p{font-size:13.5px;line-height:1.6;color:var(--ink-soft);margin-bottom:18px;}
+
+/* Summary */
+.summary-card{padding:clamp(18px,6vw,34px);text-align:center;}
+.score-ring{
+  width:clamp(105px,32vw,140px);height:clamp(105px,32vw,140px);border-radius:50%;border:6px solid var(--pen-red);
+  display:flex;align-items:center;justify-content:center;flex-direction:column;margin:0 auto 20px;
+}
+.score-ring.good{border-color:var(--pen-green);}
+.score-big{font-size:clamp(25px,7vw,34px);font-weight:700;}
+.score-sub{font-size:12px;color:var(--ink-soft);}
+.summary-breakdown{text-align:left;margin-top:22px;}
+.summary-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--rule);font-size:13.5px;}
+
+/* Toast */
+.toast{
+  position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--overlay-bg);color:var(--overlay-ink);padding:10px 18px;border-radius:8px;font-size:13px;
+  opacity:0;transition:opacity .2s, transform .2s;pointer-events:none;z-index:50;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+.loading-screen{display:flex;align-items:center;justify-content:center;height:100vh;font-size:14px;color:var(--ink-soft);}
+
+/* Auth gate */
+.auth-gate{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--paper);background-image:linear-gradient(var(--rule) 1px, transparent 1px);background-size:100% 32px;padding:20px;}
+.auth-card{width:min(360px,100%);background:var(--card);border:1px solid var(--rule);border-radius:14px;box-shadow:var(--shadow-card);padding:32px 28px;text-align:center;}
+.auth-title{font-size:24px;font-weight:600;margin-bottom:4px;}
+.auth-sub{font-size:13.5px;color:var(--ink-soft);margin-bottom:22px;line-height:1.5;}
+.google-signin-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:11px 16px;border-radius:8px;border:1px solid var(--rule-strong);background:var(--card);color:var(--ink);font-weight:600;font-size:13.5px;}
+.google-signin-btn:hover{background:var(--paper);border-color:var(--ink-faint);}
+.auth-config-warning{text-align:left;font-size:12.5px;line-height:1.6;color:var(--pen-red);background:var(--pen-red-bg);border-radius:8px;padding:12px 14px;}
+.auth-config-warning code{font-family:'IBM Plex Mono',monospace;font-size:11.5px;background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:4px;}
+.auth-error{font-size:12.5px;color:var(--pen-red);margin-top:10px;}
+
+.sidebar-backdrop{display:none;}
+@media (max-width:860px){
+  .app-shell{grid-template-columns:1fr;}
+  .sidebar{position:fixed;left:0;top:0;bottom:0;width:80vw;max-width:300px;z-index:40;transform:translateX(-100%);transition:transform .2s;}
+  .sidebar.open{transform:translateX(0);}
+  .sidebar-backdrop{display:block;position:fixed;inset:0;background:rgba(10,14,18,0.55);z-index:35;animation:backdropFadeIn .15s ease;}
+  .main{padding:16px 16px 50px;}
+  .mobile-topbar{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .chapter-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;}
+  .action-row{gap:10px;}
+  /* iOS Safari auto-zooms the page when a focused text field's font-size is under
+     16px — force every field to 16px on mobile so tapping into search/edit/filter
+     inputs doesn't yank the viewport in. */
+  input, textarea, select { font-size:16px !important; }
+}
+@media (max-width:520px){
+  .chapter-grid{grid-template-columns:1fr;}
+  .fsrs-stat-grid{gap:6px;}
+  .modal-card.wide{max-height:90vh;}
+  .field-row{gap:10px;}
+  .action-row{flex-direction:column;align-items:stretch;gap:8px;}
+  .action-row .btn{width:100%;justify-content:center;}
+  .summary-breakdown{margin-top:16px;}
+  .mcq-row-meta{gap:5px;}
+  /* Tighten the header chrome above search/browse results so more of the
+     actual list is visible without scrolling on a phone. */
+  .main-search{margin-bottom:10px;}
+  .view-head{margin-bottom:12px;}
+  .view-title{margin-bottom:2px;}
+  .breadcrumb{margin-bottom:6px;}
+  .filters-bar{margin-bottom:10px;}
+  .filter-toolbar{gap:6px;}
+  .action-row{margin:10px 0 2px;}
+}
+@keyframes backdropFadeIn{from{opacity:0;}to{opacity:1;}}
+@media (min-width:861px){.mobile-topbar{display:none;}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+</head>
+<body>
+
+<div id="loadingScreen" class="loading-screen">Loading…</div>
+<div id="authGate" class="auth-gate" style="display:none;">
+  <div class="auth-card">
+    <div class="brand-mark" style="width:52px;height:52px;margin:0 auto 16px;"><img src="icons/icon-128x128.png" alt="Practex logo"></div>
+    <div class="auth-title serif">Practex</div>
+    <div class="auth-sub">Sign in to sync your MCQ library across devices.</div>
+    <div id="authGateBody"></div>
+  </div>
+</div>
+<div id="appRoot" class="app-shell" style="display:none;"></div>
+<div class="toast" id="toast"></div>
+<div id="modalRoot"></div>
+<input type="file" id="importFileInput" accept="application/json,.json" style="display:none">
+
+<script>
+(function(){
+
+/* ================= Supabase config =================
+   Fill these in from your Supabase project dashboard: Settings → API.
+   The anon key is meant to be public/client-side — it only grants whatever your
+   Row Level Security policies allow, so it's safe to ship inside this file.
+   See the setup guide for how to create the project, tables, and Google OAuth. */
+var SUPABASE_URL = 'https://tcwqisuuamtnxwudqsvo.supabase.co';       // e.g. https://abcdefghijk.supabase.co
+var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRjd3Fpc3V1YW10bnh3dWRxc3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwNDM4MjksImV4cCI6MjEwMTYxOTgyOX0.cb5lrxdjmafAZqdhBGA2FzBN2Pq5RP26uQ7UhRDZQ1A';     // Settings → API → Project API keys → anon public
+var SUPABASE_CONFIGURED = SUPABASE_URL.indexOf('YOUR_SUPABASE') === -1 && SUPABASE_ANON_KEY.indexOf('YOUR_SUPABASE') === -1;
+var supabaseClient = (SUPABASE_CONFIGURED && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+/* ===================================================== */
+
+
+var state = {
+  mcqs: [],
+  sources: {},
+  view: 'browse',
+  selectedPath: null,
+  filters: { sources: {}, tags: {}, status: 'all', tagPanelOpen: false, search: '' },
+  forceList: false,
+  session: null,
+  sidebarOpen: false,
+  expanded: {},
+  learningMode: { enabled: true },
+  darkMode: false,
+  streak: { count: 0, lastDate: null },
+  pausedSession: null,
+  pendingStart: null,
+  activeModal: null,
+  fsrsCardExpanded: true,
+  sleepingSubjects: {},
+  pendingNav: null,
+  clipboardNode: null,
+  pendingDeckDelete: null,
+  currentUser: null
+};
+
+var PALETTE = ['#2F5C7A','#B23A2E','#2F6E45','#8B5E9C','#C77B2E','#3D7D8C','#9C4F6E','#5C6B2F'];
+
+function colorForSource(name){
+  if (state.sources[name] && state.sources[name].color) return state.sources[name].color;
+  var keys = Object.keys(state.sources);
+  var idx = keys.indexOf(name);
+  if (idx < 0) idx = keys.length;
+  return PALETTE[idx % PALETTE.length];
+}
+
+function uid(){ return 'm_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
+
+function escapeHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ---------------- Lucide-style icons (inline SVG, vanilla — no dependency) ---------------- */
+var ICON_PATHS = {
+  settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+  menu: '<line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  pencil: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/>',
+  'chevron-right': '<path d="m9 18 6-6-6-6"/>',
+  'chevron-left': '<path d="m15 18-6-6 6-6"/>',
+  'chevron-down': '<path d="m6 9 6 6 6-6"/>',
+  'chevron-up': '<path d="m18 15-6-6-6 6"/>',
+  'check-circle': '<path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/>',
+  moon: '<path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>',
+  'more-vertical': '<circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>',
+  'log-in': '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  scissors: '<circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/>',
+  'trash-2': '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+  'corner-up-right': '<polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/>',
+  clipboard: '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
+  folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  list: '<path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/>'
+};
+function icon(name, size){
+  size = size || 16;
+  return '<svg class="lucide-icon" width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(ICON_PATHS[name]||'')+'</svg>';
+}
+
+function showToast(msg){
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(function(){ t.classList.remove('show'); }, 2600);
+}
+
+/* ---------------- Storage (Supabase, scoped to the signed-in user) ---------------- */
+async function loadLibrary(){
+  if (!state.currentUser || !supabaseClient) { state.mcqs = []; state.sources = {}; return; }
+  try {
+    var mcqRes = await supabaseClient.from('mcqs').select('data').eq('user_id', state.currentUser.id);
+    if (mcqRes.error) throw mcqRes.error;
+    state.mcqs = (mcqRes.data || []).map(function(row){ return row.data; });
+  } catch(e) {
+    console.error('loadLibrary (mcqs):', e);
+    state.mcqs = [];
+    showToast('Could not load your library from the server.');
+  }
+  try {
+    var setRes = await supabaseClient.from('user_settings').select('*').eq('user_id', state.currentUser.id).maybeSingle();
+    if (setRes.error) throw setRes.error;
+    var row = setRes.data;
+    state.sources = (row && row.sources) || {};
+    state.pausedSession = (row && row.paused_session) || null;
+    state.learningMode.enabled = row ? (row.fsrs_mode_enabled !== false) : true;
+    state.darkMode = !!(row && row.dark_mode);
+    state.streak = (row && row.streak) || { count: 0, lastDate: null };
+    state.fsrsCardExpanded = row ? (row.fsrs_card_expanded !== false) : true;
+    state.sleepingSubjects = (row && row.sleeping_subjects) || {};
+  } catch(e) {
+    console.error('loadLibrary (settings):', e);
+  }
+}
+/* All the small per-user preferences live in one row so toggling any of them is a
+   single upsert rather than a separate table/network round trip each. */
+async function saveUserSettings(){
+  if (!state.currentUser || !supabaseClient) return;
+  try {
+    var res = await supabaseClient.from('user_settings').upsert({
+      user_id: state.currentUser.id,
+      sources: state.sources,
+      paused_session: state.pausedSession,
+      fsrs_mode_enabled: state.learningMode.enabled,
+      dark_mode: state.darkMode,
+      streak: state.streak,
+      fsrs_card_expanded: state.fsrsCardExpanded,
+      sleeping_subjects: state.sleepingSubjects,
+      updated_at: new Date().toISOString()
+    });
+    if (res.error) throw res.error;
+  } catch(e) {
+    console.error('saveUserSettings:', e);
+    showToast('Could not save your settings to the server.');
+  }
+}
+function saveFsrsCardExpanded(){ return saveUserSettings(); }
+function saveSleepingSubjects(){ return saveUserSettings(); }
+function saveFsrsMode(){ return saveUserSettings(); }
+function saveDarkMode(){ return saveUserSettings(); }
+function saveStreak(){ return saveUserSettings(); }
+async function saveSources(){ return saveUserSettings(); }
+async function savePausedSession(){ return saveUserSettings(); }
+function dateStr(ts){
+  var d = new Date(ts);
+  return d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate();
+}
+function bumpStreak(){
+  var today = dateStr(Date.now());
+  if (state.streak.lastDate === today) return;
+  var yesterday = dateStr(Date.now() - 86400000);
+  if (state.streak.lastDate === yesterday) state.streak.count = (state.streak.count||0) + 1;
+  else state.streak.count = 1;
+  state.streak.lastDate = today;
+  saveStreak();
+}
+/* Upserts the current in-memory library in one batched request (Postgres upsert
+   accepts an array, so this is a single round trip regardless of library size).
+   Note: this does NOT delete rows that were removed locally — see deleteMcqRows(). */
+async function saveLibrary(){
+  if (!state.currentUser || !supabaseClient) return;
+  if (!state.mcqs.length) return;
+  try {
+    var rows = state.mcqs.map(function(m){
+      return { id: m.id, user_id: state.currentUser.id, data: m, updated_at: new Date().toISOString() };
+    });
+    var res = await supabaseClient.from('mcqs').upsert(rows);
+    if (res.error) throw res.error;
+  } catch(e) {
+    console.error('saveLibrary:', e);
+    showToast('Could not save — your changes may not persist.');
+  }
+}
+/* Explicit server-side delete for questions removed locally (deck delete is currently
+   the only path that removes mcqs — upsert alone never deletes rows). */
+async function deleteMcqRows(ids){
+  if (!state.currentUser || !supabaseClient || !ids || !ids.length) return;
+  try {
+    var res = await supabaseClient.from('mcqs').delete().eq('user_id', state.currentUser.id).in('id', ids);
+    if (res.error) throw res.error;
+  } catch(e) {
+    console.error('deleteMcqRows:', e);
+    showToast('Could not delete those questions on the server.');
+  }
+}
+function exportLibrary(){
+  var payload = {
+    exportedAt: Date.now(),
+    version: 1,
+    mcqs: state.mcqs,
+    sources: state.sources,
+    streak: state.streak
+  };
+  var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  var stamp = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = 'practex-library-' + stamp + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  showToast('Library exported.');
+}
+async function importLibraryFromFile(file){
+  try {
+    var text = await file.text();
+    var payload = JSON.parse(text);
+    var incoming = Array.isArray(payload) ? payload : payload.mcqs;
+    if (!Array.isArray(incoming)) { showToast('That file doesn\'t look like a Practex export.'); return; }
+    var existingIds = {}; state.mcqs.forEach(function(m){ existingIds[m.id] = true; });
+    var added = 0;
+    incoming.forEach(function(m){
+      if (!m || !m.id) return;
+      if (existingIds[m.id]) return; // skip exact duplicates by id
+      state.mcqs.push(m);
+      existingIds[m.id] = true;
+      added++;
+    });
+    if (payload.sources) {
+      Object.keys(payload.sources).forEach(function(k){
+        if (!state.sources[k]) state.sources[k] = payload.sources[k];
+      });
+    }
+    await saveLibrary();
+    await saveSources();
+    render();
+    showToast(added + ' question' + (added===1?'':'s') + ' imported' + (incoming.length-added ? ' (' + (incoming.length-added) + ' duplicates skipped)' : '') + '.');
+  } catch(e) {
+    showToast('Could not read that file — is it a valid Practex export?');
+  }
+}
+function showModal(title, message, buttons){
+  var root=document.getElementById('modalRoot');
+  root.innerHTML='<div class="modal-backdrop"><div class="modal-card"><h3>'+escapeHtml(title)+'</h3><p>'+escapeHtml(message)+'</p><div class="action-row" style="margin-bottom:0;">'+buttons.map(function(b){return '<button class="btn '+(b.primary?'btn-primary':'btn-ghost')+'" data-action="'+b.action+'">'+escapeHtml(b.label)+'</button>';}).join('')+'</div></div></div>';
+}
+function showRichModal(innerHtml, size){
+  var root=document.getElementById('modalRoot');
+  var sizeClass = size === 'narrow' ? 'narrow' : 'wide';
+  root.innerHTML='<div class="modal-backdrop" data-action="modal-backdrop-close"><div class="modal-card '+sizeClass+'" data-stop-close>'+innerHtml+'</div></div>';
+}
+function closeModal(){ document.getElementById('modalRoot').innerHTML=''; state.activeModal=null; }
+
+/* ---------------- Settings modal ---------------- */
+function openSettingsModal(){
+  state.activeModal = 'settings';
+  renderSettingsModalContent();
+}
+function renderSettingsModalContent(){
+  var html = '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;">' +
+    '<h3 style="margin-bottom:0;">Settings</h3>' +
+    '<button class="modal-close-btn" data-action="close-modal" title="Close" aria-label="Close">' + icon('x',18) + '</button>' +
+    '</div>';
+
+  var acct = userDisplayInfo(state.currentUser);
+  html += '<div class="settings-account">' +
+    (acct.avatarUrl
+      ? '<img class="settings-avatar" src="' + escapeHtml(acct.avatarUrl) + '" alt="" style="object-fit:cover;">'
+      : '<div class="settings-avatar">' + escapeHtml(acct.initials) + '</div>') +
+    '<div class="settings-account-info">' +
+      '<div class="settings-account-name">' + escapeHtml(acct.name) + '</div>' +
+      '<div class="settings-account-email">' + escapeHtml(acct.email) + '</div>' +
+      '<span class="settings-account-tag">Google Account</span>' +
+    '</div>' +
+    '<button class="btn btn-ghost btn-sm" data-action="sign-out">Sign out</button>' +
+    '</div>';
+
+  html += '<div class="settings-section"><h4>Your data</h4>' +
+    '<div class="data-btn-row">' +
+      '<button class="data-btn primary" data-action="export-library">' + icon('download',15) + ' Export library</button>' +
+      '<button class="data-btn" data-action="import-library">' + icon('upload',15) + ' Import library</button>' +
+    '</div>' +
+    '<div class="view-sub" style="margin-top:8px;margin-bottom:0;">Everything lives in this browser only — export regularly so a cache clear can\'t wipe your library.</div>' +
+    '</div>';
+
+  html += '<div class="settings-section"><h4>Progress</h4>' +
+    '<div class="settings-row"><span class="icon-inline">' + icon('flame',14) + ' Current streak</span><strong>' + (state.streak.count||0) + ' day' + (state.streak.count===1?'':'s') + '</strong></div>' +
+    '<div class="settings-row"><span>Questions tracked</span><strong>' + state.mcqs.length + '</strong></div>' +
+    '</div>';
+
+  html += '<div class="settings-section" style="margin-bottom:0;"><h4>Appearance &amp; scheduling</h4>' +
+    '<div class="settings-row"><span>Dark mode</span>' +
+      '<span class="settings-toggle' + (state.darkMode?' on':'') + '" data-action="toggle-dark-mode" role="switch" aria-checked="' + (state.darkMode?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
+    '<div class="settings-row" style="border-bottom:none;"><span>FSRS mode</span>' +
+      '<span class="settings-toggle' + (state.learningMode.enabled?' on':'') + '" data-action="toggle-fsrs-mode" role="switch" aria-checked="' + (state.learningMode.enabled?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
+    '</div>';
+
+  showRichModal(html);
+}
+
+/* ---------------- Question history modal ---------------- */
+function openHistoryModal(id){
+  var m = state.mcqs.find(function(x){ return x.id === id; });
+  if (!m) return;
+  var fs = (m.learning && m.learning.fsrs) || null;
+  var cls = getLearningState(m);
+  var snippet = m.question.replace(/\n/g,' ').slice(0, 140) + (m.question.length > 140 ? '…' : '');
+
+  var html = '<h3>Review history</h3>';
+  html += '<p style="margin-bottom:14px;">' + escapeHtml(snippet) + '</p>';
+  html += '<div class="fsrs-stat-grid">' +
+    '<div><div class="stat-num">' + (fs ? (Math.round(fs.stability*10)/10) : '–') + '</div><div class="stat-label">Stability (d)</div></div>' +
+    '<div><div class="stat-num">' + (fs ? (Math.round(fs.difficulty*10)/10) : '–') + '</div><div class="stat-label">Difficulty</div></div>' +
+    '<div><div class="stat-num">' + (fs ? fs.reps : 0) + '</div><div class="stat-label">Reviews</div></div>' +
+    '</div>';
+  html += '<div class="view-sub" style="margin-bottom:10px;">Current state: <strong>' + escapeHtml(cls) + '</strong>' +
+    (m.learning.due ? ' · next due ' + escapeHtml(new Date(m.learning.due).toLocaleString()) : '') + '</div>';
+
+  var hist = (m.learning.history || []).slice().reverse();
+  if (!hist.length) {
+    html += '<div class="view-sub">No attempts recorded yet.</div>';
+  } else {
+    var ratingLabels = {1:'Again',2:'Hard',3:'Good',4:'Easy'};
+    html += '<div>';
+    hist.forEach(function(h){
+      var label = ratingLabels[h.rating];
+      html += '<div class="history-item"><span>' + escapeHtml(new Date(h.ts).toLocaleString()) + (label ? ' · ' + label : '') + '</span>' +
+        '<span class="history-verdict ' + (h.correct ? 'correct' : 'wrong') + '">' + (h.correct ? 'Correct' : 'Wrong') + '</span></div>';
+    });
+    html += '</div>';
+  }
+  html += '<div class="action-row" style="margin-top:16px;margin-bottom:0;"><button class="btn btn-ghost" data-action="close-modal">Close</button></div>';
+  showRichModal(html);
+}
+
+/* ---------------- Deck (subject/chapter) context menu & modals ---------------- */
+function openDeckMenu(pathKey){
+  var pathArr = pathKey.split('␟');
+  var tree = buildTree();
+  var deckNode = getNodeByPath(tree, pathArr);
+  var name = deckNode ? deckNode.name : pathArr[pathArr.length-1];
+  var html = '<div class="deck-menu">';
+  html += '<button class="deck-menu-item" data-action="deck-rename" data-path="' + escapeHtml(pathKey) + '">' + icon('pencil',17) + ' Rename</button>';
+  html += '<button class="deck-menu-item" data-action="deck-move" data-path="' + escapeHtml(pathKey) + '">' + icon('corner-up-right',17) + ' Move to…</button>';
+  html += '<button class="deck-menu-item" data-action="deck-copy" data-path="' + escapeHtml(pathKey) + '">' + icon('copy',17) + ' Copy</button>';
+  html += '<button class="deck-menu-item" data-action="deck-cut" data-path="' + escapeHtml(pathKey) + '">' + icon('scissors',17) + ' Cut</button>';
+  html += '<div class="deck-menu-divider"></div>';
+  html += '<button class="deck-menu-item danger" data-action="deck-delete" data-path="' + escapeHtml(pathKey) + '">' + icon('trash-2',17) + ' Delete</button>';
+  html += '</div>';
+  showRichModal(html, 'narrow');
+}
+
+function openRenameDeckModal(pathKey){
+  var pathArr = pathKey.split('␟');
+  var currentName = pathArr[pathArr.length-1];
+  var html = '<h3>Rename</h3>';
+  html += '<div class="form-field"><label>New name</label><input type="text" id="renameDeckInput" value="' + escapeHtml(currentName) + '"></div>';
+  html += '<div class="action-row" style="margin-top:6px;margin-bottom:0;">' +
+    '<button class="btn btn-primary" data-action="confirm-rename-deck" data-path="' + escapeHtml(pathKey) + '">Save</button>' +
+    '<button class="btn btn-ghost" data-action="close-modal">Cancel</button></div>';
+  showRichModal(html);
+  var input = document.getElementById('renameDeckInput');
+  if (input) { input.focus(); input.select(); }
+}
+
+function openMoveDeckModal(pathKey){
+  var pathArr = pathKey.split('␟');
+  var currentName = pathArr[pathArr.length-1];
+  var tree = buildTree();
+  var subjects = Object.keys(tree).sort().filter(function(s){ return !(pathArr.length === 1 && s === pathArr[0]); });
+  var isNested = pathArr.length > 1;
+  var html = '<h3>Move "' + escapeHtml(currentName) + '" to…</h3>';
+  html += '<p>It\'ll become a chapter under whichever subject you pick, keeping anything nested inside it.</p>';
+  html += '<div class="form-field"><label>Destination</label><select id="moveDeckSelect" style="width:100%;padding:8px 10px;border:1px solid var(--rule-strong);border-radius:6px;background:var(--card);color:var(--ink);font-size:13.5px;">' +
+    '<option value="">— choose —</option>' +
+    (isNested ? '<option value="__LIBRARY_ROOT__">Library (make it a top-level subject)</option>' : '') +
+    subjects.map(function(s){ return '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + '</option>'; }).join('') +
+    '</select></div>';
+  html += '<div class="form-field"><label>Or type a new subject</label><input type="text" id="moveDeckNewInput" placeholder="New subject name"></div>';
+  html += '<div class="action-row" style="margin-top:6px;margin-bottom:0;">' +
+    '<button class="btn btn-primary" data-action="confirm-move-deck" data-path="' + escapeHtml(pathKey) + '">Move</button>' +
+    '<button class="btn btn-ghost" data-action="close-modal">Cancel</button></div>';
+  showRichModal(html);
+}
+
+function openDeleteDeckModal(pathKey){
+  var pathArr = pathKey.split('␟');
+  var currentName = pathArr[pathArr.length-1];
+  var count = mcqsUnderPath(pathArr).length;
+  showModal(
+    'Delete "' + currentName + '"?',
+    'This permanently removes ' + count + ' question' + (count===1?'':'s') + ' — including everything nested inside it. This can\'t be undone.',
+    [{label:'Delete', action:'confirm-delete-deck', primary:true},{label:'Cancel', action:'close-modal'}]
+  );
+  /* stash which deck a confirm click applies to, since showModal's buttons don't carry data attributes */
+  state.pendingDeckDelete = pathKey;
+}
+
+/* ---------------- Edit MCQ modal ---------------- */
+function openEditModal(id){
+  var m = state.mcqs.find(function(x){ return x.id === id; });
+  if (!m) return;
+  var html = '<h3>Edit question</h3>';
+  html += '<div class="form-field"><label>Question</label><textarea id="editQuestion" rows="4">' + escapeHtml(m.question) + '</textarea></div>';
+  if (m.passage) {
+    html += '<div class="form-field"><label>Passage</label><textarea id="editPassage" rows="3">' + escapeHtml(m.passage) + '</textarea></div>';
+  }
+  if (m.isShortAnswer) {
+    html += '<div class="form-field"><label>Answer</label><input type="text" id="editShortAnswer" value="' + escapeHtml(m.answer[0]||'') + '"></div>';
+  } else {
+    html += '<div class="form-field"><label>Options — check the correct one(s)</label>';
+    m.options.forEach(function(opt){
+      var checked = m.answer.indexOf(opt.letter) !== -1;
+      html += '<div class="option-edit-row"><span class="opt-letter">' + escapeHtml(opt.letter) + '</span>' +
+        '<input type="text" class="edit-option-text" data-letter="' + escapeHtml(opt.letter) + '" value="' + escapeHtml(opt.text) + '" style="flex:1;padding:6px 8px;border:1px solid var(--rule-strong);border-radius:6px;background:var(--card);color:var(--ink);font-size:13px;">' +
+        '<label><input type="checkbox" class="edit-option-correct" data-letter="' + escapeHtml(opt.letter) + '" ' + (checked?'checked':'') + '> correct</label></div>';
+    });
+    html += '</div>';
+  }
+  html += '<div class="form-field"><label>Explanation</label><textarea id="editExplanation" rows="3">' + escapeHtml(m.explanation||'') + '</textarea></div>';
+  html += '<div class="form-field"><label>Subject</label><input type="text" id="editSubject" value="' + escapeHtml(m.subject||'') + '"></div>';
+  html += '<div class="form-field"><label>Chapter path (use &gt; to separate levels)</label><input type="text" id="editChapter" value="' + escapeHtml((m.chapterPath||[]).join(' > ')) + '"></div>';
+  html += '<div class="form-field"><label>Tags (comma-separated)</label><input type="text" id="editTags" value="' + escapeHtml((m.tags||[]).join(', ')) + '"></div>';
+  html += '<div class="action-row" style="margin-top:6px;margin-bottom:0;">' +
+    '<button class="btn btn-primary" data-action="save-edit-mcq" data-id="' + m.id + '">Save changes</button>' +
+    '<button class="btn btn-ghost" data-action="close-modal">Cancel</button></div>';
+  showRichModal(html);
+}
+async function saveEditMcq(id){
+  var m = state.mcqs.find(function(x){ return x.id === id; });
+  if (!m) return;
+  var qEl = document.getElementById('editQuestion');
+  if (qEl) m.question = qEl.value.trim();
+  var pEl = document.getElementById('editPassage');
+  if (pEl) m.passage = pEl.value.trim() || null;
+  if (m.isShortAnswer) {
+    var saEl = document.getElementById('editShortAnswer');
+    if (saEl) m.answer = [saEl.value.trim()];
+  } else {
+    var texts = document.querySelectorAll('.edit-option-text');
+    var corrects = document.querySelectorAll('.edit-option-correct');
+    var newOptions = [];
+    texts.forEach(function(inp){ newOptions.push({ letter: inp.getAttribute('data-letter'), text: inp.value.trim() }); });
+    var newAnswer = [];
+    corrects.forEach(function(cb){ if (cb.checked) newAnswer.push(cb.getAttribute('data-letter')); });
+    m.options = newOptions;
+    if (newAnswer.length) m.answer = newAnswer;
+  }
+  var expEl = document.getElementById('editExplanation');
+  if (expEl) m.explanation = expEl.value.trim();
+  var subjEl = document.getElementById('editSubject');
+  if (subjEl) m.subject = subjEl.value.trim() || 'Unsorted';
+  var chEl = document.getElementById('editChapter');
+  if (chEl) m.chapterPath = chEl.value.split('>').map(function(s){return s.trim();}).filter(Boolean);
+  if (!m.chapterPath.length) m.chapterPath = ['Unsorted'];
+  var tagsEl = document.getElementById('editTags');
+  if (tagsEl) m.tags = tagsEl.value.split(',').map(function(s){return s.trim();}).filter(Boolean);
+  await saveLibrary();
+  closeModal();
+  render();
+  showToast('Question updated.');
+}
+
+function currentSessionSnapshot(){ return state.session ? JSON.parse(JSON.stringify(state.session)) : null; }
+function requestStartPractice(ids, learningEnabled){
+  if (state.pausedSession) {
+    state.pendingStart={ids:ids.slice(), learningEnabled:learningEnabled};
+    showModal('Paused test in progress','You still have an unfinished paused test. Return to it, or continue with the new test. Your previous answers and learning data are already saved.',[{label:'Back to paused test',action:'resume-paused',primary:true},{label:'Continue with new test',action:'confirm-new-test'}]);
+    return;
+  }
+  state.learningMode.enabled=learningEnabled;
+  startPractice(ids);
+}
+function requestLeavePractice(){
+  showModal('Leave this test?','Choose whether to pause this test at its current question or leave without saving the test session. Answers you already revealed remain recorded.',[{label:'Pause & leave',action:'pause-and-leave',primary:true},{label:'Leave without pausing',action:'leave-without-pausing'},{label:'Cancel',action:'close-modal'}]);
+}
+/* True whenever an in-progress practice session is on screen — used to gate any sidebar
+   navigation (which stays visible/clickable during practice) so it can't silently
+   abandon an active test without offering to pause it first. */
+function isMidSession(){ return state.view === 'practice' && !!state.session; }
+/* Call at the top of a navigation action's handler. If a session is active, it stashes
+   what the user was trying to do, pops the leave-practice modal, and returns true so
+   the caller can bail out instead of navigating immediately. */
+function guardNavigation(action, el){
+  if (!isMidSession()) return false;
+  state.pendingNav = { action: action, view: el.getAttribute('data-view'), path: el.getAttribute('data-path') };
+  requestLeavePractice();
+  return true;
+}
+/* Runs after the user resolves the leave-practice modal (pause or leave without pausing),
+   sending them to wherever they originally tried to navigate instead of always dumping
+   them on the Library view. */
+function applyPendingNav(){
+  var nav = state.pendingNav;
+  state.pendingNav = null;
+  state.sidebarOpen = false;
+  if (!nav) { state.view = 'browse'; return; }
+  if (nav.action === 'set-view') {
+    state.view = nav.view || 'browse';
+  } else if (nav.action === 'open-dashboard') {
+    state.view = 'dashboard';
+  } else if (nav.action === 'select-node' && nav.path) {
+    state.selectedPath = nav.path.split('␟');
+    state.view = 'browse';
+    state.expanded[nav.path] = true;
+    state.forceList = false;
+  } else {
+    state.view = 'browse';
+  }
+}
+function bookmarkButton(m){
+  return '<button class="btn btn-ghost btn-sm bookmark-btn'+(m.flagged?' bookmarked':'')+'" data-action="bookmark-current" title="Bookmark question (F)" aria-label="'+(m.flagged?'Remove bookmark':'Bookmark question')+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4V3z"></path></svg><span>'+(m.flagged?'Bookmarked':'Bookmark')+'</span></button>';
+}
+
+/* ---------------- Standard format parser ---------------- */
+function parseLibraryText(raw, sourceOverride){
+  var lines = raw.replace(/\r\n/g,'\n').split('\n');
+  var mcqs = [];
+  var errors = [];
+  var passages = {};
+  var source = sourceOverride || '';
+  var subject = '';
+  var chapterPath = [];
+  var i = 0;
+
+  while (i < lines.length) {
+    var line = lines[i];
+    var t = line.trim();
+    if (!t) { i++; continue; }
+
+    if (t.indexOf('#SOURCE:') === 0) {
+      if (!sourceOverride) source = t.slice(8).trim();
+      i++; continue;
+    }
+    if (t.indexOf('#SUBJECT:') === 0) {
+      subject = t.slice(9).trim(); i++; continue;
+    }
+    if (t.indexOf('#CHAPTER:') === 0) {
+      chapterPath = t.slice(9).split('>').map(function(s){return s.trim();}).filter(Boolean);
+      i++; continue;
+    }
+    if (t.indexOf('#PASSAGE:') === 0) {
+      var pid = t.slice(9).trim();
+      i++;
+      var pbuf = [];
+      while (i < lines.length && lines[i].trim() !== '#ENDPASSAGE') { pbuf.push(lines[i]); i++; }
+      passages[pid] = pbuf.join('\n').trim();
+      i++;
+      continue;
+    }
+    if (t.indexOf('#Q') === 0) {
+      var startLine = i + 1;
+      var pmatch = t.match(/\[PASSAGE:(\S+)\]/);
+      var passageId = pmatch ? pmatch[1] : null;
+      i++;
+      var qlines = [];
+      while (i < lines.length && lines[i].trim().indexOf('#OPTIONS') !== 0 && lines[i].trim().indexOf('#ANSWER') !== 0) {
+        qlines.push(lines[i]); i++;
+      }
+      var questionText = qlines.join('\n').trim();
+
+      var options = [];
+      if (i < lines.length && lines[i].trim().indexOf('#OPTIONS') === 0) {
+        i++;
+        while (i < lines.length) {
+          var ot = lines[i].trim();
+          if (ot.indexOf('#ANSWER') === 0) break;
+          var om = ot.match(/^([A-H])\)\s*(.*)$/);
+          if (om) options.push({ letter: om[1], text: om[2].trim() });
+          i++;
+        }
+      }
+
+      var isShortAnswer = options.length === 0;
+      var answer = [];
+      if (i < lines.length && lines[i].trim().indexOf('#ANSWER') === 0) {
+        var aline = lines[i].trim();
+        var aval = aline.slice(aline.indexOf(':') + 1).trim();
+        if (isShortAnswer) {
+          answer = [aval];
+        } else if (/^unknown$/i.test(aval)) {
+          answer = ['UNKNOWN'];
+        } else {
+          answer = aval.split(',').map(function(s){return s.trim().toUpperCase();}).filter(Boolean);
+        }
+        i++;
+      } else {
+        errors.push({ line: startLine, message: 'Missing #ANSWER for question near line ' + startLine });
+      }
+
+      var explanation = '';
+      if (i < lines.length && lines[i].trim().indexOf('#EXPLANATION') === 0) {
+        i++;
+        var ebuf = [];
+        while (i < lines.length && lines[i].trim().indexOf('#TAGS') !== 0 && lines[i].trim().indexOf('#END') !== 0) { ebuf.push(lines[i]); i++; }
+        explanation = ebuf.join('\n').trim();
+      }
+
+      var tags = [];
+      if (i < lines.length && lines[i].trim().indexOf('#TAGS') === 0) {
+        var tl = lines[i].trim();
+        tags = tl.slice(tl.indexOf(':') + 1).split(',').map(function(s){return s.trim();}).filter(Boolean);
+        i++;
+      }
+
+      if (i < lines.length && lines[i].trim().indexOf('#END') === 0) { i++; }
+
+      if (!questionText) {
+        errors.push({ line: startLine, message: 'Empty question body near line ' + startLine });
+      } else {
+        mcqs.push({
+          id: uid(),
+          source: source || 'Unlabeled source',
+          subject: subject || 'Unsorted',
+          chapterPath: chapterPath.length ? chapterPath.slice() : ['Unsorted'],
+          passage: passageId ? (passages[passageId] || null) : null,
+          question: questionText,
+          options: options,
+          isShortAnswer: isShortAnswer,
+          answer: answer,
+          explanation: explanation,
+          tags: tags,
+          flagged: false,
+          addedAt: Date.now(),
+          learning: {
+            due: Date.now(),
+            interval: 0,
+            history: [],
+            lastReviewed: null
+          }
+        });
+      }
+      continue;
+    }
+    i++;
+  }
+  return { mcqs: mcqs, errors: errors };
+}
+
+/* ---------------- Content renderer (tables, images, prose) ---------------- */
+function tryParseTable(lines, idx){
+  if (!/^\s*\|.*\|\s*$/.test(lines[idx] || '')) return null;
+  var sep = lines[idx+1] || '';
+  if (!/^\s*\|?[\s:\-|]+\|[\s:\-|]*\s*$/.test(sep) || sep.indexOf('-') === -1) return null;
+  function splitRow(l){
+    var cells = l.split('|').map(function(c){return c.trim();});
+    if (cells.length && cells[0] === '') cells.shift();
+    if (cells.length && cells[cells.length-1] === '') cells.pop();
+    return cells;
+  }
+  var header = splitRow(lines[idx]);
+  var r = idx + 2;
+  var rows = [];
+  while (r < lines.length && /^\s*\|.*\|\s*$/.test(lines[r])) { rows.push(splitRow(lines[r])); r++; }
+  return { header: header, rows: rows, nextIdx: r };
+}
+
+function renderContent(text){
+  if (!text) return '';
+  var lines = text.split('\n');
+  var out = '';
+  var i = 0;
+  var buf = [];
+  function flush(){
+    if (buf.length) { out += '<p>' + buf.map(escapeHtml).join('<br>') + '</p>'; buf = []; }
+  }
+  while (i < lines.length) {
+    var line = lines[i];
+    if (/^\s*#IMAGE:/.test(line)) {
+      flush();
+      var desc = line.replace(/^\s*#IMAGE:\s*/, '');
+      out += '<div class="img-placeholder">Image referenced in source — ' + escapeHtml(desc) + '</div>';
+      i++; continue;
+    }
+    var table = tryParseTable(lines, i);
+    if (table) {
+      flush();
+      out += '<table class="mcq-table"><thead><tr>' + table.header.map(function(h){return '<th>'+escapeHtml(h)+'</th>';}).join('') + '</tr></thead><tbody>' +
+        table.rows.map(function(row){ return '<tr>' + row.map(function(c){return '<td>'+escapeHtml(c)+'</td>';}).join('') + '</tr>'; }).join('') +
+        '</tbody></table>';
+      i = table.nextIdx;
+      continue;
+    }
+    if (line.trim() === '') { flush(); i++; continue; }
+    buf.push(line);
+    i++;
+  }
+  flush();
+  return out;
+}
+
+/* ---------------- Tree building ---------------- */
+function buildTree(){
+  var root = {};
+  state.mcqs.forEach(function(m){
+    if (!root[m.subject]) root[m.subject] = { name: m.subject, count: 0, children: {}, ids: [] };
+    var node = root[m.subject];
+    node.count++;
+    var path = m.chapterPath && m.chapterPath.length ? m.chapterPath : ['Unsorted'];
+    path.forEach(function(part){
+      if (!node.children[part]) node.children[part] = { name: part, count: 0, children: {}, ids: [] };
+      node = node.children[part];
+      node.count++;
+    });
+    node.ids.push(m.id);
+  });
+  return root;
+}
+
+function collectIds(node){
+  var ids = node.ids.slice();
+  Object.keys(node.children).forEach(function(k){ ids = ids.concat(collectIds(node.children[k])); });
+  return ids;
+}
+
+function getNodeByPath(tree, pathArr){
+  if (!pathArr.length) return null;
+  var node = tree[pathArr[0]];
+  for (var i = 1; i < pathArr.length && node; i++) node = node.children[pathArr[i]];
+  return node;
+}
+
+/* ---------------- Deck (subject/chapter) management: rename / move / copy / delete ---------------- */
+function fullPathOf(m){
+  return [m.subject].concat(m.chapterPath && m.chapterPath.length ? m.chapterPath : ['Unsorted']);
+}
+/* Every mcq whose full path starts with pathArr (i.e. lives under this deck, at any depth). */
+function mcqsUnderPath(pathArr){
+  return state.mcqs.filter(function(m){
+    var fp = fullPathOf(m);
+    if (fp.length < pathArr.length) return false;
+    for (var i = 0; i < pathArr.length; i++) if (fp[i] !== pathArr[i]) return false;
+    return true;
+  });
+}
+function applyFullPath(m, fullPath){
+  m.subject = fullPath[0];
+  m.chapterPath = fullPath.length > 1 ? fullPath.slice(1) : ['Unsorted'];
+}
+function renameDeck(pathArr, newName){
+  newName = (newName || '').trim();
+  if (!newName) return false;
+  var depth = pathArr.length;
+  mcqsUnderPath(pathArr).forEach(function(m){
+    var fp = fullPathOf(m);
+    fp[depth - 1] = newName;
+    applyFullPath(m, fp);
+  });
+  if (state.sleepingSubjects[pathArr[0]] && depth === 1) {
+    state.sleepingSubjects[newName] = state.sleepingSubjects[pathArr[0]];
+    delete state.sleepingSubjects[pathArr[0]];
+  }
+  return true;
+}
+/* Moves the deck at pathArr to become a child of destPathArr (a full path — can be a
+   bare subject, or a nested chapter), keeping its own name as the new top segment
+   underneath the destination and preserving anything nested below it. */
+function moveDeckUnder(pathArr, destPathArr){
+  /* destPathArr may be [] (or omitted) to promote the deck to a top-level subject in its own right. */
+  destPathArr = destPathArr || [];
+  var ownName = pathArr[pathArr.length - 1];
+  var depth = pathArr.length;
+  mcqsUnderPath(pathArr).forEach(function(m){
+    var fp = fullPathOf(m);
+    var below = fp.slice(depth); // whatever was nested underneath this deck, unaffected
+    applyFullPath(m, destPathArr.concat([ownName]).concat(below));
+  });
+  return true;
+}
+/* True if destPathArr is the deck itself or lives somewhere underneath it — pasting/moving
+   there would nest a deck inside its own descendant, which makes no sense. */
+function isPathWithinOrEqual(destPathArr, pathArr){
+  if (destPathArr.length < pathArr.length) return false;
+  for (var i = 0; i < pathArr.length; i++) if (destPathArr[i] !== pathArr[i]) return false;
+  return true;
+}
+function duplicateDeck(pathArr){
+  var ownName = pathArr[pathArr.length - 1];
+  var depth = pathArr.length;
+  var copies = mcqsUnderPath(pathArr).map(function(m){
+    var fp = fullPathOf(m);
+    var below = fp.slice(depth);
+    var newFullPath = fp.slice(0, depth - 1).concat([ownName + ' (copy)']).concat(below);
+    var copy = JSON.parse(JSON.stringify(m));
+    copy.id = uid();
+    copy.addedAt = Date.now();
+    copy.learning = { due: Date.now(), interval: 0, history: [], lastReviewed: null, fsrs: null };
+    copy.flagged = false;
+    applyFullPath(copy, newFullPath);
+    return copy;
+  });
+  state.mcqs = state.mcqs.concat(copies);
+  return copies.length;
+}
+function deleteDeck(pathArr){
+  var idsSet = {};
+  mcqsUnderPath(pathArr).forEach(function(m){ idsSet[m.id] = true; });
+  var removedIds = Object.keys(idsSet);
+  state.mcqs = state.mcqs.filter(function(m){ return !idsSet[m.id]; });
+  return removedIds;
+}
+
+/* ---------------- Filtering ---------------- */
+function activeSourceFilterList(){
+  var chosen = Object.keys(state.filters.sources).filter(function(k){ return state.filters.sources[k]; });
+  return chosen.length ? chosen : null;
+}
+function activeTagFilterList(){
+  var chosen = Object.keys(state.filters.tags).filter(function(k){ return state.filters.tags[k]; });
+  return chosen.length ? chosen : null;
+}
+function passesFilters(m){
+  var srcF = activeSourceFilterList();
+  if (srcF && srcF.indexOf(m.source) === -1) return false;
+  var tagF = activeTagFilterList();
+  if (tagF && !m.tags.some(function(t){ return tagF.indexOf(t) !== -1; })) return false;
+  var st = state.filters.status;
+  if (st === 'unanswered' && m.learning.history.length > 0) return false;
+  if (st === 'correct' && getLearningState(m) !== 'mastered') return false;
+  if (st === 'wrong' && getLearningState(m) === 'mastered') return false;
+  if (st === 'flagged' && !m.flagged) return false;
+  var q = (state.filters.search || '').trim().toLowerCase();
+  if (q) {
+    var hay = [
+      m.question,
+      m.explanation,
+      m.subject,
+      m.source,
+      (m.chapterPath || []).join(' '),
+      m.tags.join(' '),
+      (m.options || []).map(function(o){ return o.text; }).join(' ')
+    ].join(' ').toLowerCase();
+    if (hay.indexOf(q) === -1) return false;
+  }
+  return true;
+}
+
+function allTags(){
+  var set = {};
+  state.mcqs.forEach(function(m){ m.tags.forEach(function(t){ set[t] = true; }); });
+  return Object.keys(set).sort();
+}
+
+/* ---------------- Rendering: shell ---------------- */
+function render(){
+  document.body.classList.toggle('fsrs-mode', !!(state.learningMode && state.learningMode.enabled));
+  document.body.classList.toggle('dark-mode', !!state.darkMode);
+  var root = document.getElementById('appRoot');
+  root.innerHTML =
+    renderSidebar() +
+    (state.sidebarOpen ? '<div class="sidebar-backdrop" data-action="toggle-sidebar"></div>' : '') +
+    '<main class="main">' +
+      '<div class="mobile-topbar"><button class="btn btn-sm" data-action="toggle-sidebar">' +
+        (state.sidebarOpen ? icon('x',15) + ' Close' : icon('menu',15) + ' Menu') +
+      '</button></div>' +
+      renderMain() +
+    '</main>';
+  bindEvents();
+  if (state.activeModal === 'settings') renderSettingsModalContent();
+}
+
+
+/* ================= Phase 3.4 ================= */
+function getLearningStats(){
+  var now = Date.now();
+  var stats = { due: 0, new: 0, noconcept: 0, misconception: 0, learning: 0, mastered: 0, tomorrow: 0, recovering: 0 };
+  state.mcqs.forEach(function(q){
+    if(!q.learning) return;
+    if(state.sleepingSubjects[q.subject]) return; /* asleep subjects don't contribute to due/state counts */
+    var s = getLearningState(q);
+    if(stats[s] !== undefined) stats[s]++;
+    if((q.learning.due || 0) <= now) stats.due++;
+    if((q.learning.due || 0) > now && (q.learning.due || 0) <= now + 86400000) stats.tomorrow++;
+    
+    // Check recovery: transitioning from misconception/noconcept to learning/mastered recently
+    var hist = q.learning.history;
+    if (hist.length >= 2) {
+      var last = hist[hist.length - 1];
+      var prev = hist[hist.length - 2];
+      if (!prev.correct && last.correct) {
+        stats.recovering++;
+      }
+    }
+  });
+  return stats;
+}
+
+function getDashboardData(){
+  var ls = getLearningStats();
+  var totalTracked = state.mcqs.length;
+  var masteryPct = totalTracked ? Math.round((ls.mastered / totalTracked) * 100) : 0;
+
+  // Weakest subjects (asleep subjects excluded — not recommended)
+  var subjMap = {};
+  state.mcqs.forEach(function(m){
+    if (state.sleepingSubjects[m.subject]) return;
+    if(!subjMap[m.subject]) subjMap[m.subject] = { total: 0, mastered: 0 };
+    subjMap[m.subject].total++;
+    if(getLearningState(m) === 'mastered') subjMap[m.subject].mastered++;
+  });
+  var weakestSubjects = Object.keys(subjMap).map(function(sub){
+    var obj = subjMap[sub];
+    var pct = obj.total ? Math.round((obj.mastered / obj.total) * 100) : 0;
+    return { subject: sub, percentage: pct };
+  }).sort(function(a,b){ return a.percentage - b.percentage; });
+
+  // Persistent misconceptions (asleep subjects excluded — not recommended)
+  var miscMap = {};
+  state.mcqs.forEach(function(m){
+    if (state.sleepingSubjects[m.subject]) return;
+    if(getLearningState(m) === 'misconception') {
+      var trap = getMostRepeatedWrong(m);
+      var key = m.subject + ' (' + trap + ')';
+      miscMap[key] = (miscMap[key] || 0) + 1;
+    }
+  });
+  var persistentMisconceptions = Object.keys(miscMap).map(function(k){
+    return { name: k, count: miscMap[k] };
+  }).sort(function(a,b){ return b.count - a.count; }).slice(0, 5);
+
+  var todayStr = dateStr(Date.now());
+  var reviewsToday = 0;
+  state.mcqs.forEach(function(m){
+    (m.learning.history || []).forEach(function(h){ if (dateStr(h.ts) === todayStr) reviewsToday++; });
+  });
+
+  return {
+    due: ls.due,
+    tracked: totalTracked,
+    mastered: ls.mastered,
+    learning: ls.learning,
+    misconception: ls.misconception,
+    noconcept: ls.noconcept,
+    new: ls.new,
+    mastery: masteryPct,
+    recovering: ls.recovering,
+    tomorrow: ls.tomorrow,
+    weakestSubjects: weakestSubjects,
+    persistentMisconceptions: persistentMisconceptions,
+    reviewsToday: reviewsToday,
+    streak: state.streak.count || 0
+  };
+}
+/* ============================================ */
+
+function renderSidebar(){
+  var tree = buildTree();
+  var subjectKeys = Object.keys(tree).sort();
+  var html = '<aside class="sidebar' + (state.sidebarOpen ? ' open' : '') + '" id="sidebar">';
+  html += '<div class="brand"><div class="brand-mark"><img src="icons/icon-128x128.png" alt="Practex logo"></div>' +
+    '<div style="flex:1;"><div class="brand-name serif">Practex</div><div class="brand-tag">MCQ practice</div></div>' +
+    '<button class="sidebar-gear-btn" data-action="open-settings" title="Settings" aria-label="Settings">' + icon('settings',16) + '</button></div>';
+
+  html += '<div class="nav-tabs">' +
+    '<button class="nav-tab' + (state.view==='browse'?' active':'') + '" data-action="set-view" data-view="browse">Library</button>' +
+    '<button class="nav-tab' + (state.view==='addsource'?' active':'') + '" data-action="set-view" data-view="addsource">Add source</button>' +
+    '</div>';
+
+  var ls = getLearningStats();
+  html += '<div class="fsrs-bar">';
+  html += '<div class="fsrs-bar-header" data-action="toggle-fsrs-card" role="button" aria-expanded="' + (state.fsrsCardExpanded ? 'true' : 'false') + '">' +
+    '<span class="icon-inline">' + icon(state.fsrsCardExpanded ? 'chevron-down' : 'chevron-right', 13) + '<span style="font-size:12px;font-weight:600;">FSRS MODE</span></span>' +
+    '<span class="fsrs-switch' + (state.learningMode.enabled ? ' on' : '') + '" data-action="toggle-fsrs-mode" role="switch" aria-checked="' + (state.learningMode.enabled ? 'true' : 'false') + '" aria-label="Toggle FSRS mode" title="' + (state.learningMode.enabled ? 'FSRS mode is on — click to disable' : 'FSRS mode is off — click to enable') + '"><span class="fsrs-switch-track"></span><span class="fsrs-switch-thumb"></span></span>' +
+    '</div>';
+  if (state.fsrsCardExpanded) {
+    html += '<div class="fsrs-bar-body" data-action="open-dashboard">';
+    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin-bottom:8px;">';
+    html += '<div><div style="font-size:18px;font-weight:700">' + ls.due + '</div><div style="font-size:10px;opacity:0.8;">Due</div></div>';
+    html += '<div><div style="font-size:18px;font-weight:700">' + ls.misconception + '</div><div style="font-size:10px;opacity:0.8;">Misconcept.</div></div>';
+    html += '<div><div style="font-size:18px;font-weight:700">' + ls.tomorrow + '</div><div style="font-size:10px;opacity:0.8;">Tomorrow</div></div>';
+    html += '</div>';
+    html += '<div style="border-top:1px solid rgba(255,255,255,0.15);padding-top:6px;font-size:11px;display:flex;justify-content:space-between;opacity:0.9;">' +
+      '<span>Tracked</span><strong>' + state.mcqs.length + ' Questions</strong></div>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  html += '<div class="side-section-label">Subjects &amp; chapters</div>';
+  html += '<div class="toc">';
+  if (!subjectKeys.length) {
+    html += '<div class="toc-empty">Nothing logged yet. Go to <strong>Add source</strong> to import your first set of OCR\'d MCQs.</div>';
+  } else {
+    subjectKeys.forEach(function(sk){
+      html += renderTocNode(tree[sk], [sk], true);
+    });
+  }
+  html += '</div>';
+
+  html += '<div class="side-footer">' + state.mcqs.length + ' MCQs logged from ' + Object.keys(state.sources).length + ' source' + (Object.keys(state.sources).length===1?'':'s') + '.</div>';
+  html += '</aside>';
+  return html;
+}
+
+function renderTocNode(node, path, isSubject){
+  var key = path.join('␟');
+  var expanded = !!state.expanded[key];
+  var hasChildren = Object.keys(node.children).length > 0;
+  var selected = state.selectedPath && state.selectedPath.join('␟') === key;
+  var html = '<div class="toc-node' + (isSubject ? ' subject' : '') + '">';
+  html += '<div class="toc-row' + (selected ? ' selected' : '') + '">';
+  if (hasChildren) {
+    html += '<button class="toc-toggle" data-action="toggle-node" data-path="' + escapeHtml(key) + '">' + (expanded ? icon('chevron-down',12) : icon('chevron-right',12)) + '</button>';
+  } else {
+    html += '<span class="toc-toggle"></span>';
+  }
+  html += '<span class="toc-label" data-action="select-node" data-path="' + escapeHtml(key) + '">' + escapeHtml(node.name) + '</span>';
+  html += '<span class="toc-count">' + node.count + '</span>';
+  html += '</div>';
+  if (hasChildren && expanded) {
+    html += '<div class="toc-children">';
+    Object.keys(node.children).sort().forEach(function(ck){
+      html += renderTocNode(node.children[ck], path.concat([ck]), false);
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderMain(){
+  if (state.view === 'addsource') return renderAddSource();
+  if (state.view === 'dashboard') return renderDashboard();
+  if (state.view === 'queuepreview') return renderQueuePreview();
+  if (state.view === 'practice' && state.session) return renderPractice();
+  if (state.view === 'summary' && state.session) return renderSummary();
+  return renderBrowse();
+}
+
+/* ---------------- Learning Dashboard view ---------------- */
+function renderDashboard(){
+  var d = getDashboardData();
+  var html = '<div class="view-head"><div class="view-title serif">Learning Dashboard</div>' +
+    '<div class="view-sub">Overview of your spaced repetition, memory states, and weak spots.</div></div>';
+  html += '<div style="margin-bottom:18px;"><button class="btn btn-ghost" data-action="set-view" data-view="browse">' + icon('chevron-left',14) + ' Back to Library</button></div>';
+  if (state.pausedSession) {
+    var psd = state.pausedSession;
+    html += '<div class="card paused-card"><div style="font-weight:600;margin-bottom:4px;">Paused test</div>' +
+      '<div class="view-sub" style="margin-bottom:10px;">Question ' + Math.min(psd.index+1, psd.ids.length) + ' of ' + psd.ids.length + ' · ' + psd.results.length + ' answered</div>' +
+      '<button class="btn btn-primary btn-sm" data-action="resume-paused">Resume test</button></div>';
+  }
+
+  html += '<div class="card section-block" style="background:var(--cover);color:#fff;">';
+  html += '<div style="font-size:12px;text-transform:uppercase;letter-spacing:1px;opacity:0.8;margin-bottom:4px;">Today\'s Due</div>';
+  html += '<div style="font-size:clamp(32px,9vw,42px);font-weight:700;margin-bottom:12px;">' + d.due + '</div>';
+  html += '<button class="btn btn-primary" style="background:#fff;color:var(--cover);border-color:#fff;" data-action="start-queue-preview">Start Today\'s Session</button>';
+  html += '<div style="display:flex;gap:18px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.25);font-size:12.5px;opacity:0.95;">' +
+    '<span class="icon-inline">' + icon('flame',14) + ' <strong>' + d.streak + '</strong> day' + (d.streak===1?'':'s') + '</span>' +
+    '<span><strong>' + d.reviewsToday + '</strong> reviewed today</span>' +
+    '</div>';
+  html += '</div>';
+
+  html += '<div class="card section-block">';
+  html += '<h3>Question States</h3>';
+  html += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">';
+  html += '<div style="display:flex;justify-content:space-between;font-size:13.5px;padding:6px 0;border-bottom:1px solid var(--rule);"><span><span style="display:inline-flex;align-items:center;"><span style="width:12px;height:12px;border-radius:50%;background:#22c55e;border:1.5px solid #111;display:inline-block;margin-right:8px;"></span>Mastered</span></span><strong>' + d.mastered + '</strong></div>';
+  html += '<div style="display:flex;justify-content:space-between;font-size:13.5px;padding:6px 0;border-bottom:1px solid var(--rule);"><span><span style="display:inline-flex;align-items:center;"><span style="width:12px;height:12px;border-radius:50%;background:#228be6;border:1.5px solid #111;display:inline-block;margin-right:8px;"></span>Learning</span></span><strong>' + d.learning + '</strong></div>';
+  html += '<div style="display:flex;justify-content:space-between;font-size:13.5px;padding:6px 0;border-bottom:1px solid var(--rule);"><span><span style="display:inline-flex;align-items:center;"><span style="width:12px;height:12px;border-radius:50%;background:#facc15;border:1.5px solid #111;display:inline-block;margin-right:8px;"></span>No Concept</span></span><strong>' + d.noconcept + '</strong></div>';
+  html += '<div style="display:flex;justify-content:space-between;font-size:13.5px;padding:6px 0;border-bottom:1px solid var(--rule);"><span><span style="display:inline-flex;align-items:center;"><span style="width:12px;height:12px;border-radius:50%;background:#ef4444;border:1.5px solid #111;display:inline-block;margin-right:8px;"></span>Misconception</span></span><strong>' + d.misconception + '</strong></div>';
+  html += '<div style="display:flex;justify-content:space-between;font-size:13.5px;padding:6px 0;"><span><span style="display:inline-flex;align-items:center;"><span style="width:12px;height:12px;border-radius:50%;background:#fff;border:1.5px solid #111;display:inline-block;margin-right:8px;"></span>New</span></span><strong>' + d.new + '</strong></div>';
+  html += '</div></div>';
+
+  html += '<div class="card section-block">';
+  html += '<h3>Mastery &amp; Recovery</h3>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px;">';
+  html += '<div style="background:var(--paper);padding:14px;border-radius:8px;"><div style="font-size:clamp(19px,5.5vw,24px);font-weight:700;color:var(--pen-green);">' + d.mastery + '%</div><div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">Overall Mastery</div></div>';
+  html += '<div style="background:var(--paper);padding:14px;border-radius:8px;"><div style="font-size:clamp(19px,5.5vw,24px);font-weight:700;color:var(--cover);">' + d.recovering + '</div><div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">Questions recovering</div></div>';
+  html += '</div></div>';
+
+  if (d.persistentMisconceptions.length) {
+    html += '<div class="card section-block">';
+    html += '<h3>Most Persistent Misconceptions</h3>';
+    html += '<div style="display:flex;flex-direction:column;gap:6px;margin-top:10px;">';
+    d.persistentMisconceptions.forEach(function(m){
+      html += '<div style="font-size:13.5px;padding:6px 0;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between;"><span>• ' + escapeHtml(m.name) + '</span><span style="color:var(--pen-red);font-weight:600;">' + m.count + ' misses</span></div>';
+    });
+    html += '</div></div>';
+  }
+
+  if (d.weakestSubjects.length) {
+    html += '<div class="card section-block">';
+    html += '<h3>Weakest Subjects</h3>';
+    html += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">';
+    d.weakestSubjects.forEach(function(s){
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13.5px;padding:6px 0;border-bottom:1px solid var(--rule);">' +
+        '<button class="link-btn" data-action="jump-subject" data-subject="' + escapeHtml(s.subject) + '">' + escapeHtml(s.subject) + '</button><strong>' + s.percentage + '%</strong></div>';
+    });
+    html += '</div></div>';
+  }
+
+
+  return html;
+}
+
+/* ---------------- Queue Preview view ---------------- */
+function renderQueuePreview(){
+  var dueIds = getLearningQueue(state.mcqs.map(function(m){return m.id;}));
+  var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
+  var dueQs = dueIds.map(function(id){ return byId[id]; }).filter(Boolean);
+
+  var counts = { misconception: 0, noconcept: 0, learning: 0, mastered: 0, new: 0 };
+  dueQs.forEach(function(q){
+    var st = getLearningState(q);
+    if (counts[st] !== undefined) counts[st]++;
+  });
+
+  var estTime = Math.max(2, Math.round(dueQs.length * 0.75));
+
+  var html = '<div class="view-head"><div class="view-title serif">Today\'s Session</div>' +
+    '<div class="view-sub">Review queue prepared by your spaced repetition algorithm.</div></div>';
+
+  if (!dueQs.length) {
+    html += '<div class="card section-block" style="text-align:center;padding:40px 20px;">' +
+      '<div class="serif icon-inline" style="font-size:20px;margin-bottom:8px;justify-content:center;">' + icon('check-circle',20) + ' You\'re caught up</div>' +
+      '<div class="view-sub" style="margin-bottom:20px;">Nothing is scheduled.</div>' +
+      '<div style="border-top:1px solid var(--rule);padding-top:20px;margin-top:20px;">' +
+      '<div class="serif" style="font-size:16px;margin-bottom:6px;">Study Ahead</div>' +
+      '<div class="view-sub" style="margin-bottom:14px;">Review tomorrow\'s questions today.</div>' +
+      '<button class="btn btn-primary" data-action="start-study-ahead">Study Ahead</button>' +
+      '</div><div style="margin-top:20px;">' +
+      '<div class="serif" style="font-size:16px;margin-bottom:6px;">Practice All</div>' +
+      '<div class="view-sub" style="margin-bottom:14px;">Ignore FSRS Mode.</div>' +
+      '<button class="btn" data-action="start-practice-all">Practice Everything</button>' +
+      '</div></div>';
+  } else {
+    html += '<div class="card section-block">';
+    html += '<div style="font-size:clamp(22px,7vw,28px);font-weight:700;margin-bottom:14px;">' + dueQs.length + ' Questions</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);padding:12px 0;margin-bottom:14px;">';
+    if (counts.misconception) html += '<div style="display:flex;justify-content:space-between;font-size:13.5px;"><span><span style="display:inline-flex;align-items:center;"><span style="width:12px;height:12px;border-radius:50%;background:#ef4444;border:1.5px solid #111;display:inline-block;margin-right:8px;"></span>Misconception</span></span><strong>' + counts.misconception + '</strong></div>';
+    if (counts.noconcept) html += '<div style="display:flex;justify-content:space-between;font-size:13.5px;"><span><span style="display:inline-flex;align-items:center;"><span style="width:12px;height:12px;border-radius:50%;background:#facc15;border:1.5px solid #111;display:inline-block;margin-right:8px;"></span>No Concept</span></span><strong>' + counts.noconcept + '</strong></div>';
+    if (counts.learning) html += '<div style="display:flex;justify-content:space-between;font-size:13.5px;"><span><span style="display:inline-flex;align-items:center;"><span style="width:12px;height:12px;border-radius:50%;background:#228be6;border:1.5px solid #111;display:inline-block;margin-right:8px;"></span>Learning</span></span><strong>' + counts.learning + '</strong></div>';
+    if (counts.mastered) html += '<div style="display:flex;justify-content:space-between;font-size:13.5px;"><span><span style="display:inline-flex;align-items:center;"><span style="width:12px;height:12px;border-radius:50%;background:#22c55e;border:1.5px solid #111;display:inline-block;margin-right:8px;"></span>Mastered</span></span><strong>' + counts.mastered + '</strong></div>';
+    if (counts.new) html += '<div style="display:flex;justify-content:space-between;font-size:13.5px;"><span><span style="display:inline-flex;align-items:center;"><span style="width:12px;height:12px;border-radius:50%;background:#fff;border:1.5px solid #111;display:inline-block;margin-right:8px;"></span>New</span></span><strong>' + counts.new + '</strong></div>';
+    html += '</div>';
+    html += '<div class="view-sub" style="margin-bottom:20px;">Estimated Time: <strong>~' + estTime + ' min</strong></div>';
+    html += '<div class="action-row"><button class="btn btn-primary" data-action="start-due-session">Start Session</button>' +
+      '<button class="btn btn-ghost" data-action="set-view" data-view="browse">Back to Library</button></div>';
+    html += '</div>';
+  }
+  return html;
+}
+
+/* ---------------- Browse view ---------------- */
+function renderSearchBar(){
+  var term = state.filters.search || '';
+  return '<div class="main-search"><span class="main-search-icon">' + icon('search',15) + '</span>' +
+    '<input type="text" id="globalSearchInput" placeholder="Search questions…" value="' + escapeHtml(term) + '">' +
+    (term ? '<button class="main-search-clear" data-action="clear-search" title="Clear search" aria-label="Clear search">' + icon('x',14) + '</button>' : '') +
+    '</div>';
+}
+
+function renderBrowse(){
+  var pausedHtml='';
+  if(state.pausedSession){ var ps=state.pausedSession; pausedHtml='<div class="card paused-card"><div style="font-weight:600;margin-bottom:4px;">Paused test</div><div class="view-sub" style="margin-bottom:10px;">Question '+Math.min(ps.index+1,ps.ids.length)+' of '+ps.ids.length+' · '+ps.results.length+' answered</div><button class="btn btn-primary btn-sm" data-action="resume-paused">Resume test</button></div>'; }
+  var searchBarHtml = renderSearchBar();
+  if ((state.filters.search || '').trim()) {
+    return searchBarHtml + pausedHtml + renderQuestionList(buildTree(), null, true);
+  }
+  var tree = buildTree();
+  var node = state.selectedPath ? getNodeByPath(tree, state.selectedPath) : null;
+  var hasChildren = node && Object.keys(node.children).length > 0;
+  var showGrid = state.mcqs.length && (!node || (hasChildren && !state.forceList));
+  return searchBarHtml + pausedHtml + (showGrid ? renderChapterGrid(tree, node) : renderQuestionList(tree, node));
+}
+
+function renderBreadcrumb(){
+  if (!state.selectedPath) return '';
+  var html = '<div class="breadcrumb">';
+  html += '<button class="breadcrumb-link" data-action="clear-selection">Library</button>';
+  var acc = [];
+  state.selectedPath.forEach(function(seg, i){
+    acc.push(seg);
+    var isLast = i === state.selectedPath.length - 1;
+    html += '<span class="breadcrumb-sep">/</span>';
+    if (isLast) {
+      html += '<span class="breadcrumb-current">' + escapeHtml(seg) + '</span>';
+    } else {
+      html += '<button class="breadcrumb-link" data-action="select-node" data-path="' + escapeHtml(acc.join('␟')) + '">' + escapeHtml(seg) + '</button>';
+    }
+  });
+  html += '</div>';
+  return html;
+}
+
+/* Card grid — shown for the library root (subjects) and for any node that still has children (chapters) */
+function renderChapterGrid(tree, node){
+  var childrenMap = node ? node.children : tree;
+  var keys = Object.keys(childrenMap).sort();
+  var title = node ? node.name : 'Library';
+  var kind = node ? 'chapter' : 'subject';
+
+  var html = '<div class="view-head">';
+  html += renderBreadcrumb();
+  html += '<div class="view-title serif">' + escapeHtml(title) + '</div>' +
+    '<div class="view-sub">' + keys.length + ' ' + kind + (keys.length===1?'':'s') +
+    (node ? ' in this subject' : ' — pick one to see its chapters and questions') + '</div></div>';
+
+  if (state.clipboardNode) {
+    var herePathKey = (node ? state.selectedPath : []).join('␟');
+    html += '<div class="paste-banner"><span>' + icon('clipboard',15) + ' <strong>' + escapeHtml(state.clipboardNode.name) + '</strong> is cut — pick a destination, then paste it here.</span>' +
+      '<span style="display:flex;gap:8px;flex-shrink:0;">' +
+      '<button class="btn btn-primary btn-sm" data-action="paste-node-here" data-path="' + escapeHtml(herePathKey) + '">Paste here</button>' +
+      '<button class="btn btn-ghost btn-sm" data-action="cancel-cut">Cancel</button>' +
+      '</span></div>';
+  }
+
+  if (!keys.length) {
+    html += '<div class="card empty-state"><span class="serif">Nothing here yet</span>No MCQs are logged under this ' + kind + '.</div>';
+    return html;
+  }
+
+  var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
+  html += '<div class="chapter-grid">';
+  keys.forEach(function(k){
+    var child = childrenMap[k];
+    var path = (node ? state.selectedPath : []).concat([k]);
+    var pathKey = path.join('␟');
+    var qs = collectIds(child).map(function(id){ return byId[id]; }).filter(Boolean);
+    var answered = qs.filter(function(m){ return m.learning.history.length > 0; }).length;
+    var mastered = qs.filter(function(m){ return getLearningState(m) === 'mastered'; }).length;
+    var flagged = qs.filter(function(m){ return m.flagged; }).length;
+    var mastery = answered ? Math.round(mastered / qs.length * 100) : 0;
+    var childHasKids = Object.keys(child.children).length > 0;
+    var isSubjectLevel = !node;
+    var asleep = isSubjectLevel && !!state.sleepingSubjects[k];
+
+    var childCount = Object.keys(child.children).length;
+    var typeTag = childHasKids
+      ? '<span class="deck-type-tag folder" title="Opens another set of chapters">' + icon('folder',11) + ' ' + childCount + ' chapter' + (childCount===1?'':'s') + '</span>'
+      : '<span class="deck-type-tag leaf" title="Opens straight to its question list">' + icon('list',11) + ' Question list</span>';
+
+    html += '<div class="chapter-card' + (asleep ? ' asleep' : '') + (childHasKids ? ' is-folder' : ' is-leaf') + '" data-action="select-node" data-path="' + escapeHtml(pathKey) + '">';
+    html += '<div class="chapter-card-toolbar">';
+    if (isSubjectLevel) {
+      html += '<button class="chapter-card-sleep-btn' + (asleep ? ' on' : '') + '" data-action="toggle-subject-sleep" data-subject="' + escapeHtml(k) + '" title="' + (asleep ? 'Asleep — click to wake, resuming FSRS review' : 'Put this subject to sleep — pauses FSRS review and excludes it from Start Practice on the library root') + '" aria-label="Toggle sleep for ' + escapeHtml(k) + '">' + icon('moon',14) + '</button>';
+    }
+    html += '<button class="chapter-card-menu-btn" data-action="open-deck-menu" data-path="' + escapeHtml(pathKey) + '" title="More options" aria-label="More options for ' + escapeHtml(child.name) + '">' + icon('more-vertical',15) + '</button>';
+    html += '</div>';
+    html += '<div class="chapter-card-body">';
+    html += '<div class="chapter-card-title">' + escapeHtml(child.name) + (asleep ? ' <span class="sleep-badge">Asleep</span>' : '') + '</div>';
+    html += typeTag;
+    html += '<div class="chapter-card-stats"><strong>' + child.count + '</strong> question' + (child.count===1?'':'s');
+    if (answered) {
+      var accClass = mastery >= 70 ? 'stat-good' : (mastery >= 40 ? 'stat-mid' : 'stat-low');
+      html += ' · <span class="' + accClass + '">' + mastery + '% mastered</span>';
+    } else {
+      html += ' · not started';
+    }
+    if (flagged) html += ' · ' + flagged + ' flagged';
+    if (asleep) html += ' · not recommended while asleep';
+    html += '</div></div>';
+    html += '<button class="chapter-card-view" data-action="view-node-questions" data-path="' + escapeHtml(pathKey) + '">' +
+      'View questions ' + icon('chevron-right',13) + '</button>';
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+/* Flat filtered question list — shown once you're inside a leaf chapter, or after "View questions" */
+function renderQuestionList(tree, node, searchAll){
+  var title = searchAll ? 'Search results' : (state.selectedPath ? state.selectedPath[state.selectedPath.length-1] : 'All subjects');
+  var ids = (searchAll || !node) ? state.mcqs.map(function(m){return m.id;}) : collectIds(node);
+  var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
+  var list = ids.map(function(id){ return byId[id]; }).filter(Boolean).filter(passesFilters);
+  /* Sleeping subjects stay visible for browsing, but drop out of the root-level "Start practice" pool/count. */
+  var practiceCount = (searchAll || !node) ? list.filter(function(m){ return !state.sleepingSubjects[m.subject]; }).length : list.length;
+
+  var html = '<div class="view-head">';
+  html += searchAll ? '<div class="breadcrumb"><button class="breadcrumb-link" data-action="clear-search">' + icon('chevron-left',12) + ' Library</button></div>' : renderBreadcrumb();
+  html += '<div class="view-title serif">' + escapeHtml(title) + '</div>' +
+    '<div class="view-sub">' + list.length + ' question' + (list.length===1?'':'s') + ' match the filters below' + (searchAll || state.selectedPath ? '' : ' · pick a subject or chapter on the left to narrow down') + '</div></div>';
+
+  html += renderFilters();
+
+  html += '<div class="action-row">' +
+    '<button class="btn btn-primary" data-action="start-practice"' + (practiceCount ? '' : ' disabled') + '>Start practice (' + practiceCount + ')</button>';
+  html += '</div>';
+
+  if (!state.mcqs.length) {
+    html += '<div class="card empty-state"><span class="serif">Your library is empty</span>Head to <strong>Add source</strong> to paste in your first standardized MCQ set.</div>';
+  } else if (!list.length) {
+    html += '<div class="card empty-state"><span class="serif">No questions match</span>Try loosening the filters above.</div>';
+  } else {
+    html += '<div class="mcq-list">';
+    list.slice(0, 200).forEach(function(m){
+      var statusClass = m.flagged ? 'flagged' : (m.learning.history.length === 0 ? '' : (getLearningState(m) === 'mastered' ? 'correct' : 'wrong'));
+      var snippet = m.question.replace(/\n/g,' ').slice(0, 140);
+      html += '<div class="card mcq-row" data-action="preview-mcq" data-id="' + m.id + '">' +
+        '<div class="mcq-status-dot ' + statusClass + '"></div>' +
+        '<div class="mcq-row-text">' + escapeHtml(snippet) + (m.question.length > 140 ? '…' : '') +
+        '<div class="mcq-row-meta">' +
+        '<span class="source-pill" style="background:' + colorForSource(m.source) + '">' + escapeHtml(m.source) + '</span>' +
+        m.tags.slice(0,2).map(function(t){ return '<span class="tag-pill">' + escapeHtml(t) + '</span>'; }).join('') +
+        (m.tags.length > 2 ? '<span class="tag-pill-more">+' + (m.tags.length-2) + '</span>' : '') +
+        '</div></div>' +
+        '<div class="mcq-row-actions">' +
+        '<button class="mcq-icon-btn" data-action="view-history" data-id="' + m.id + '" title="Review history">' + icon('clock',14) + '</button>' +
+        '<button class="mcq-icon-btn" data-action="edit-mcq" data-id="' + m.id + '" title="Edit question">' + icon('pencil',14) + '</button>' +
+        '</div></div>';
+    });
+    if (list.length > 200) html += '<div class="view-sub" style="margin-top:8px;">Showing first 200 of ' + list.length + ' — narrow the filters to see more precisely.</div>';
+    html += '</div>';
+  }
+  return html;
+}
+
+function renderFilters(){
+  var sources = Object.keys(state.sources);
+  var tags = allTags();
+  if (!sources.length) return '';
+  var activeTagCount = Object.keys(state.filters.tags).filter(function(t){ return state.filters.tags[t]; }).length;
+  var anyFilterActive = activeTagCount > 0 ||
+    Object.keys(state.filters.sources).some(function(s){ return state.filters.sources[s]; }) ||
+    state.filters.status !== 'all';
+
+  var html = '<div class="filters-bar">';
+  html += '<div class="filter-toolbar">';
+
+  // Sources — small set, always shown inline
+  html += '<div class="filter-toolbar-group">';
+  sources.forEach(function(s){
+    var active = !!state.filters.sources[s];
+    html += '<button class="chip' + (active?' active':'') + '" data-action="toggle-source-filter" data-source="' + escapeHtml(s) + '">' +
+      '<span class="chip-dot" style="background:' + colorForSource(s) + '"></span>' + escapeHtml(s) + '</button>';
+  });
+  html += '</div>';
+
+  if (tags.length) {
+    html += '<div class="filter-divider"></div>';
+    html += '<button class="tags-trigger' + (activeTagCount ? ' has-active' : '') + '" data-action="toggle-tag-panel">' +
+      'Tags' + (activeTagCount ? '<span class="count-badge">' + activeTagCount + '</span>' : '') +
+      '<span class="caret">' + (state.filters.tagPanelOpen ? icon('chevron-up',11) : icon('chevron-down',11)) + '</span></button>';
+  }
+
+  html += '<div class="filter-divider"></div>';
+  html += '<div class="filter-toolbar-group">' +
+    '<select class="status-select" data-action="set-status-filter">' +
+    ['all','unanswered','correct','wrong','flagged'].map(function(v){
+      return '<option value="'+v+'"' + (state.filters.status===v?' selected':'') + '>' + v.charAt(0).toUpperCase()+v.slice(1) + '</option>';
+    }).join('') + '</select></div>';
+
+  if (anyFilterActive) {
+    html += '<button class="filter-clear-link" data-action="clear-all-filters">Clear filters</button>';
+  }
+  html += '</div>'; // .filter-toolbar
+
+  if (state.filters.tagPanelOpen && tags.length) {
+    html += '<div class="tag-panel">';
+    tags.forEach(function(t){
+      var active = !!state.filters.tags[t];
+      html += '<button class="chip' + (active?' active':'') + '" data-action="toggle-tag-filter" data-tag="' + escapeHtml(t) + '">' + escapeHtml(t) + '</button>';
+    });
+    html += '</div>';
+  }
+
+  html += '</div>'; // .filters-bar
+  return html;
+}
+
+/* ---------------- Add source view ---------------- */
+var MASTER_PROMPT = "PRACTEX MCQ STANDARDIZATION PROMPT\n\n" +
+"You will be given raw, messy OCR text extracted from a medical review or self-assessment book containing multiple-choice questions. Convert it into the exact Practex Standard MCQ Format below. Output ONLY the converted text in this format - no commentary, no markdown code fences, nothing before or after.\n\n" +
+"=== FILE HEADER (once, at the very top) ===\n" +
+"#SOURCE: <Full book title, author, edition - as accurately as you can tell from the text or context given>\n\n" +
+"=== SECTION HEADERS (repeat only when subject or chapter changes) ===\n" +
+"#SUBJECT: <subject name, e.g. Microbiology>\n" +
+"#CHAPTER: <chapter path, use \" > \" to separate levels if the book nests Section > Chapter > Topic, e.g. \"General Microbiology > Sterilization and Disinfection\">\n" +
+"Place these immediately before the first question they apply to. Do not repeat them for every question - only when they change.\n\n" +
+"=== EACH QUESTION BLOCK ===\n" +
+"#Q\n" +
+"<full question stem, verbatim, except for OCR cleanup below>\n" +
+"#OPTIONS\n" +
+"A) <option text>\n" +
+"B) <option text>\n" +
+"C) <option text>\n" +
+"D) <option text>\n" +
+"E) <option text>   (only if a 5th option exists - omit the line entirely if not)\n" +
+"#ANSWER: <letter, e.g. B - or comma-separated letters for multi-correct e.g. B,D - or UNKNOWN if the source has no answer key for this question>\n" +
+"#EXPLANATION\n" +
+"<explanation text if the book provides one, else omit this whole block>\n" +
+"#TAGS: <comma-separated - exam name/year if shown e.g. AIIMS 2015, plus any topic tags you can infer>\n" +
+"#END\n\n" +
+"Always re-letter options A, B, C, D, E in that order regardless of how the original numbered them (i, ii, iii or 1, 2, 3 all become A, B, C...).\n\n" +
+"=== SPECIAL QUESTION TYPES ===\n\n" +
+"1. Standard single-best-answer - use the block above as-is.\n\n" +
+"2. Multiple correct answers (select all that apply) - same block, #ANSWER lists every correct letter comma-separated with no spaces, e.g. #ANSWER: A,C,D\n\n" +
+"3. Assertion-Reason questions - put both statements in the #Q body labeled exactly \"Assertion (A):\" and \"Reason (R):\" on their own lines, then the standard Assertion-Reason options go in #OPTIONS as normal lettered options.\n\n" +
+"4. Match-the-following / column matching - put the two columns in the #Q body as a markdown pipe table (table rules below), then the lettered combinations go in #OPTIONS as normal, e.g. \"A) 1-a, 2-b, 3-c, 4-d\".\n\n" +
+"5. Multiple-statement true/false (Roman numeral statements I, II, III, IV) - list the numbered statements as plain lines inside #Q body, then the combinations go in #OPTIONS as normal, e.g. \"A) I and II only\".\n\n" +
+"6. Fill-in-the-blank / one-word-answer questions with no options - omit the #OPTIONS block entirely. Put the answer directly after #ANSWER:\n\n" +
+"7. Passage or case-vignette shared by 2+ consecutive questions - write the shared passage once, immediately before the first question using it:\n" +
+"#PASSAGE: P1\n" +
+"<passage text>\n" +
+"#ENDPASSAGE\n" +
+"Then for every question that uses it, add the passage id right after #Q on the same line: \"#Q [PASSAGE:P1]\". Give each distinct passage in the document a new sequential id (P1, P2, P3...).\n\n" +
+"8. Questions referencing an image/photo/diagram that OCR cannot capture - insert a line inside the #Q body: #IMAGE: [brief description inferred from the surrounding text/caption]. Never invent findings that aren't stated nearby - if you cannot tell what the image shows, write #IMAGE: [image - description unavailable].\n\n" +
+"9. Questions with no visible answer key anywhere in the source - still create the full block, options included, and set #ANSWER: UNKNOWN.\n\n" +
+"=== TABLE RULES ===\n" +
+"Use standard markdown pipe tables only, inside a #Q or #EXPLANATION body:\n" +
+"| Header 1 | Header 2 |\n" +
+"|---|---|\n" +
+"| cell | cell |\n" +
+"Every header cell must contain text - never leave one empty. Keep one fact per cell. Preserve row order exactly as in the source.\n\n" +
+"=== OCR CLEANUP RULES ===\n" +
+"Fix obvious character-level OCR errors you're confident about (rn misread as m, 0 for O, words split across a line break) and rejoin them. Remove stray running headers, page numbers, and watermarks that leaked into the text (e.g. repeated site names). Never guess or alter actual medical content, numbers, or drug names you're not sure about - keep your best-guess reading rather than inventing something, and don't flag uncertainty inline. Normalize arrows to the → character. Keep superscripts as ^ (10^3) and subscripts as _ (CO_2) since true super/subscript formatting is usually lost in OCR. Remove duplicated/garbled repeated fragments from double-scanned lines.\n\n" +
+"=== GENERAL RULES ===\n" +
+"One #Q ... #END block per question, no empty blocks. Do not add your own question numbers - if the original had a locator worth preserving, put it in #TAGS instead (e.g. TAGS: Q45). If converting a large document, process it completely - do not summarize, skip, or truncate partway through, even across hundreds of questions. Output nothing except the formatted blocks - no preamble, no closing notes.\n\n" +
+"Below is the raw OCR text to convert:\n" +
+"<PASTE YOUR OCR TEXT HERE>";
+
+function renderAddSource(){
+  var html = '<div class="view-head"><div class="view-title serif">Add source</div>' +
+    '<div class="view-sub">Convert a book\'s OCR dump into the Practex format, then paste the result below to log it.</div></div>';
+
+  html += '<div class="card section-block">' +
+    '<h3>1. Copy the conversion prompt</h3>' +
+    '<div class="view-sub" style="margin-bottom:10px;">Paste this into an LLM (like Claude) along with your raw OCR text. It defines the exact standard format Practex parses, including every question type, table rules, and OCR cleanup rules — so imports come out clean instead of haywire.</div>' +
+    '<div class="prompt-box mono" id="promptBox">' + escapeHtml(MASTER_PROMPT) + '</div>' +
+    '<div class="action-row"><button class="btn btn-primary" data-action="copy-prompt">Copy prompt</button></div>' +
+    '</div>';
+
+  html += '<div class="card section-block">' +
+    '<h3>2. Paste the standardized output here</h3>' +
+    '<div class="field-row"><div class="field"><label>Source name override (optional — leave blank to use the #SOURCE: line from the text)</label><input type="text" id="sourceOverrideInput" placeholder="e.g. Sastry Microbiology, 6th ed."></div></div>' +
+    '<textarea class="ingest-area mono" id="ingestArea" placeholder="#SOURCE: ...&#10;#SUBJECT: ...&#10;#CHAPTER: ...&#10;#Q ..."></textarea>' +
+    '<div class="action-row">' +
+    '<button class="btn btn-primary" data-action="parse-preview">Parse &amp; preview</button>' +
+    '<button class="btn btn-ghost" data-action="clear-ingest">Clear</button>' +
+    '</div>' +
+    '<div id="parseReport"></div>' +
+    '</div>';
+
+  var sourceNames = Object.keys(state.sources);
+  if (sourceNames.length) {
+    html += '<div class="card section-block"><h3>Manage sources</h3>';
+    sourceNames.forEach(function(s){
+      var count = state.mcqs.filter(function(m){ return m.source === s; }).length;
+      html += '<div class="source-manage-row">' +
+        '<span class="chip-dot" style="background:' + colorForSource(s) + '"></span>' +
+        '<span style="flex:1;">' + escapeHtml(s) + '</span>' +
+        '<span class="view-sub" style="margin:0;">' + count + ' MCQs</span>' +
+        '<button class="btn btn-sm btn-danger" data-action="delete-source" data-source="' + escapeHtml(s) + '">Delete</button>' +
+        '</div>';
+    });
+    html += '</div>';
+  }
+
+  if (state.mcqs.length) {
+    html += '<div class="card section-block"><h3>Reset</h3>' +
+      '<div class="view-sub" style="margin-bottom:10px;">Removes every logged MCQ and source. Cannot be undone.</div>' +
+      '<button class="btn btn-danger btn-sm" data-action="clear-all">Clear entire library</button></div>';
+  }
+
+  return html;
+}
+
+/* ---------------- Practice / session ---------------- */
+
+function getLearningQueue(ids){
+  var now = Date.now();
+  var byId = {};
+  state.mcqs.forEach(function(m){ byId[m.id]=m; });
+  var due = ids.map(function(id){ return byId[id]; }).filter(Boolean).filter(function(q){
+    return q.learning && (q.learning.due||0) <= now && !state.sleepingSubjects[q.subject];
+  });
+  due.sort(function(a,b){
+    var order={misconception:0,noconcept:1,learning:2,mastered:3,new:4};
+    return (order[getLearningState(a)]??9)-(order[getLearningState(b)]??9);
+  });
+  return due.map(function(q){return q.id;});
+}
+
+
+/* ================= FSRS-inspired scheduler ================= */
+var DAY = 24*60*60*1000;
+var FSRS_W = [0.4, 0.6, 2.4, 5.8, 4.93, 0.94, 0.86, 0.01, 1.49, 0.14, 0.94, 2.18, 0.05, 0.34, 1.26, 0.29, 2.61];
+
+function fsrsClamp(v, lo, hi){ return Math.min(hi, Math.max(lo, v)); }
+function fsrsInitStability(rating){ return Math.max(0.1, FSRS_W[rating-1]); }
+function fsrsInitDifficulty(rating){
+  return fsrsClamp(FSRS_W[4] - Math.exp(FSRS_W[5]*(rating-1)) + 1, 1, 10);
+}
+function fsrsNextDifficulty(difficulty, rating){
+  var deltaD = -FSRS_W[6]*(rating-3);
+  var dPrime = difficulty + deltaD*(10-difficulty)/9;
+  var anchor = fsrsInitDifficulty(4);
+  return fsrsClamp(FSRS_W[7]*anchor + (1-FSRS_W[7])*dPrime, 1, 10);
+}
+function fsrsRetrievability(elapsedDays, stability){
+  if (!stability || stability <= 0) return 0;
+  return Math.pow(0.9, elapsedDays / stability);
+}
+function fsrsNextStability(difficulty, stability, r, rating){
+  if (rating === 1) {
+    return Math.max(0.1,
+      FSRS_W[11] * Math.pow(difficulty, -FSRS_W[12]) *
+      (Math.pow(stability + 1, FSRS_W[13]) - 1) *
+      Math.exp((1 - r) * FSRS_W[14])
+    );
+  }
+  var hardPenalty = rating === 2 ? FSRS_W[15] : 1;
+  var easyBonus = rating === 4 ? FSRS_W[16] : 1;
+  return Math.max(0.1, stability * (
+    1 + Math.exp(FSRS_W[8]) * (11 - difficulty) * Math.pow(stability, -FSRS_W[9]) *
+    (Math.exp((1 - r) * FSRS_W[10]) - 1) * hardPenalty * easyBonus
+  ));
+}
+/* fsrsState: {stability, difficulty, reps, lapses, lastReview} | null (first review) */
+function fsrsStep(fsrsState, rating, now){
+  var out;
+  if (!fsrsState || !fsrsState.reps) {
+    out = { stability: fsrsInitStability(rating), difficulty: fsrsInitDifficulty(rating), reps: 1, lapses: rating===1?1:0 };
+  } else {
+    var elapsedDays = fsrsState.lastReview ? (now - fsrsState.lastReview) / DAY : 0;
+    var r = fsrsRetrievability(elapsedDays, fsrsState.stability);
+    out = {
+      stability: fsrsNextStability(fsrsState.difficulty, fsrsState.stability, r, rating),
+      difficulty: fsrsNextDifficulty(fsrsState.difficulty, rating),
+      reps: fsrsState.reps + 1,
+      lapses: fsrsState.lapses + (rating===1?1:0)
+    };
+  }
+  out.lastReview = now;
+  return out;
+}
+function fsrsIntervalDays(stability){ return Math.max(1/144, stability); } /* requestRetention=0.9 -> interval == stability (days), floor 10min */
+/* ============================================================ */
+
+/* ================= Learning Engine (Phase 3) ================= */
+const LearningEngine={
+
+  MAX_HISTORY:8,
+
+  record(mcq,picked,correct){
+
+    if(!mcq.learning){
+      mcq.learning={
+        due:Date.now(),
+        interval:0,
+        history:[],
+        lastReviewed:null,
+        fsrs:null
+      };
+    }
+    if(mcq.learning.fsrs===undefined) mcq.learning.fsrs=null;
+
+    mcq.learning.history.push({
+      correct,
+      picked,
+      rating:null,
+      expected:mcq.answer[0],
+      ts:Date.now()
+    });
+
+    if(mcq.learning.history.length>this.MAX_HISTORY){
+      mcq.learning.history.splice(
+        0,
+        mcq.learning.history.length-this.MAX_HISTORY
+      );
+    }
+
+    /* Auto-derive an Again/Hard/Good/Easy-equivalent (1-4) rating from the question's
+       own tracked history, instead of asking the user to self-report one after every
+       question. classify() below reflects history INCLUDING the attempt just pushed. */
+    const rating = this.deriveRating(mcq, correct);
+    mcq.learning.history[mcq.learning.history.length-1].rating = rating;
+
+    this.schedule(mcq, rating);
+
+  },
+
+  deriveRating(mcq, correct){
+    if(!correct) return 1; // Again — wrong this round, always, no exceptions
+
+    const cls = this.classify(mcq);
+    if(cls === 'misconception' || cls === 'noconcept') return 2; // Hard — right this time, but the pattern says you're not solid
+    if(cls === 'mastered') return 4; // Easy
+    return 3; // Good — new / learning
+  },
+
+  classify(mcq){
+
+    const h=mcq.learning.history;
+
+    if(h.length<3){
+      return "new";
+    }
+
+    const correct=h.filter(x=>x.correct).length;
+    const wrong=h.filter(x=>!x.correct);
+
+    const correctRate=correct/h.length;
+
+    let wrongConsistency=0;
+
+    if(wrong.length>=2){
+
+      const freq={};
+
+      wrong.forEach(x=>{
+        freq[x.picked]=(freq[x.picked]||0)+1;
+      });
+
+      wrongConsistency=Math.max(...Object.values(freq))/wrong.length;
+
+    }
+
+    const last2=h.slice(-2).every(x=>x.correct);
+
+    if(
+      wrong.length>=2 &&
+      wrongConsistency>=0.6
+    ){
+      return "misconception";
+    }
+
+    if(
+      correctRate>=0.7 &&
+      last2
+    ){
+      return "mastered";
+    }
+
+    if(correct>0){
+      return "learning";
+    }
+
+    return "noconcept";
+
+  },
+
+  schedule(mcq, rating){
+
+    const clsState=this.classify(mcq);
+
+    const now=Date.now();
+
+    mcq.learning.state=clsState;
+
+    /* Real FSRS stability/difficulty step drives the base interval. */
+    mcq.learning.fsrs = fsrsStep(mcq.learning.fsrs, rating, now);
+    var intervalDays = fsrsIntervalDays(mcq.learning.fsrs.stability);
+
+    /* Pedagogical ceilings: cards flagged as a recurring misconception, showing
+       no grasp of the concept, or still brand-new get pulled back sooner than
+       raw FSRS math alone would schedule them, regardless of this review's rating. */
+    if (clsState === 'misconception') intervalDays = Math.min(intervalDays, 0.5);       /* ≤ 12h */
+    else if (clsState === 'noconcept') intervalDays = Math.min(intervalDays, 30/1440);  /* ≤ 30m */
+    else if (clsState === 'new') intervalDays = Math.min(intervalDays, 10/1440);        /* ≤ 10m */
+
+    mcq.learning.interval = intervalDays * DAY;
+    mcq.learning.lastReviewed = now;
+    mcq.learning.due = now + mcq.learning.interval;
+
+  }
+
+};
+/* ============================================================ */
+
+function getLearningState(mcq){
+  return LearningEngine.classify(mcq);
+}
+
+function getMostRepeatedWrong(mcq){
+  const wrong={};
+  mcq.learning.history
+    .filter(x=>!x.correct)
+    .forEach(x=>{
+      wrong[x.picked]=(wrong[x.picked]||0)+1;
+    });
+  let max=0;
+  let option="-";
+  Object.entries(wrong).forEach(([k,v])=>{
+    if(v>max){
+      max=v;
+      option=k;
+    }
+  });
+  return option;
+}
+
+function renderExplanation(mcq){
+  return mcq.explanation ? '<div class="reveal-explain">' + renderContent(mcq.explanation) + '</div>' : '';
+}
+
+function renderReveal(mcq){
+  const state=LearningEngine.classify(mcq);
+  let banner="";
+  switch(state){
+    case "new":
+      banner='';
+      break;
+    case "noconcept":
+      banner='<div class="learning-banner noconcept">No Concept<br>Your incorrect answers don\'t follow a pattern.<br>Focus on understanding the concept instead of memorizing.</div>';
+      break;
+    case "misconception":
+      var trap=getMostRepeatedWrong(mcq);
+      banner='<div class="learning-banner misconception">Recurring Misconception<br>You\'ve repeatedly selected <strong>' + escapeHtml(trap) + '</strong><br>Review why this option is incorrect.</div>';
+      break;
+    case "learning":
+      banner='<div class="learning-banner learning">Recovering<br>You\'re beginning to answer this correctly.</div>';
+      break;
+    case "mastered":
+      banner='<div class="learning-banner mastered">Mastered<br>Excellent consistency.<br>This question will appear less often.</div>';
+      break;
+  }
+  return banner + renderExplanation(mcq);
+}
+
+function startPractice(ids){
+  var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
+  if(state.learningMode && state.learningMode.enabled){
+    ids = getLearningQueue(ids);
+  }
+  var pool = ids.map(function(id){ return byId[id]; }).filter(Boolean);
+  if(!pool.length){
+    if(state.learningMode && state.learningMode.enabled){
+      alert("✓ You're caught up!\n\nNothing is scheduled for review yet.\n\nDisable FSRS Mode to practice all questions.");
+    } else {
+      showToast('No questions to practice with those filters.');
+    }
+    return;
+  }
+  for (var i = pool.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+  }
+  state.session = {
+    ids: pool.map(function(m){ return m.id; }),
+    index: 0,
+    selected: null,
+    revealed: false,
+    results: [],
+    undoStack: [],
+    stats: { correct:0, wrong:0, misconception:0, learning:0, mastered:0, noconcept:0 }
+  };
+  state.view = 'practice';
+  render();
+}
+
+function renderPractice(){
+  var s = state.session;
+  var m = state.mcqs.find(function(x){ return x.id === s.ids[s.index]; });
+  if (!m) { state.view = 'summary'; return renderSummary(); }
+  var pct = Math.round((s.index / s.ids.length) * 100);
+
+  var html = '<div class="practice-wrap">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap;">' +
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
+    '<button class="btn btn-ghost btn-sm" data-action="leave-practice">' + icon('chevron-left',14) + ' Back</button>' +
+    (s.undoStack && s.undoStack.length ? '<button class="undo-btn icon-inline" data-action="undo-answer">' + icon('undo',13) + ' Undo last answer</button>' : '') +
+    '</div>' +
+    bookmarkButton(m) +
+    '</div>';
+  var nextM = state.mcqs.find(function(x){ return x.id === s.ids[s.index+1]; });
+  var nextLabel = nextM && nextM.learning ? LearningEngine.classify(nextM) : (nextM ? 'new' : null);
+  html += '<div class="practice-progress"><div class="progress-track"><div class="progress-fill" style="width:' + pct + '%;"></div></div>' +
+    '<div class="progress-label">' + (s.index+1) + ' / ' + s.ids.length +
+    (nextLabel ? '<br>Next: ' + escapeHtml(nextLabel) : '') + '</div></div>';
+
+  html += '<div class="card answer-sheet">';
+  html += '<div class="qmeta"><span class="qnum mono">Q.' + (s.index+1) + '</span><div class="qmeta-tags">' +
+    '<span class="source-pill" style="background:' + colorForSource(m.source) + '">' + escapeHtml(m.source) + '</span>' +
+    m.tags.map(function(t){ return '<span class="tag-pill">' + escapeHtml(t) + '</span>'; }).join('') +
+    '</div></div>';
+
+  if (m.passage) html += '<div class="passage-box">' + renderContent(m.passage) + '</div>';
+  html += '<div class="qtext">' + renderContent(m.question) + '</div>';
+
+  if (m.isShortAnswer) {
+    html += '<div class="short-answer-box"><textarea id="shortAnswerInput" placeholder="Type your answer, then reveal to check yourself" ' + (s.revealed ? 'disabled' : '') + '>' + (s.selected||'') + '</textarea></div>';
+    if (!s.revealed) {
+      html += '<div class="answer-footer" style="justify-content:flex-end;"><button class="btn btn-primary" data-action="reveal-short">Reveal answer</button></div>';
+    }
+  } else {
+    html += '<div class="bubbles">';
+    m.options.forEach(function(opt){
+      var isSelected = s.selected && s.selected.indexOf(opt.letter) !== -1;
+      var isCorrectLetter = m.answer.indexOf(opt.letter) !== -1;
+      var cls = 'bubble';
+      if (isSelected) cls += ' selected';
+      if (s.revealed) {
+        cls += ' locked';
+        if (isCorrectLetter) cls += ' reveal-correct';
+        else if (isSelected) cls += ' reveal-wrong';
+      }
+      html += '<button class="' + cls + '" ' + (s.revealed ? 'disabled' : '') + ' data-action="select-option" data-letter="' + opt.letter + '">' +
+        '<span class="bubble-mark"><svg class="bubble-ring" viewBox="0 0 30 30"><ellipse cx="15" cy="15" rx="12" ry="12" pathLength="100"></ellipse></svg>' +
+        '<span class="bubble-letter">' + opt.letter + '</span></span>' +
+        '<span class="bubble-text">' + escapeHtml(opt.text) + '</span></button>';
+    });
+    html += '</div>';
+    if (!s.revealed) {
+      html += '<div class="answer-footer" style="justify-content:flex-end;">' +
+        '<button class="btn btn-primary" data-action="reveal-mcq"' + (s.selected && s.selected.length ? '' : ' disabled') + '>Check answer</button></div>';
+    }
+  }
+
+  if (s.revealed) {
+    var isCorrect = evaluateCorrect(m, s.selected);
+    html += '<div class="reveal-panel">';
+    html += '<div class="reveal-verdict ' + (isCorrect ? 'correct' : 'wrong') + '">' + (isCorrect ? 'Correct' : (m.answer[0]==='UNKNOWN' ? 'No answer key on record' : 'Not quite')) + '</div>';
+    if (!m.isShortAnswer && m.answer[0] !== 'UNKNOWN') {
+      html += '<div class="view-sub" style="margin-bottom:8px;">Correct answer: ' + m.answer.join(', ') + '</div>';
+    }
+    if (m.isShortAnswer) {
+      html += '<div class="view-sub" style="margin-bottom:8px;">Answer on record: ' + escapeHtml(m.answer[0]) + '</div>';
+    }
+    html += renderReveal(m);
+    html += '<div class="answer-footer" style="justify-content:flex-end;">' +
+      '<button class="btn btn-primary" data-action="next-question">' + (s.index + 1 < s.ids.length ? 'Next question' : 'Finish session') + '</button></div>';
+    html += '</div>';
+  }
+
+  html += '</div></div>';
+  return html;
+}
+
+function evaluateCorrect(m, selected){
+  if (!selected) return false;
+  if (m.isShortAnswer) return true;
+  if (m.answer.indexOf('UNKNOWN') !== -1) return null;
+  var a = selected.slice().sort().join(',');
+  var b = m.answer.slice().sort().join(',');
+  return a === b;
+}
+
+function revealCurrent(){
+  var s = state.session;
+  s.revealed = true;
+  render();
+}
+
+async function advanceAfterReveal(){
+  var s = state.session;
+  var m = state.mcqs.find(function(x){ return x.id === s.ids[s.index]; });
+  if (!m) return;
+  var correct = evaluateCorrect(m, s.selected);
+  var pickedStr = m.isShortAnswer ? (s.selected || '') : (s.selected ? s.selected.join(',') : '');
+
+  if (!s.undoStack) s.undoStack = [];
+  s.undoStack.push({
+    mcqId: m.id,
+    learningBefore: JSON.parse(JSON.stringify(m.learning)),
+    statsBefore: JSON.parse(JSON.stringify(s.stats)),
+    resultsLenBefore: s.results.length,
+    index: s.index,
+    selected: s.selected
+  });
+
+  LearningEngine.record(m, pickedStr, correct); /* rating is auto-derived inside, from this question's own history */
+
+  var cls = LearningEngine.classify(m);
+  if (s.stats && s.stats[cls] !== undefined) s.stats[cls]++;
+  if (correct === true) s.stats.correct++;
+  if (correct === false) s.stats.wrong++;
+
+  s.results.push({ id: m.id, correct: correct });
+  bumpStreak();
+  await saveLibrary();
+
+  s.index++; s.selected = null; s.revealed = false;
+  if (s.index >= s.ids.length) state.view = 'summary';
+  render();
+}
+
+async function undoLastAnswer(){
+  var s = state.session;
+  if (!s || !s.undoStack || !s.undoStack.length) return;
+  var last = s.undoStack.pop();
+  var mm = state.mcqs.find(function(x){ return x.id === last.mcqId; });
+  if (mm) mm.learning = last.learningBefore;
+  s.results.length = last.resultsLenBefore;
+  s.stats = last.statsBefore;
+  s.index = last.index;
+  s.selected = last.selected;
+  s.revealed = true;
+  await saveLibrary();
+  render();
+}
+
+function renderSummary(){
+  var s = state.session;
+  var total = s.results.length;
+  var correct = s.results.filter(function(r){ return r.correct === true; }).length;
+  var scored = s.results.filter(function(r){ return r.correct !== null; }).length;
+  var pct = scored ? Math.round((correct / scored) * 100) : 0;
+  var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
+
+  var classCounts = { mastered:0, learning:0, misconception:0, noconcept:0 };
+  s.results.forEach(function(r){
+    var m = byId[r.id];
+    if (!m || !m.learning) return;
+    var cls = LearningEngine.classify(m);
+    if (classCounts[cls] !== undefined) classCounts[cls]++;
+  });
+
+  var html = '<div class="practice-wrap"><div class="card summary-card">';
+  html += '<div class="score-ring' + (pct >= 60 ? ' good' : '') + '"><div class="score-big serif">' + pct + '%</div><div class="score-sub">' + correct + ' / ' + scored + ' scored</div></div>';
+  html += '<div class="serif" style="font-size:19px;">Session complete</div>';
+  html += '<div class="view-sub">' + total + ' question' + (total===1?'':'s') + ' attempted this round.</div>';
+
+  html += '<div class="summary-breakdown">';
+  html += '<div class="summary-row"><span>Questions</span><span>' + total + '</span></div>';
+  html += '<div class="summary-row"><span>Accuracy</span><span>' + pct + '%</span></div>';
+  html += '<div class="summary-row"><span>Mastered</span><span>' + classCounts.mastered + '</span></div>';
+  html += '<div class="summary-row"><span>Learning</span><span>' + classCounts.learning + '</span></div>';
+  html += '<div class="summary-row"><span>Misconceptions</span><span>' + classCounts.misconception + '</span></div>';
+  html += '<div class="summary-row"><span>No Concept</span><span>' + classCounts.noconcept + '</span></div>';
+  html += '</div>';
+
+  var wrongIds = s.results.filter(function(r){ return r.correct === false; }).map(function(r){ return r.id; });
+  html += '<div class="action-row" style="justify-content:center;margin-top:22px;">';
+  if (wrongIds.length) html += '<button class="btn btn-primary" data-action="retry-wrong" data-ids="' + wrongIds.join(',') + '">Retry the ' + wrongIds.length + ' missed</button>';
+  html += '<button class="btn btn-ghost" data-action="back-to-library">Back to library</button>';
+  html += '</div>';
+
+  html += '</div></div>';
+  return html;
+}
+
+/* ---------------- Events ---------------- */
+function bindEvents(){
+  var statusSel = document.querySelector('[data-action="set-status-filter"]');
+  if (statusSel) statusSel.addEventListener('change', function(e){ state.filters.status = e.target.value; render(); });
+  var searchInput = document.getElementById('globalSearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('input', function(e){
+      state.filters.search = e.target.value;
+      var cursorPos = e.target.selectionStart;
+      render();
+      var newInput = document.getElementById('globalSearchInput');
+      if (newInput) { newInput.focus(); newInput.setSelectionRange(cursorPos, cursorPos); }
+    });
+  }
+}
+
+async function onClick(e){
+  var el = e.target.closest('[data-action]');
+  if (!el) return;
+  var action = el.getAttribute('data-action');
+
+  if (action === 'toggle-sidebar') { state.sidebarOpen = !state.sidebarOpen; render(); return; }
+  if (action === 'set-view') { if (guardNavigation(action, el)) return; state.view = el.getAttribute('data-view'); state.sidebarOpen = false; render(); return; }
+  if (action === 'open-dashboard') { if (guardNavigation(action, el)) return; state.view = 'dashboard'; state.sidebarOpen = false; render(); return; }
+  if (action === 'toggle-fsrs-mode') {
+    state.learningMode.enabled = !state.learningMode.enabled;
+    saveFsrsMode();
+    showToast('FSRS Mode ' + (state.learningMode.enabled ? 'enabled' : 'disabled'));
+    render();
+    return;
+  }
+  if (action === 'toggle-fsrs-card') {
+    state.fsrsCardExpanded = !state.fsrsCardExpanded;
+    saveFsrsCardExpanded();
+    render();
+    return;
+  }
+  if (action === 'toggle-subject-sleep') {
+    var subj = el.getAttribute('data-subject');
+    if (state.sleepingSubjects[subj]) {
+      delete state.sleepingSubjects[subj];
+      showToast('"' + subj + '" is awake again — back in FSRS review.');
+    } else {
+      state.sleepingSubjects[subj] = true;
+      showToast('"' + subj + '" is now asleep — paused from FSRS review and Start Practice on the root page.');
+    }
+    saveSleepingSubjects();
+    render();
+    return;
+  }
+  if (action === 'toggle-dark-mode') {
+    state.darkMode = !state.darkMode;
+    saveDarkMode();
+    render();
+    return;
+  }
+  if (action === 'export-library') { exportLibrary(); return; }
+  if (action === 'import-library') {
+    var fi = document.getElementById('importFileInput');
+    if (fi) fi.click();
+    return;
+  }
+  if (action === 'open-settings') { openSettingsModal(); return; }
+  if (action === 'sign-out') { signOutUser(); return; }
+  if (action === 'google-sign-in') { signInWithGoogle(); return; }
+  if (action === 'start-queue-preview') { state.view = 'queuepreview'; state.sidebarOpen = false; render(); return; }
+  if (action === 'start-due-session') {
+    var dueIds = getLearningQueue(state.mcqs.map(function(m){return m.id;}));
+    requestStartPractice(dueIds, true);
+    return;
+  }
+  if (action === 'start-study-ahead') {
+    var tomorrow = Date.now() + 86400000;
+    var byId = {}; state.mcqs.forEach(function(m){ byId[m.id]=m; });
+    var ids = state.mcqs.filter(function(q){ return (q.learning.due||0) <= tomorrow; }).map(function(q){ return q.id; });
+    requestStartPractice(ids, true);
+    return;
+  }
+  if (action === 'start-practice-all') {
+    var allIds = state.mcqs.map(function(m){ return m.id; });
+    requestStartPractice(allIds, false);
+    return;
+  }
+
+  if (action === 'toggle-node') {
+    var key = el.getAttribute('data-path');
+    state.expanded[key] = !state.expanded[key];
+    render(); return;
+  }
+  if (action === 'select-node') {
+    if (guardNavigation(action, el)) return;
+    var key2 = el.getAttribute('data-path');
+    state.selectedPath = key2.split('␟');
+    state.view = 'browse';
+    state.expanded[key2] = true;
+    state.forceList = false;
+    state.sidebarOpen = false;
+    render(); return;
+  }
+  if (action === 'view-node-questions') {
+    var key4 = el.getAttribute('data-path');
+    state.selectedPath = key4.split('␟');
+    state.view = 'browse';
+    state.expanded[key4] = true;
+    state.forceList = true;
+    state.sidebarOpen = false;
+    render(); return;
+  }
+  if (action === 'clear-selection') { state.selectedPath = null; state.forceList = false; render(); return; }
+
+  if (action === 'toggle-source-filter') {
+    var s = el.getAttribute('data-source');
+    state.filters.sources[s] = !state.filters.sources[s];
+    render(); return;
+  }
+  if (action === 'toggle-tag-filter') {
+    var tg = el.getAttribute('data-tag');
+    state.filters.tags[tg] = !state.filters.tags[tg];
+    render(); return;
+  }
+  if (action === 'toggle-tag-panel') {
+    state.filters.tagPanelOpen = !state.filters.tagPanelOpen;
+    render(); return;
+  }
+  if (action === 'clear-all-filters') {
+    state.filters.sources = {};
+    state.filters.tags = {};
+    state.filters.status = 'all';
+    render(); return;
+  }
+  if (action === 'clear-search') {
+    state.filters.search = '';
+    render();
+    var si = document.getElementById('globalSearchInput');
+    if (si) si.focus();
+    return;
+  }
+
+  if (action === 'start-practice') {
+    var tree = buildTree();
+    var node = state.selectedPath ? getNodeByPath(tree, state.selectedPath) : null;
+    var ids = node ? collectIds(node) : state.mcqs.map(function(m){ return m.id; });
+    var byId = {}; state.mcqs.forEach(function(m){ byId[m.id]=m; });
+    if (!node) ids = ids.filter(function(id){ return byId[id] && !state.sleepingSubjects[byId[id].subject]; }); /* root-level "Start Practice" skips sleeping subjects entirely */
+    var filtered = ids.filter(function(id){ return byId[id] && passesFilters(byId[id]); });
+    requestStartPractice(filtered, state.learningMode.enabled);
+    return;
+  }
+
+  if (action === 'preview-mcq') {
+    var id = el.getAttribute('data-id');
+    requestStartPractice([id], false);
+    return;
+  }
+
+  if (action === 'copy-prompt') {
+    var copied = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(MASTER_PROMPT);
+        copied = true;
+      }
+    } catch(err) { copied = false; }
+    if (!copied) {
+      /* Fallback for contexts where the async Clipboard API is blocked (e.g. sandboxed
+         preview iframes without clipboard-write permission delegated) — the older
+         execCommand path works in more of those environments. */
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = MASTER_PROMPT;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-9999px';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, ta.value.length);
+        copied = document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch(err2) { copied = false; }
+    }
+    if (copied) {
+      showToast('Prompt copied — paste it into your LLM of choice.');
+    } else {
+      var pb = document.getElementById('promptBox');
+      if (pb && window.getSelection) {
+        var range = document.createRange();
+        range.selectNodeContents(pb);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      showToast('Could not copy automatically — the prompt text below is now selected, press Ctrl/Cmd+C to copy.');
+    }
+    return;
+  }
+
+  if (action === 'clear-ingest') {
+    document.getElementById('ingestArea').value = '';
+    document.getElementById('parseReport').innerHTML = '';
+    return;
+  }
+
+  if (action === 'parse-preview') {
+    var raw = document.getElementById('ingestArea').value;
+    var override = document.getElementById('sourceOverrideInput').value.trim();
+    if (!raw.trim()) { showToast('Paste some standardized MCQ text first.'); return; }
+    var result = parseLibraryText(raw, override || null);
+    var reportEl = document.getElementById('parseReport');
+    if (!result.mcqs.length) {
+      reportEl.innerHTML = '<div class="parse-report" style="color:var(--pen-red);">No valid #Q blocks found. Check the format against the prompt above.</div>';
+      return;
+    }
+    var bySubj = {};
+    result.mcqs.forEach(function(m){ bySubj[m.subject] = (bySubj[m.subject]||0) + 1; });
+    var subjSummary = Object.keys(bySubj).map(function(k){ return k + ' (' + bySubj[k] + ')'; }).join(', ');
+    var reportHtml = '<div class="parse-report"><span class="parse-ok">' + result.mcqs.length + ' questions parsed</span> — ' + escapeHtml(subjSummary) + '</div>';
+    if (result.errors.length) {
+      reportHtml += '<div class="parse-err-list">' + result.errors.length + ' block(s) skipped:<br>' +
+        result.errors.slice(0,15).map(function(er){ return '· ' + escapeHtml(er.message); }).join('<br>') + '</div>';
+    }
+    reportHtml += '<div class="action-row"><button class="btn btn-primary" data-action="confirm-import">Import ' + result.mcqs.length + ' questions</button></div>';
+    reportEl.innerHTML = reportHtml;
+    reportEl._pending = result.mcqs;
+    return;
+  }
+
+  if (action === 'confirm-import') {
+    var reportEl2 = document.getElementById('parseReport');
+    var pending = reportEl2 && reportEl2._pending;
+    if (!pending || !pending.length) return;
+    pending.forEach(function(m){
+      if (!state.sources[m.source]) state.sources[m.source] = { color: colorForSource(m.source) };
+    });
+    state.mcqs = state.mcqs.concat(pending);
+    await saveLibrary();
+    await saveSources();
+    document.getElementById('ingestArea').value = '';
+    showToast(pending.length + ' questions logged to your library.');
+    state.view = 'browse';
+    render();
+    return;
+  }
+
+  if (action === 'delete-source') {
+    var srcName = el.getAttribute('data-source');
+    if (!confirm('Delete "' + srcName + '" and all its MCQs? This cannot be undone.')) return;
+    state.mcqs = state.mcqs.filter(function(m){ return m.source !== srcName; });
+    delete state.sources[srcName];
+    await saveLibrary();
+    await saveSources();
+    showToast('Source deleted.');
+    render();
+    return;
+  }
+
+  if (action === 'clear-all') {
+    if (!confirm('Delete your entire Practex library? This cannot be undone.')) return;
+    state.mcqs = [];
+    state.sources = {};
+    state.selectedPath = null;
+    await saveLibrary();
+    await saveSources();
+    showToast('Library cleared.');
+    render();
+    return;
+  }
+
+  if (action === 'close-modal') { state.pendingNav = null; closeModal(); return; }
+  if (action === 'modal-backdrop-close') { if (e.target === el) { state.pendingNav = null; closeModal(); } return; }
+  if (action === 'view-history') { openHistoryModal(el.getAttribute('data-id')); return; }
+  if (action === 'edit-mcq') { openEditModal(el.getAttribute('data-id')); return; }
+  if (action === 'save-edit-mcq') { saveEditMcq(el.getAttribute('data-id')); return; }
+
+  if (action === 'open-deck-menu') { openDeckMenu(el.getAttribute('data-path')); return; }
+
+  if (action === 'deck-rename') { openRenameDeckModal(el.getAttribute('data-path')); return; }
+  if (action === 'confirm-rename-deck') {
+    var rPath = el.getAttribute('data-path');
+    var rInput = document.getElementById('renameDeckInput');
+    var rNewName = rInput ? rInput.value : '';
+    if (renameDeck(rPath.split('␟'), rNewName)) {
+      await saveLibrary(); await saveSleepingSubjects();
+      closeModal(); render(); showToast('Renamed to "' + rNewName.trim() + '".');
+    } else {
+      showToast('Enter a name first.');
+    }
+    return;
+  }
+
+  if (action === 'deck-move') { openMoveDeckModal(el.getAttribute('data-path')); return; }
+  if (action === 'confirm-move-deck') {
+    var mvPath = el.getAttribute('data-path');
+    var mvArr = mvPath.split('␟');
+    var mvSelect = document.getElementById('moveDeckSelect');
+    var mvNewInput = document.getElementById('moveDeckNewInput');
+    var mvDest = (mvNewInput && mvNewInput.value.trim()) ? mvNewInput.value.trim() : (mvSelect ? mvSelect.value : '');
+    if (!mvDest) { showToast('Pick or type a destination subject first.'); return; }
+    var movedName = mvArr[mvArr.length-1];
+    if (mvDest === '__LIBRARY_ROOT__') {
+      moveDeckUnder(mvArr, []);
+      await saveLibrary();
+      closeModal(); render(); showToast('"' + movedName + '" is now a top-level subject in the Library.');
+      return;
+    }
+    if (isPathWithinOrEqual([mvDest], mvArr)) { showToast('Can\'t move a deck into itself.'); return; }
+    moveDeckUnder(mvArr, [mvDest]);
+    await saveLibrary();
+    closeModal(); render(); showToast('Moved "' + movedName + '" under "' + mvDest + '".');
+    return;
+  }
+
+  if (action === 'deck-copy') {
+    var cpPath = el.getAttribute('data-path');
+    var cpCount = duplicateDeck(cpPath.split('␟'));
+    await saveLibrary();
+    closeModal(); render();
+    showToast('Copied — ' + cpCount + ' question' + (cpCount===1?'':'s') + ' duplicated as "' + cpPath.split('␟').pop() + ' (copy)".');
+    return;
+  }
+
+  if (action === 'deck-cut') {
+    var cutPath = el.getAttribute('data-path');
+    var cutArr = cutPath.split('␟');
+    state.clipboardNode = { path: cutArr, name: cutArr[cutArr.length-1] };
+    closeModal(); render();
+    showToast('"' + state.clipboardNode.name + '" cut — navigate to a destination and choose "Paste here".');
+    return;
+  }
+  if (action === 'cancel-cut') { state.clipboardNode = null; render(); return; }
+  if (action === 'paste-node-here') {
+    if (!state.clipboardNode) { render(); return; }
+    var destPath = el.getAttribute('data-path');
+    var destPathArr = destPath ? destPath.split('␟') : [];
+    if (!destPathArr.length) {
+      if (state.clipboardNode.path.length === 1) {
+        showToast('That\'s already at the Library root.');
+        state.clipboardNode = null; render();
+        return;
+      }
+      var promotedName = state.clipboardNode.name;
+      moveDeckUnder(state.clipboardNode.path, []);
+      await saveLibrary();
+      state.clipboardNode = null;
+      render();
+      showToast('"' + promotedName + '" moved to the Library root as a top-level subject.');
+      return;
+    }
+    if (isPathWithinOrEqual(destPathArr, state.clipboardNode.path)) {
+      showToast(destPathArr.join(' / ') === state.clipboardNode.path.join(' / ') ? 'That\'s already where it is.' : 'Can\'t paste a deck into itself.');
+      if (destPathArr.join(' / ') === state.clipboardNode.path.join(' / ')) state.clipboardNode = null;
+      render();
+      return;
+    }
+    moveDeckUnder(state.clipboardNode.path, destPathArr);
+    await saveLibrary();
+    var pastedName = state.clipboardNode.name;
+    state.clipboardNode = null;
+    render();
+    showToast('"' + pastedName + '" moved here.');
+    return;
+  }
+
+  if (action === 'deck-delete') { openDeleteDeckModal(el.getAttribute('data-path')); return; }
+  if (action === 'confirm-delete-deck') {
+    var delPath = state.pendingDeckDelete;
+    state.pendingDeckDelete = null;
+    if (delPath) {
+      var delArr = delPath.split('␟');
+      var removedIds = deleteDeck(delArr);
+      if (state.selectedPath && state.selectedPath.join('␟').indexOf(delPath) === 0) {
+        state.selectedPath = null; state.forceList = false;
+      }
+      await deleteMcqRows(removedIds);
+      closeModal(); render();
+      showToast('Deleted ' + removedIds.length + ' question' + (removedIds.length===1?'':'s') + '.');
+    } else {
+      closeModal();
+    }
+    return;
+  }
+  if (action === 'leave-practice') { requestLeavePractice(); return; }
+  if (action === 'pause-and-leave') {
+    state.pausedSession=currentSessionSnapshot(); await savePausedSession(); state.session=null; applyPendingNav(); closeModal(); render(); return;
+  }
+  if (action === 'leave-without-pausing') {
+    state.session=null; applyPendingNav(); closeModal(); render(); return;
+  }
+  if (action === 'resume-paused') {
+    if(!state.pausedSession){ closeModal(); return; }
+    state.session=JSON.parse(JSON.stringify(state.pausedSession)); state.pausedSession=null; await savePausedSession(); state.view='practice'; closeModal(); render(); return;
+  }
+  if (action === 'confirm-new-test') {
+    var pending=state.pendingStart; state.pendingStart=null; closeModal();
+    if(pending){ state.learningMode.enabled=pending.learningEnabled; startPractice(pending.ids); }
+    return;
+  }
+  if (action === 'jump-subject') {
+    state.selectedPath=[el.getAttribute('data-subject')]; state.view='browse'; state.forceList=false; state.expanded[state.selectedPath.join('␟')]=true; render(); return;
+  }
+
+  if (action === 'select-option') {
+    if (state.session.revealed) return;
+    var letter = el.getAttribute('data-letter');
+    state.session.selected = [letter];
+    render();
+    return;
+  }
+
+  if (action === 'reveal-mcq') { revealCurrent(); return; }
+
+  if (action === 'reveal-short') {
+    var val = document.getElementById('shortAnswerInput').value.trim();
+    state.session.selected = val;
+    revealCurrent();
+    return;
+  }
+
+  if (action === 'next-question') { advanceAfterReveal(); return; }
+
+  if (action === 'undo-answer') { undoLastAnswer(); return; }
+
+  if (action === 'bookmark-current') {
+    var s2 = state.session;
+    var m2 = state.mcqs.find(function(x){ return x.id === s2.ids[s2.index]; });
+    m2.flagged = !m2.flagged;
+    await saveLibrary();
+    render();
+    return;
+  }
+
+  if (action === 'retry-wrong') {
+    var ids2 = el.getAttribute('data-ids').split(',').filter(Boolean);
+    startPractice(ids2);
+    return;
+  }
+
+  if (action === 'back-to-library') {
+    state.session = null;
+    state.view = 'browse';
+    render();
+    return;
+  }
+}
+
+/* ---------------- Auth ---------------- */
+function userDisplayInfo(user){
+  if (!user) return { name: '', email: '', initials: '?', avatarUrl: null };
+  var meta = user.user_metadata || {};
+  var name = meta.full_name || meta.name || (user.email ? user.email.split('@')[0] : 'Account');
+  var initials = name.split(/\s+/).filter(Boolean).slice(0,2).map(function(w){ return w[0].toUpperCase(); }).join('') || '?';
+  return { name: name, email: user.email || '', initials: initials, avatarUrl: meta.avatar_url || meta.picture || null };
+}
+async function signInWithGoogle(){
+  if (!supabaseClient) return;
+  var errEl = document.getElementById('authError');
+  if (errEl) errEl.textContent = '';
+  try {
+    var res = await supabaseClient.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.href }
+    });
+    if (res.error) throw res.error;
+    /* Browser navigates to Google's consent screen and back — nothing else to do here. */
+  } catch(e) {
+    console.error('signInWithGoogle:', e);
+    if (errEl) errEl.textContent = 'Could not start Google sign-in: ' + (e.message || e);
+  }
+}
+async function signOutUser(){
+  if (!supabaseClient) return;
+  try {
+    await supabaseClient.auth.signOut();
+  } catch(e) {
+    console.error('signOutUser:', e);
+  }
+  state.currentUser = null;
+  state.mcqs = []; state.sources = {}; state.selectedPath = null; state.session = null;
+  closeModal();
+  showAuthGate();
+}
+function renderAuthGateBody(){
+  var body = document.getElementById('authGateBody');
+  if (!body) return;
+  if (!SUPABASE_CONFIGURED) {
+    body.innerHTML =
+      '<div class="auth-config-warning">Supabase isn\'t configured yet. Open this file and set ' +
+      '<code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> near the top of the ' +
+      '<code>&lt;script&gt;</code> block — see the setup guide for where to find them.</div>';
+    return;
+  }
+  body.innerHTML =
+    '<button class="google-signin-btn" data-action="google-sign-in">' + icon('log-in',17) + ' Continue with Google</button>' +
+    '<div class="auth-error" id="authError"></div>';
+}
+function showAuthGate(){
+  document.getElementById('appRoot').style.display = 'none';
+  document.getElementById('loadingScreen').style.display = 'none';
+  var gate = document.getElementById('authGate');
+  gate.style.display = 'flex';
+  renderAuthGateBody();
+}
+async function showApp(){
+  document.getElementById('authGate').style.display = 'none';
+  document.getElementById('loadingScreen').style.display = 'flex';
+  document.getElementById('loadingScreen').textContent = 'Loading your library…';
+  document.getElementById('appRoot').style.display = 'none';
+  await loadLibrary();
+  document.getElementById('loadingScreen').style.display = 'none';
+  document.getElementById('appRoot').style.display = 'grid';
+  render();
+}
+
+/* ---------------- Init ---------------- */
+async function init(){
+  document.body.addEventListener('click', onClick); /* bound once — delegates for both #appRoot, #authGate, and #modalRoot */
+  var importInput = document.getElementById('importFileInput');
+  if (importInput) {
+    importInput.addEventListener('change', function(e){
+      var file = e.target.files && e.target.files[0];
+      if (file) importLibraryFromFile(file);
+      e.target.value = '';
+    });
+  }
+
+  if (!supabaseClient) {
+    document.getElementById('loadingScreen').style.display = 'none';
+    showAuthGate();
+    return;
+  }
+
+  supabaseClient.auth.onAuthStateChange(function(event, session){
+    if (event === 'SIGNED_IN' && session && session.user) {
+      state.currentUser = session.user;
+      showApp();
+    } else if (event === 'SIGNED_OUT') {
+      state.currentUser = null;
+      showAuthGate();
+    }
+  });
+
+  try {
+    var sres = await supabaseClient.auth.getSession();
+    var session = sres.data && sres.data.session;
+    if (session && session.user) {
+      state.currentUser = session.user;
+      await showApp();
+    } else {
+      document.getElementById('loadingScreen').style.display = 'none';
+      showAuthGate();
+    }
+  } catch(e) {
+    console.error('init/getSession:', e);
+    document.getElementById('loadingScreen').style.display = 'none';
+    showAuthGate();
+  }
+}
+init();
+
+
+document.addEventListener('keydown', function(e){
+  if(state.view!=='practice' || !state.session) return;
+  var active=document.activeElement;
+  var typing=active && (active.tagName==='INPUT'||active.tagName==='TEXTAREA'||active.tagName==='SELECT'||active.isContentEditable);
+  if(typing) return;
+  var s=state.session, m=state.mcqs.find(function(x){return x.id===s.ids[s.index];});
+  if(!m) return;
+
+  /* Number keys 1-9 select the corresponding option (pre-reveal only) */
+  if(/^[1-9]$/.test(e.key) && !s.revealed && !m.isShortAnswer){
+    var idx=parseInt(e.key,10)-1;
+    if(m.options[idx]){ e.preventDefault(); s.selected=[m.options[idx].letter]; render(); }
+    return;
+  }
+
+  /* Letter keys (A, B, C, D...) select the option with that letter */
+  if(/^[a-zA-Z]$/.test(e.key) && !s.revealed && !m.isShortAnswer){
+    var letter=e.key.toUpperCase();
+    var match=m.options.filter(function(o){ return o.letter===letter; })[0];
+    if(match){ e.preventDefault(); s.selected=[letter]; render(); return; }
+  }
+
+  /* F toggles bookmark */
+  if(e.key==='f'||e.key==='F'){
+    e.preventDefault(); m.flagged=!m.flagged; saveLibrary(); render(); return;
+  }
+
+  /* Space: before reveal, acts as Check Answer (only if something is selected);
+     after reveal, advances to the next question — same as clicking "Next question". */
+  if(e.code==='Space'){
+    e.preventDefault();
+    if(!s.revealed){
+      var hasSelection = m.isShortAnswer
+        ? !!(document.getElementById('shortAnswerInput') && document.getElementById('shortAnswerInput').value.trim())
+        : !!(s.selected && s.selected.length);
+      if(!hasSelection) return;
+      if(m.isShortAnswer){
+        s.selected = document.getElementById('shortAnswerInput').value.trim();
+      }
+      revealCurrent();
+    } else {
+      advanceAfterReveal();
+    }
+    return;
+  }
+});
+
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Backspace') return;
+
+  var el = document.activeElement;
+  var typing = el && (
+    el.tagName === 'INPUT' ||
+    el.tagName === 'TEXTAREA' ||
+    el.tagName === 'SELECT' ||
+    el.isContentEditable
+  );
+
+  if (typing) return;
+
+  e.preventDefault();
+
+  if (state.view === 'practice' && state.session) { requestLeavePractice(); return; }
+  if (state.view !== 'browse') { state.view = 'browse'; state.forceList = false; render(); return; }
+
+  if (!state.selectedPath) return;
+
+  if (state.selectedPath.length === 1) {
+    state.selectedPath = null;
+    state.forceList = false;
+  } else {
+    state.selectedPath = state.selectedPath.slice(0, -1);
+    state.forceList = false;
+  }
+
+  render();
+});
+
+})();
+</script>
+</body>
+</html>
