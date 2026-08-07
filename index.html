@@ -601,8 +601,8 @@ textarea.ingest-area{
    The anon key is meant to be public/client-side — it only grants whatever your
    Row Level Security policies allow, so it's safe to ship inside this file.
    See the setup guide for how to create the project, tables, and Google OAuth. */
-var SUPABASE_URL = 'https://tcwqisuuamtnxwudqsvo.supabase.co';       // e.g. https://abcdefghijk.supabase.co
-var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRjd3Fpc3V1YW10bnh3dWRxc3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwNDM4MjksImV4cCI6MjEwMTYxOTgyOX0.cb5lrxdjmafAZqdhBGA2FzBN2Pq5RP26uQ7UhRDZQ1A';     // Settings → API → Project API keys → anon public
+var SUPABASE_URL = 'YOUR_SUPABASE_PROJECT_URL';       // e.g. https://abcdefghijk.supabase.co
+var SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';     // Settings → API → Project API keys → anon public
 var SUPABASE_CONFIGURED = SUPABASE_URL.indexOf('YOUR_SUPABASE') === -1 && SUPABASE_ANON_KEY.indexOf('YOUR_SUPABASE') === -1;
 var supabaseClient = (SUPABASE_CONFIGURED && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 /* ===================================================== */
@@ -3056,21 +3056,27 @@ async function init(){
     }
   });
 
-  try {
-    var sres = await supabaseClient.auth.getSession();
-    var session = sres.data && sres.data.session;
+  var authInitialized = false;
+  supabaseClient.auth.onAuthStateChange(function(event, session){
+    /* onAuthStateChange is the ONLY source of truth for whether we're signed in —
+       it fires once on subscribe with whatever the client currently knows (waiting
+       for any OAuth-redirect token in the URL to finish parsing first), and again on
+       every subsequent sign-in/out/refresh. Deliberately not also calling
+       getSession() separately here: racing the two was exactly what caused a signed-in
+       redirect to sometimes land back on the sign-in screen with the raw token still
+       sitting unprocessed in the URL, if getSession() resolved a beat before the
+       library finished parsing the redirect. */
     if (session && session.user) {
+      if (authInitialized && state.currentUser && state.currentUser.id === session.user.id) return; /* e.g. TOKEN_REFRESHED for the same user — already loaded, don't reload */
+      authInitialized = true;
       state.currentUser = session.user;
-      await showApp();
+      showApp();
     } else {
-      document.getElementById('loadingScreen').style.display = 'none';
+      authInitialized = true;
+      state.currentUser = null;
       showAuthGate();
     }
-  } catch(e) {
-    console.error('init/getSession:', e);
-    document.getElementById('loadingScreen').style.display = 'none';
-    showAuthGate();
-  }
+  });
 }
 init();
 
