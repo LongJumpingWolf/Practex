@@ -99,6 +99,7 @@ body{
 }
 .serif{font-family:'Fraunces',Georgia,serif;}
 .mono{font-family:'IBM Plex Mono',monospace;}
+code.mono{background:var(--paper);padding:1px 5px;border-radius:4px;font-size:0.92em;}
 button{font-family:inherit;cursor:pointer;background:none;border:none;color:inherit;}
 input,textarea,select{font-family:inherit;color:inherit;}
 ::-webkit-scrollbar{width:10px;height:10px;}
@@ -600,6 +601,7 @@ textarea.ingest-area{
 @media (min-width:861px){.mobile-topbar{display:none;}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
 <body>
 
@@ -662,7 +664,8 @@ var state = {
   pendingDeckDelete: null,
   currentUser: null,
   imageUrlMap: {}, /* hash -> ImgBB URL, the only image-related thing that ever reaches Supabase (plain text) */
-  editingMcqId: null
+  editingMcqId: null,
+  zipImportJob: null /* {active, processed, total, attached, notFound, skippedNames} — survives navigating away mid-import */
 };
 
 var PALETTE = ['#2F5C7A','#B23A2E','#2F6E45','#8B5E9C','#C77B2E','#3D7D8C','#9C4F6E','#5C6B2F'];
@@ -1015,6 +1018,140 @@ function exportLibrary(){
   setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
   showToast('Library exported.');
 }
+
+/* ---------------- Bulk image ZIP import ---------------- */
+function csvEscape(s){
+  s = String(s == null ? '' : s);
+  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
+  return s;
+}
+function downloadIdSheet(){
+  var sourceFilter = document.getElementById('idSheetSourceSelect');
+  var src = sourceFilter ? sourceFilter.value : '';
+  var rows = state.mcqs.filter(function(m){ return !src || m.source === src; });
+  if (!rows.length) { showToast('No questions match that source.'); return; }
+  var lines = ['id,question,subject,chapter,source'];
+  rows.forEach(function(m){
+    var snippet = m.question.replace(/\s+/g,' ').trim().slice(0, 120);
+    lines.push([m.id, snippet, m.subject, (m.chapterPath||[]).join(' > '), m.source].map(csvEscape).join(','));
+  });
+  var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'practex-question-ids' + (src ? '-' + src.replace(/[^a-z0-9]+/gi,'-') : '') + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  showToast(rows.length + ' question ID' + (rows.length===1?'':'s') + ' exported.');
+}
+/* Matches zip entry filenames like <id>_q.jpg, <id>-a.png, <id>_q_2.webp — the id is
+   whatever's before the last _q/_a marker, so ids containing underscores/hyphens
+   themselves still work (uid() ids look like "m_ab12cd34xxxxx"). */
+var IMAGE_ZIP_NAME_RE = /^(.+)[-_](q|a)(?:[-_]\d+)?\.(png|jpe?g|gif|webp)$/i;
+var IMAGE_ZIP_UPLOAD_STAGGER_MS = 250; /* pace between entries so a big zip doesn't fire a burst of uploads at once against ImgBB's free-tier rate limit */
+
+function requestNotificationPermissionIfNeeded(){
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') Notification.requestPermission().catch(function(){});
+}
+function notifyZipImportComplete(job){
+  if (document.visibilityState === 'visible') return; /* tab's in front of you — the toast already covers it */
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    var n = new Notification('Practex — image import finished', {
+      body: job.attached + ' of ' + job.total + ' image' + (job.total===1?'':'s') + ' attached.' + (job.notFound.length ? ' ' + job.notFound.length + ' filename(s) didn\'t match a question ID.' : ''),
+      icon: 'icons/icon-128x128.png'
+    });
+    n.onclick = function(){ window.focus(); n.close(); };
+  } catch(err) { console.warn('Notification failed:', err); }
+}
+/* Renders the in-page progress/summary if the person is still sitting on the Add
+   Source screen — pure best-effort, the job itself doesn't depend on this element
+   existing, so navigating away mid-import is completely safe. */
+function renderZipImportStatus(){
+  var reportEl = document.getElementById('zipUploadReport');
+  if (!reportEl) return;
+  var job = state.zipImportJob;
+  if (!job) { reportEl.innerHTML = ''; return; }
+  if (job.active) {
+    reportEl.innerHTML = '<div class="view-sub">Processing ' + job.processed + ' of ' + job.total + '… (' + job.attached + ' attached so far — safe to navigate away, this keeps running in the background)</div>';
+    return;
+  }
+  var summary = '<div class="parse-report"><span class="parse-ok">' + job.attached + ' image' + (job.attached===1?'':'s') + ' attached</span></div>';
+  if (job.notFound.length) {
+    summary += '<div class="parse-err-list">' + job.notFound.length + ' filename' + (job.notFound.length===1?'':'s') + ' didn\'t match any question ID (check the ID sheet):<br>' +
+      job.notFound.slice(0,15).map(function(n){ return '· ' + escapeHtml(n); }).join('<br>') + '</div>';
+  }
+  if (job.skippedNames.length) {
+    summary += '<div class="parse-err-list">' + job.skippedNames.length + ' file' + (job.skippedNames.length===1?'':'s') + ' skipped (didn\'t match the &lt;id&gt;_q/_a.ext naming pattern):<br>' +
+      job.skippedNames.slice(0,15).map(function(n){ return '· ' + escapeHtml(n); }).join('<br>') + '</div>';
+  }
+  reportEl.innerHTML = summary;
+}
+async function processImageZip(file){
+  if (typeof JSZip === 'undefined') { showToast('ZIP support failed to load — check your connection and reload the page.'); return; }
+  if (state.zipImportJob && state.zipImportJob.active) { showToast('An image import is already running — let it finish first.'); return; }
+
+  var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
+  var job = { active: true, processed: 0, total: 0, attached: 0, notFound: [], skippedNames: [] };
+  state.zipImportJob = job;
+  renderZipImportStatus();
+  showToast('Import started — processing in the background, you can keep working.');
+
+  var zip;
+  try {
+    zip = await JSZip.loadAsync(file);
+  } catch(err) {
+    console.error('processImageZip:', err);
+    job.active = false;
+    showToast('Could not read that zip — is it a valid .zip file?');
+    renderZipImportStatus();
+    return;
+  }
+
+  var entries = Object.keys(zip.files).filter(function(name){ return !zip.files[name].dir; });
+  job.total = entries.length;
+  renderZipImportStatus();
+
+  for (var i = 0; i < entries.length; i++) {
+    var fullName = entries[i];
+    var baseName = fullName.split('/').pop();
+    var match = baseName.match(IMAGE_ZIP_NAME_RE);
+    if (!match) { job.skippedNames.push(baseName); }
+    else {
+      var qid = match[1], side = match[2].toLowerCase(), ext = match[3].toLowerCase();
+      var mcq = byId[qid];
+      if (!mcq) { job.notFound.push(baseName); }
+      else {
+        try {
+          var rawBlob = await zip.files[fullName].async('blob');
+          var mimeType = 'image/' + (ext === 'jpg' ? 'jpeg' : ext);
+          var typedBlob = rawBlob.type ? rawBlob : new Blob([rawBlob], { type: mimeType });
+          var hash = await storeImageFromFile(typedBlob); /* local write is immediate; cloud upload to ImgBB kicks off in the background right here */
+          var field = side === 'a' ? 'answerImages' : 'images';
+          if (!mcq[field]) mcq[field] = [];
+          if (mcq[field].indexOf(hash) === -1) mcq[field].push(hash);
+          job.attached++;
+        } catch(err) {
+          console.error('processImageZip entry failed:', baseName, err);
+          job.skippedNames.push(baseName + ' (failed to read)');
+        }
+      }
+    }
+    job.processed++;
+    renderZipImportStatus();
+    if (i < entries.length - 1) await new Promise(function(r){ setTimeout(r, IMAGE_ZIP_UPLOAD_STAGGER_MS); });
+  }
+
+  await saveLibrary();
+  job.active = false;
+  renderZipImportStatus();
+  render(); /* picks up new thumbnails/counts wherever you've navigated to — doesn't touch an open modal */
+  showToast(job.attached + ' image' + (job.attached===1?'':'s') + ' attached from the zip.');
+  notifyZipImportComplete(job);
+}
 async function importLibraryFromFile(file){
   try {
     var text = await file.text();
@@ -1037,6 +1174,7 @@ async function importLibraryFromFile(file){
       }
       if (!Array.isArray(m.tags)) m.tags = [];
       if (!Array.isArray(m.images)) m.images = [];
+      if (!Array.isArray(m.answerImages)) m.answerImages = [];
       if (!Array.isArray(m.options)) m.options = [];
       if (!Array.isArray(m.answer) || !m.answer.length) m.answer = ['UNKNOWN'];
       if (!m.subject) m.subject = 'Unsorted';
@@ -1088,31 +1226,33 @@ function hydrateImages(){
 }
 
 /* ---------------- Image assignment (Edit modal) ---------------- */
-function renderMcqImageGrid(m){
-  var grid = document.getElementById('mcqImageGrid');
+function renderMcqImageGrid(m, field, gridElId){
+  field = field || 'images';
+  var grid = document.getElementById(gridElId || 'mcqImageGrid');
   if (!grid) return;
-  var imgs = m.images || [];
+  var imgs = m[field] || [];
   var html = imgs.map(function(hash){
     return '<div class="mcq-image-thumb">' +
       '<img data-hash-src="' + escapeHtml(hash) + '" data-action="view-mcq-image" data-hash="' + escapeHtml(hash) + '" alt="">' +
-      '<button class="mcq-image-remove-btn" data-action="remove-mcq-image" data-id="' + escapeHtml(m.id) + '" data-hash="' + escapeHtml(hash) + '" title="Remove image" aria-label="Remove image">' + icon('x',12) + '</button>' +
+      '<button class="mcq-image-remove-btn" data-action="remove-mcq-image" data-id="' + escapeHtml(m.id) + '" data-hash="' + escapeHtml(hash) + '" data-field="' + field + '" title="Remove image" aria-label="Remove image">' + icon('x',12) + '</button>' +
       '</div>';
   }).join('');
-  html += '<button class="mcq-image-add-tile" data-action="add-mcq-image" data-id="' + escapeHtml(m.id) + '">' + icon('upload',18) + '<span>Add image</span></button>';
+  html += '<button class="mcq-image-add-tile" data-action="add-mcq-image" data-id="' + escapeHtml(m.id) + '" data-field="' + field + '">' + icon('upload',18) + '<span>Add image</span></button>';
   grid.innerHTML = html;
   hydrateImages();
 }
-async function attachImageToMcq(mcqId, file){
+async function attachImageToMcq(mcqId, file, field){
+  field = field || 'images';
   if (!file || file.type.indexOf('image/') !== 0) { showToast('That file isn\'t an image.'); return; }
   var m = state.mcqs.find(function(x){ return x.id === mcqId; });
   if (!m) return;
   showToast('Uploading image…');
   try {
     var hash = await storeImageFromFile(file);
-    if (!m.images) m.images = [];
-    if (m.images.indexOf(hash) === -1) m.images.push(hash);
+    if (!m[field]) m[field] = [];
+    if (m[field].indexOf(hash) === -1) m[field].push(hash);
     await saveLibrary();
-    renderMcqImageGrid(m);
+    renderMcqImageGrid(m, field, field === 'answerImages' ? 'mcqAnswerImageGrid' : 'mcqImageGrid');
     showToast('Image added.');
   } catch(err) {
     console.error('attachImageToMcq:', err);
@@ -1297,10 +1437,15 @@ function openEditModal(id){
     html += '</div>';
   }
   html += '<div class="form-field"><label>Explanation</label><textarea id="editExplanation" rows="3">' + escapeHtml(m.explanation||'') + '</textarea></div>';
-  html += '<div class="form-field"><label>Images</label>' +
+  html += '<div class="form-field"><label>Question images</label>' +
     '<div class="mcq-image-grid" id="mcqImageGrid"></div>' +
     '<input type="file" id="mcqImageFileInput" accept="image/*" multiple style="display:none">' +
-    '<div class="view-sub" style="margin-top:6px;">Click "Add image" to upload, or paste (Ctrl/Cmd+V) a screenshot while this window is open.</div>' +
+    '<div class="view-sub" style="margin-top:6px;">Shown alongside the question. Click "Add image" to upload, or paste (Ctrl/Cmd+V) a screenshot while this window is open.</div>' +
+    '</div>';
+  html += '<div class="form-field"><label>Answer / explanation images</label>' +
+    '<div class="mcq-image-grid" id="mcqAnswerImageGrid"></div>' +
+    '<input type="file" id="mcqAnswerImageFileInput" accept="image/*" multiple style="display:none">' +
+    '<div class="view-sub" style="margin-top:6px;">Shown after reveal, alongside the explanation.</div>' +
     '</div>';
   html += '<div class="form-field"><label>Subject</label><input type="text" id="editSubject" value="' + escapeHtml(m.subject||'') + '"></div>';
   html += '<div class="form-field"><label>Chapter path (use &gt; to separate levels)</label><input type="text" id="editChapter" value="' + escapeHtml((m.chapterPath||[]).join(' > ')) + '"></div>';
@@ -1310,11 +1455,19 @@ function openEditModal(id){
     '<button class="btn btn-ghost" data-action="close-modal">Cancel</button></div>';
   showRichModal(html);
   state.editingMcqId = id;
-  renderMcqImageGrid(m);
+  renderMcqImageGrid(m, 'images', 'mcqImageGrid');
+  renderMcqImageGrid(m, 'answerImages', 'mcqAnswerImageGrid');
   var fileInput = document.getElementById('mcqImageFileInput');
   if (fileInput) {
     fileInput.addEventListener('change', function(e){
-      Array.prototype.slice.call(e.target.files || []).forEach(function(f){ attachImageToMcq(id, f); });
+      Array.prototype.slice.call(e.target.files || []).forEach(function(f){ attachImageToMcq(id, f, 'images'); });
+      e.target.value = '';
+    });
+  }
+  var answerFileInput = document.getElementById('mcqAnswerImageFileInput');
+  if (answerFileInput) {
+    answerFileInput.addEventListener('change', function(e){
+      Array.prototype.slice.call(e.target.files || []).forEach(function(f){ attachImageToMcq(id, f, 'answerImages'); });
       e.target.value = '';
     });
   }
@@ -1515,6 +1668,7 @@ function parseLibraryText(raw, sourceOverride){
           tags: tags,
           flagged: false,
           images: [],
+          answerImages: [],
           addedAt: Date.now(),
           learning: {
             due: Date.now(),
@@ -1751,6 +1905,7 @@ function render(){
     '</main>';
   bindEvents();
   hydrateImages();
+  renderZipImportStatus(); /* no-op unless the zipUploadReport element exists on this screen — safe to call unconditionally */
   if (state.activeModal === 'settings') renderSettingsModalContent();
 }
 
@@ -2326,6 +2481,25 @@ function renderAddSource(){
     '<div id="parseReport"></div>' +
     '</div>';
 
+  if (state.mcqs.length) {
+    var sourceOptions = Object.keys(state.sources).map(function(s){ return '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + '</option>'; }).join('');
+    html += '<div class="card section-block">' +
+      '<h3>3. Bulk-attach images (optional)</h3>' +
+      '<div class="view-sub" style="margin-bottom:12px;">Every question has a unique ID. Download the ID sheet below, name your image ' +
+      'files to match — <code class="mono">&lt;id&gt;_q.jpg</code> for an image shown alongside the question, ' +
+      '<code class="mono">&lt;id&gt;_a.jpg</code> for one shown alongside the answer/explanation — zip them up, and upload the zip here. ' +
+      'jpg, png, gif, and webp are all fine; multiple images per question/side work too (add <code class="mono">_1</code>, <code class="mono">_2</code> etc. before the extension).</div>' +
+      '<div class="field-row"><div class="field"><label>Download ID sheet for</label>' +
+      '<select id="idSheetSourceSelect" style="width:100%;padding:8px 10px;border:1px solid var(--rule-strong);border-radius:6px;background:var(--card);color:var(--ink);font-size:13.5px;">' +
+      '<option value="">All questions (' + state.mcqs.length + ')</option>' + sourceOptions + '</select></div></div>' +
+      '<div class="action-row"><button class="btn btn-ghost" data-action="download-id-sheet">' + icon('download',14) + ' Download ID sheet (CSV)</button></div>' +
+      '<div class="field-row" style="margin-top:14px;"><div class="field"><label>Images ZIP</label>' +
+      '<input type="file" id="imageZipInput" accept=".zip,application/zip"></div></div>' +
+      '<div class="action-row"><button class="btn btn-primary" data-action="upload-image-zip">Process ZIP</button></div>' +
+      '<div id="zipUploadReport"></div>' +
+      '</div>';
+  }
+
   var sourceNames = Object.keys(state.sources);
   if (sourceNames.length) {
     html += '<div class="card section-block"><h3>Manage sources</h3>';
@@ -2576,7 +2750,11 @@ function getMostRepeatedWrong(mcq){
 }
 
 function renderExplanation(mcq){
-  return mcq.explanation ? '<div class="reveal-explain">' + renderContent(mcq.explanation) + '</div>' : '';
+  var imgs = mcq.answerImages || [];
+  var imagesHtml = imgs.length ? '<div class="qimage-grid">' + imgs.map(function(hash){
+    return '<div class="qimage-thumb"><img data-hash-src="' + escapeHtml(hash) + '" data-action="view-mcq-image" data-hash="' + escapeHtml(hash) + '" alt=""></div>';
+  }).join('') + '</div>' : '';
+  return imagesHtml + (mcq.explanation ? '<div class="reveal-explain">' + renderContent(mcq.explanation) + '</div>' : '');
 }
 
 function renderReveal(mcq){
@@ -3057,6 +3235,16 @@ async function onClick(e){
     return;
   }
 
+  if (action === 'download-id-sheet') { downloadIdSheet(); return; }
+  if (action === 'upload-image-zip') {
+    var zipInput = document.getElementById('imageZipInput');
+    var zipFile = zipInput && zipInput.files && zipInput.files[0];
+    if (!zipFile) { showToast('Choose a .zip file first.'); return; }
+    requestNotificationPermissionIfNeeded(); /* must happen synchronously off this click — a real user gesture, not an unsolicited prompt */
+    processImageZip(zipFile);
+    return;
+  }
+
   if (action === 'parse-preview') {
     var raw = document.getElementById('ingestArea').value;
     var override = document.getElementById('sourceOverrideInput').value.trim();
@@ -3129,17 +3317,19 @@ async function onClick(e){
   if (action === 'save-edit-mcq') { saveEditMcq(el.getAttribute('data-id')); return; }
 
   if (action === 'add-mcq-image') {
-    var fi = document.getElementById('mcqImageFileInput');
+    var addField = el.getAttribute('data-field') || 'images';
+    var fi = document.getElementById(addField === 'answerImages' ? 'mcqAnswerImageFileInput' : 'mcqImageFileInput');
     if (fi) fi.click();
     return;
   }
   if (action === 'remove-mcq-image') {
     var rmId = el.getAttribute('data-id'), rmHash = el.getAttribute('data-hash');
+    var rmField = el.getAttribute('data-field') || 'images';
     var rmM = state.mcqs.find(function(x){ return x.id === rmId; });
-    if (rmM && rmM.images) {
-      rmM.images = rmM.images.filter(function(h){ return h !== rmHash; });
+    if (rmM && rmM[rmField]) {
+      rmM[rmField] = rmM[rmField].filter(function(h){ return h !== rmHash; });
       await saveLibrary();
-      renderMcqImageGrid(rmM);
+      renderMcqImageGrid(rmM, rmField, rmField === 'answerImages' ? 'mcqAnswerImageGrid' : 'mcqImageGrid');
       showToast('Image removed.');
     }
     return;
