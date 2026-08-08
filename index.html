@@ -714,7 +714,9 @@ var state = {
   autoSleepEnabled: true,
   autoSleepStreak: 4,
   zipImportJob: null, /* {active, processed, total, attached, notFound, skippedNames} — survives navigating away mid-import */
-  hasUnsyncedChanges: false /* true whenever a save to Supabase has failed and hasn't been confirmed since — drives the retry loop and the sync status pill */
+  hasUnsyncedChanges: false, /* true whenever a save to Supabase has failed and hasn't been confirmed since — drives the retry loop and the sync status pill */
+  lastSaveHadPermanentConflict: false, /* true right after a save fails specifically due to an ownership conflict (RLS) — a permanent failure, not something the retry loop should keep hammering */
+  pendingImportPayload: null /* a parsed JSON import file, waiting on the user to choose keep-progress vs start-fresh before it actually gets applied */
 };
 
 /* ================= Local-first data mirror =================
@@ -1173,6 +1175,7 @@ async function manualSync(){
    Note: this does NOT delete rows that were removed locally — see deleteMcqRows(). */
 async function saveLibrary(){
   persistLocalMirror(); /* local-first, unconditional, before any network attempt */
+  state.lastSaveHadPermanentConflict = false;
   if (!state.currentUser || !supabaseClient) return;
   if (!state.mcqs.length) return;
   try {
@@ -1185,6 +1188,19 @@ async function saveLibrary(){
     updateSyncIndicator();
   } catch(e) {
     console.error('saveLibrary:', e);
+    if (e && e.code === '42501') {
+      /* Row-level-security rejection — this means one or more of these question IDs
+         already exist in the table under a DIFFERENT account (e.g. a JSON export from
+         one sign-in imported while signed into another). This is a permanent conflict,
+         not a network hiccup — retrying it automatically forever would just repeat the
+         same failure, so this deliberately does NOT set hasUnsyncedChanges (which
+         would otherwise queue it for the retry loop). Say so plainly instead of a
+         generic "could not save", and flag it so callers (e.g. the import flow) don't
+         also show a misleading "success" message right after this one. */
+      state.lastSaveHadPermanentConflict = true;
+      showToast('Some questions couldn\'t sync — they already exist under a different Practex account. Sign in as whichever account originally created them.');
+      return;
+    }
     state.hasUnsyncedChanges = true;
     updateSyncIndicator();
   }
@@ -1396,56 +1412,91 @@ async function processImageZip(file){
   showToast(job.attached + ' image' + (job.attached===1?'':'s') + ' attached from the zip.');
   notifyZipImportComplete(job);
 }
-async function importLibraryFromFile(file){
+/* Reads and validates the file, then asks how to handle the FSRS progress baked into
+   it before actually touching state.mcqs — the destructive/import-shaping choice
+   happens in confirmImportWithChoice() below, once the user's picked one. */
+async function handleImportFileSelected(file){
   try {
     var text = await file.text();
     var payload = JSON.parse(text);
     var incoming = Array.isArray(payload) ? payload : payload.mcqs;
-    if (!Array.isArray(incoming)) { showToast('That file doesn\'t look like a Practex export.'); return; }
+    if (!Array.isArray(incoming) || !incoming.length) { showToast('That file doesn\'t look like a Practex export.'); return; }
     var existingIds = {}; state.mcqs.forEach(function(m){ existingIds[m.id] = true; });
-    var added = 0;
-    incoming.forEach(function(m){
-      if (!m || !m.id) return;
-      if (existingIds[m.id]) return; // skip exact duplicates by id
-      /* Defend against hand-edited/malformed import files — a normal export→import
-         round trip already has all of this, but nothing stops someone from feeding in
-         a hand-crafted or corrupted JSON file, and several render paths assume these
-         fields exist without guarding (e.g. m.learning.history.length). */
-      if (!m.learning || typeof m.learning !== 'object') {
-        m.learning = { due: Date.now(), interval: 0, history: [], lastReviewed: null, fsrs: null };
-      } else if (!Array.isArray(m.learning.history)) {
-        m.learning.history = [];
-      }
-      if (!Array.isArray(m.tags)) m.tags = [];
-      if (!Array.isArray(m.images)) m.images = [];
-      if (!Array.isArray(m.answerImages)) m.answerImages = [];
-      if (typeof m.asleep !== 'boolean') m.asleep = false;
-      if (!Array.isArray(m.options)) m.options = [];
-      if (!Array.isArray(m.answer) || !m.answer.length) m.answer = ['UNKNOWN'];
-      if (!m.subject) m.subject = 'Unsorted';
-      if (!Array.isArray(m.chapterPath) || !m.chapterPath.length) m.chapterPath = ['Unsorted'];
-      if (typeof m.question !== 'string') m.question = '';
-      if (typeof m.source !== 'string') m.source = 'Imported';
-      state.mcqs.push(m);
-      existingIds[m.id] = true;
-      added++;
-    });
-    if (payload.sources) {
-      Object.keys(payload.sources).forEach(function(k){
-        if (!state.sources[k]) state.sources[k] = payload.sources[k];
-      });
-    }
-    render();
-    showToast('Saving ' + added + ' question' + (added===1?'':'s') + '…');
-    await saveLibrary(); /* awaited — same reasoning as confirm-import: this is a bulk operation, not a frequent tap, worth the wait for correctness */
-    await saveSources();
-    if (state.hasUnsyncedChanges) {
-      showToast(added + ' question' + (added===1?'':'s') + ' saved locally — will sync once you\'re back online.');
-    } else {
-      showToast(added + ' question' + (added===1?'':'s') + ' imported' + (incoming.length-added ? ' (' + (incoming.length-added) + ' duplicates skipped)' : '') + '.');
-    }
+    var newCount = incoming.filter(function(m){ return m && m.id && !existingIds[m.id]; }).length;
+    if (!newCount) { showToast('Every question in that file is already in your library.'); return; }
+    state.pendingImportPayload = payload;
+    openImportChoiceModal(newCount);
   } catch(e) {
     showToast('Could not read that file — is it a valid Practex export?');
+  }
+}
+function openImportChoiceModal(newCount){
+  var html = '<h3>Import ' + newCount + ' question' + (newCount===1?'':'s') + '</h3>';
+  html += '<p>This file also carries each question\'s answer history and FSRS scheduling from whenever it was exported. What should happen to that?</p>';
+  html += '<div class="deck-menu" style="padding:0;">' +
+    '<button class="deck-menu-item" data-action="confirm-import-file" data-reset="false" style="padding:12px;">' + icon('clock',17) +
+      '<span><strong style="display:block;">Keep their existing progress</strong><span style="font-size:12px;color:var(--ink-soft);font-weight:400;">Import with their answer history and due dates intact — as if you\'d been reviewing them here all along.</span></span></button>' +
+    '<div class="deck-menu-divider"></div>' +
+    '<button class="deck-menu-item" data-action="confirm-import-file" data-reset="true" style="padding:12px;">' + icon('refresh-cw',17) +
+      '<span><strong style="display:block;">Start fresh</strong><span style="font-size:12px;color:var(--ink-soft);font-weight:400;">Ignore the exported progress — treat every question as brand new, due immediately.</span></span></button>' +
+    '</div>';
+  html += '<div class="action-row" style="margin-top:14px;margin-bottom:0;"><button class="btn btn-ghost" data-action="cancel-import-file">Cancel</button></div>';
+  showRichModal(html, 'narrow');
+}
+async function confirmImportWithChoice(resetProgress){
+  var payload = state.pendingImportPayload;
+  state.pendingImportPayload = null;
+  closeModal();
+  if (!payload) return;
+  var incoming = Array.isArray(payload) ? payload : payload.mcqs;
+  var existingIds = {}; state.mcqs.forEach(function(m){ existingIds[m.id] = true; });
+  var added = 0;
+  incoming.forEach(function(m){
+    if (!m || !m.id) return;
+    if (existingIds[m.id]) return; // skip exact duplicates by id
+    /* Defend against hand-edited/malformed import files — a normal export→import
+       round trip already has all of this, but nothing stops someone from feeding in
+       a hand-crafted or corrupted JSON file, and several render paths assume these
+       fields exist without guarding (e.g. m.learning.history.length). */
+    if (!m.learning || typeof m.learning !== 'object') {
+      m.learning = { due: Date.now(), interval: 0, history: [], lastReviewed: null, fsrs: null };
+    } else if (!Array.isArray(m.learning.history)) {
+      m.learning.history = [];
+    }
+    if (resetProgress) {
+      m.learning = { due: Date.now(), interval: 0, history: [], lastReviewed: null, fsrs: null };
+      m.asleep = false; /* auto-sleep is derived from progress that no longer exists — nothing to preserve */
+    }
+    if (!Array.isArray(m.tags)) m.tags = [];
+    if (!Array.isArray(m.images)) m.images = [];
+    if (!Array.isArray(m.answerImages)) m.answerImages = [];
+    if (typeof m.asleep !== 'boolean') m.asleep = false;
+    if (!Array.isArray(m.options)) m.options = [];
+    if (!Array.isArray(m.answer) || !m.answer.length) m.answer = ['UNKNOWN'];
+    if (!m.subject) m.subject = 'Unsorted';
+    if (!Array.isArray(m.chapterPath) || !m.chapterPath.length) m.chapterPath = ['Unsorted'];
+    if (typeof m.question !== 'string') m.question = '';
+    if (typeof m.source !== 'string') m.source = 'Imported';
+    state.mcqs.push(m);
+    existingIds[m.id] = true;
+    added++;
+  });
+  if (payload.sources) {
+    Object.keys(payload.sources).forEach(function(k){
+      if (!state.sources[k]) state.sources[k] = payload.sources[k];
+    });
+  }
+  render();
+  showToast('Saving ' + added + ' question' + (added===1?'':'s') + '…');
+  await saveLibrary(); /* awaited — same reasoning as confirm-import: this is a bulk operation, not a frequent tap, worth the wait for correctness */
+  await saveSources();
+  if (state.lastSaveHadPermanentConflict) {
+    /* saveLibrary() already showed a specific explanation — don't pile a misleading
+       "success" message on top of it. */
+  } else if (state.hasUnsyncedChanges) {
+    showToast(added + ' question' + (added===1?'':'s') + ' saved locally — will sync once you\'re back online.');
+  } else {
+    showToast(added + ' question' + (added===1?'':'s') + (resetProgress ? ' imported fresh.' : ' imported with their existing progress.'));
   }
 }
 function showModal(title, message, buttons){
@@ -3740,6 +3791,8 @@ async function onClick(e){
   }
 
   if (action === 'download-id-sheet') { downloadIdSheet(); return; }
+  if (action === 'confirm-import-file') { confirmImportWithChoice(el.getAttribute('data-reset') === 'true'); return; }
+  if (action === 'cancel-import-file') { state.pendingImportPayload = null; closeModal(); return; }
   if (action === 'upload-image-zip') {
     var zipInput = document.getElementById('imageZipInput');
     var zipFile = zipInput && zipInput.files && zipInput.files[0];
@@ -3793,7 +3846,10 @@ async function onClick(e){
        (Next question, Bookmark, etc.) stay optimistic on purpose. */
     await saveLibrary();
     await saveSources();
-    if (state.hasUnsyncedChanges) {
+    if (state.lastSaveHadPermanentConflict) {
+      /* saveLibrary() already showed a specific explanation — don't pile a misleading
+         "success" message on top of it. */
+    } else if (state.hasUnsyncedChanges) {
       showToast(pending.length + ' question' + (pending.length===1?'':'s') + ' saved locally — will sync once you\'re back online.');
     } else {
       showToast(pending.length + ' question' + (pending.length===1?'':'s') + ' imported and saved.');
@@ -4184,7 +4240,7 @@ async function init(){
   if (importInput) {
     importInput.addEventListener('change', function(e){
       var file = e.target.files && e.target.files[0];
-      if (file) importLibraryFromFile(file);
+      if (file) handleImportFileSelected(file);
       e.target.value = '';
     });
   }
