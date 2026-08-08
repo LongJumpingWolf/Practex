@@ -1421,11 +1421,10 @@ async function handleImportFileSelected(file){
     var payload = JSON.parse(text);
     var incoming = Array.isArray(payload) ? payload : payload.mcqs;
     if (!Array.isArray(incoming) || !incoming.length) { showToast('That file doesn\'t look like a Practex export.'); return; }
-    var existingIds = {}; state.mcqs.forEach(function(m){ existingIds[m.id] = true; });
-    var newCount = incoming.filter(function(m){ return m && m.id && !existingIds[m.id]; }).length;
-    if (!newCount) { showToast('Every question in that file is already in your library.'); return; }
+    var validCount = incoming.filter(function(m){ return m && m.id; }).length;
+    if (!validCount) { showToast('That file doesn\'t look like a Practex export.'); return; }
     state.pendingImportPayload = payload;
-    openImportChoiceModal(newCount);
+    openImportChoiceModal(validCount);
   } catch(e) {
     showToast('Could not read that file — is it a valid Practex export?');
   }
@@ -1434,6 +1433,7 @@ function openImportChoiceModal(newCount){
   state.activeModal = 'import-choice'; /* explicit, not left as whatever was open before (e.g. 'settings') — otherwise a stray render() elsewhere could re-render the PREVIOUS modal's content over this one, since render() re-renders whatever state.activeModal still points at */
   var html = '<h3>Import ' + newCount + ' question' + (newCount===1?'':'s') + '</h3>';
   html += '<p>This file also carries each question\'s answer history and FSRS scheduling from whenever it was exported. What should happen to that?</p>';
+  html += '<p class="view-sub" style="margin-bottom:14px;">Each question gets a fresh copy with a new internal ID — safe to import into any account without conflicting with the original. Re-importing the same file again will create a second copy of everything rather than skipping it, so only import a given file once.</p>';
   html += '<div class="deck-menu" style="padding:0;">' +
     '<button class="deck-menu-item" data-action="confirm-import-file" data-reset="false" style="padding:12px;">' + icon('clock',17) +
       '<span><strong style="display:block;">Keep their existing progress</strong><span style="font-size:12px;color:var(--ink-soft);font-weight:400;">Import with their answer history and due dates intact — as if you\'d been reviewing them here all along.</span></span></button>' +
@@ -1450,11 +1450,19 @@ async function confirmImportWithChoice(resetProgress){
   closeModal();
   if (!payload) return;
   var incoming = Array.isArray(payload) ? payload : payload.mcqs;
-  var existingIds = {}; state.mcqs.forEach(function(m){ existingIds[m.id] = true; });
   var added = 0;
   incoming.forEach(function(m){
     if (!m || !m.id) return;
-    if (existingIds[m.id]) return; // skip exact duplicates by id
+    /* Always a fresh, brand-new id — never reuse the one baked into the export file.
+       That id is the table's primary key, so reusing it is exactly what caused an
+       otherwise-harmless re-import to get rejected by row-level security: the row
+       already existed (possibly under a completely different account), and the
+       database correctly refused to let this write claim it. Generating a new id
+       means an imported question can never collide with anything, on any account,
+       ever — the tradeoff is that importing the same file twice now creates two
+       copies instead of silently skipping the second one, which the modal warns
+       about up front. */
+    m.id = uid();
     /* Defend against hand-edited/malformed import files — a normal export→import
        round trip already has all of this, but nothing stops someone from feeding in
        a hand-crafted or corrupted JSON file, and several render paths assume these
@@ -1479,7 +1487,6 @@ async function confirmImportWithChoice(resetProgress){
     if (typeof m.question !== 'string') m.question = '';
     if (typeof m.source !== 'string') m.source = 'Imported';
     state.mcqs.push(m);
-    existingIds[m.id] = true;
     added++;
   });
   if (payload.sources) {
