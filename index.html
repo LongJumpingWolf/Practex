@@ -171,13 +171,13 @@ input,textarea,select{font-family:inherit;color:inherit;}
 .sidebar-gear-btn{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);color:#EAF0F5;font-size:15px;flex-shrink:0;transition:background .15s,transform .2s;}
 .sidebar-gear-btn:hover{background:rgba(255,255,255,0.2);transform:rotate(20deg);}
 
-.sync-status-pill{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:6px 10px;border-radius:8px;color:#EAF0F5;cursor:pointer;}
-.sync-status-pill:hover{background:rgba(255,255,255,0.18);}
-.sync-status-pill.offline{background:rgba(178,58,46,0.22);}
-.sync-status-pill.syncing{background:rgba(255,255,255,0.12);}
+.sync-status-pill{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:6px 10px;border-radius:8px;cursor:pointer;}
+.sync-status-pill:hover{background:rgba(255,255,255,0.14);}
+.sync-status-pill.offline{background:rgba(178,58,46,0.22);color:#EAF0F5;}
+.sync-status-pill.syncing{background:rgba(255,255,255,0.1);color:rgba(234,240,245,0.75);}
 .sync-status-pill.syncing svg{animation:sync-spin .8s linear infinite;}
-.sync-status-pill.synced{background:rgba(47,110,69,0.18);}
-.sync-status-pill.unsynced{background:rgba(199,123,46,0.25);}
+.sync-status-pill.synced{background:transparent;color:rgba(234,240,245,0.55);} /* nothing to report — quiet on purpose, no colored badge needed for "all fine" */
+.sync-status-pill.unsynced{background:rgba(199,123,46,0.25);color:#EAF0F5;}
 @keyframes sync-spin{to{transform:rotate(360deg);}}
 
 /* Settings modal */
@@ -1052,6 +1052,7 @@ async function loadLibrary(){
    single upsert rather than a separate table/network round trip each. */
 async function saveUserSettings(){
   persistLocalMirror(); /* local-first, unconditional, before any network attempt */
+  state.lastSaveHadPermanentConflict = false; /* this table is keyed by user_id only, so it can't hit the cross-account collision saveLibrary() can — reset here anyway so a stale value from an earlier saveLibrary() call can't mislead a caller checking this flag after just calling this function alone */
   if (!state.currentUser || !supabaseClient) return;
   try {
     var res = await supabaseClient.from('user_settings').upsert({
@@ -4056,7 +4057,23 @@ async function onClick(e){
   }
   if (action === 'leave-practice') { requestLeavePractice(); return; }
   if (action === 'pause-and-leave') {
-    state.pausedSession=currentSessionSnapshot(); state.session=null; applyPendingNav(); closeModal(); render(); savePausedSession(); return;
+    state.pausedSession=currentSessionSnapshot(); state.session=null; applyPendingNav(); closeModal(); render();
+    showToast('Pausing…');
+    /* Awaited — this is exactly the highest-risk spot for a fire-and-forget save:
+       pausing a test is almost always immediately followed by closing the tab or
+       switching devices, precisely when a background save is most likely to get
+       cut off mid-flight. Worth the brief wait for the pause to actually be
+       guaranteed on the server before the person walks away from this screen. */
+    await saveUserSettings();
+    if (state.lastSaveHadPermanentConflict) {
+      /* saveUserSettings doesn't currently set this, but stay consistent with the
+         pattern used elsewhere in case that ever changes. */
+    } else if (state.hasUnsyncedChanges) {
+      showToast('Paused locally — will sync to your other devices once you\'re back online.');
+    } else {
+      showToast('Paused — resume it from any device.');
+    }
+    return;
   }
   if (action === 'leave-without-pausing') {
     state.session=null; applyPendingNav(); closeModal(); render(); return;
