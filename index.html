@@ -1198,24 +1198,40 @@ function renderSyncStatusPill(id){
    retryUnsyncedChangesIfAny()), which is exactly how something like this
    quietly drifts apart over time. One implementation now; the two
    callers below just differ in whether they show toast feedback. */
+/* Tracks exactly WHICH questions have an unconfirmed local edit, not just
+   whether any exist. This is what the retry/reconnect path actually
+   needs: pushing "everything" as a safety-net fallback is precisely
+   what caused real, reproduced data loss — a device that was offline
+   for a while has a stale local copy of everything it didn't personally
+   edit, and a blanket push on reconnect would overwrite anything another
+   device had already pushed in the meantime with that stale copy. With
+   specific ids tracked, reconnecting only ever re-pushes what THIS
+   device actually changed, never anything it merely still remembers. */
+var unsyncedQuestionIds = {};
+
 async function doFullSync(){
   if (state.view === 'practice' && state.session) return; // never replace state.mcqs mid-question, regardless of which caller triggered this (manual, focus/visibility/online, or the 30s timer)
   if (state.hasUnsyncedChanges) {
     // Push first — a pull replaces in-memory state with whatever the
     // cloud returns, so pulling before an unsaved edit lands would
-    // destroy it.
-    await saveLibrary();
+    // destroy it. Only the SPECIFIC ids this device actually has pending
+    // — never a bare saveLibrary(), which falls back to pushing every
+    // question, stale copies included.
+    var idsToRetry = Object.keys(unsyncedQuestionIds);
+    if (idsToRetry.length) await saveLibrary(idsToRetry);
     await saveUserSettings();
     await loadLibrary();
   } else {
     // Nothing of our own to protect — pull first. This is the actual
-    // core fix: previously nothing in this app ever pulled fresh data
-    // after the initial page load, on any trigger, manual or automatic
-    // — a change made on another device would simply never appear here
-    // without a full page reload, no matter how long you waited.
+    // core fix from earlier: previously nothing in this app ever pulled
+    // fresh data after the initial page load, on any trigger, manual or
+    // automatic — a change made on another device would simply never
+    // appear here without a full page reload, no matter how long you
+    // waited. No push needed afterward here — a fresh pull already
+    // reflects the cloud's current state, so there's nothing to
+    // "reconfirm", and doing one anyway would just be the same stale-
+    // overwrite risk for no benefit.
     await loadLibrary();
-    await saveLibrary();
-    await saveUserSettings();
   }
   render();
 }
@@ -1252,17 +1268,22 @@ async function saveLibrary(changedIds){
   state.lastSaveHadPermanentConflict = false;
   if (!state.currentUser || !supabaseClient) return;
   if (!state.mcqs.length) return;
-  var source = (changedIds && changedIds.length)
-    ? state.mcqs.filter(function(m){ return changedIds.indexOf(m.id) !== -1; })
-    : state.mcqs;
+  var idsToSave = (changedIds && changedIds.length) ? changedIds.slice() : state.mcqs.map(function(m){ return m.id; });
+  var source = state.mcqs.filter(function(m){ return idsToSave.indexOf(m.id) !== -1; });
   if (!source.length) return;
+  // Mark these as pending BEFORE attempting the network call — if it
+  // fails partway through, they're already correctly flagged for retry,
+  // no separate catch-block bookkeeping needed for that part.
+  idsToSave.forEach(function(id){ unsyncedQuestionIds[id] = true; });
+  state.hasUnsyncedChanges = true;
   try {
     var rows = source.map(function(m){
       return { id: m.id, user_id: state.currentUser.id, data: m, updated_at: new Date().toISOString() };
     });
     var res = await supabaseClient.from('mcqs').upsert(rows);
     if (res.error) throw res.error;
-    state.hasUnsyncedChanges = false;
+    idsToSave.forEach(function(id){ delete unsyncedQuestionIds[id]; });
+    state.hasUnsyncedChanges = Object.keys(unsyncedQuestionIds).length > 0;
     updateSyncIndicator();
   } catch(e) {
     console.error('saveLibrary:', e);
@@ -1271,15 +1292,17 @@ async function saveLibrary(changedIds){
          already exist in the table under a DIFFERENT account (e.g. a JSON export from
          one sign-in imported while signed into another). This is a permanent conflict,
          not a network hiccup — retrying it automatically forever would just repeat the
-         same failure, so this deliberately does NOT set hasUnsyncedChanges (which
-         would otherwise queue it for the retry loop). Say so plainly instead of a
-         generic "could not save", and flag it so callers (e.g. the import flow) don't
-         also show a misleading "success" message right after this one. */
+         same failure, so this deliberately clears these ids from the retry set instead
+         of leaving them queued forever. Say so plainly instead of a generic "could not
+         save", and flag it so callers (e.g. the import flow) don't also show a
+         misleading "success" message right after this one. */
+      idsToSave.forEach(function(id){ delete unsyncedQuestionIds[id]; });
+      state.hasUnsyncedChanges = Object.keys(unsyncedQuestionIds).length > 0;
       state.lastSaveHadPermanentConflict = true;
       showToast('Some questions couldn\'t sync — they already exist under a different Practex account. Sign in as whichever account originally created them.');
       return;
     }
-    state.hasUnsyncedChanges = true;
+    state.hasUnsyncedChanges = true; // idsToSave are already marked pending above — nothing more to flag
     updateSyncIndicator();
   }
 }
