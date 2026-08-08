@@ -12,7 +12,7 @@
 // stays the source of truth when you have signal, the local mirror is the
 // fallback when you don't.
 
-const CACHE_NAME = 'practex-shell-v1';
+const CACHE_NAME = 'practex-shell-v2';
 const SHELL_URLS = ['index.html', 'config.js'];
 
 self.addEventListener('install', (event) => {
@@ -41,7 +41,12 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api/')) return;     // never touch our own image-upload relay function
 
   event.respondWith(
-    fetch(req)
+    /* cache: 'no-store' is the actual fix here — without it, this fetch() still obeys
+       normal HTTP caching rules and can silently return a cached response even though
+       the code's whole intent is "always prefer a live network response". That gap
+       meant a redeploy could sit invisible behind a stale cached copy of index.html,
+       with no error and nothing telling you it was stale. */
+    fetch(req, { cache: 'no-store' })
       .then((res) => {
         // NETWORK-FIRST: always prefer the live response when online. Only
         // mirror a copy into the cache afterward, as a fallback for later.
