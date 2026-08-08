@@ -1128,12 +1128,11 @@ var lastAutoSyncAt = 0;
 var AUTO_SYNC_MIN_INTERVAL_MS = 15000; // throttle — don't hammer retries more than once per 15s
 
 async function retryUnsyncedChangesIfAny(){
-  if (!state.hasUnsyncedChanges || !state.currentUser || !supabaseClient || syncInFlight) return;
+  if (!state.currentUser || !supabaseClient || syncInFlight) return;
   syncInFlight = true;
   updateSyncIndicator();
   try {
-    await saveLibrary();
-    await saveUserSettings();
+    await doFullSync();
   } finally {
     syncInFlight = false;
     updateSyncIndicator();
@@ -1143,6 +1142,7 @@ setInterval(retryUnsyncedChangesIfAny, 30000);
 
 function autoSync(){
   if (!state.currentUser) return;
+  if (state.view === 'practice' && state.session) return; // don't replace state.mcqs out from under an active practice session mid-question
   var now = Date.now();
   if (now - lastAutoSyncAt < AUTO_SYNC_MIN_INTERVAL_MS) return;
   lastAutoSyncAt = now;
@@ -1170,6 +1170,33 @@ function renderSyncStatusPill(){
   return '<div id="syncStatusPill" class="sync-status-pill ' + cls + '" data-action="manual-sync" role="button" tabindex="0" title="Click to sync now">' +
     icon(iconName, 13) + ' ' + label + '</div>';
 }
+/* Shared core for both the manual sync button and the automatic
+   retry/sync path — used to be two separate, independently-maintained
+   implementations (manualSync() only ever pushed, same as the old
+   retryUnsyncedChangesIfAny()), which is exactly how something like this
+   quietly drifts apart over time. One implementation now; the two
+   callers below just differ in whether they show toast feedback. */
+async function doFullSync(){
+  if (state.view === 'practice' && state.session) return; // never replace state.mcqs mid-question, regardless of which caller triggered this (manual, focus/visibility/online, or the 30s timer)
+  if (state.hasUnsyncedChanges) {
+    // Push first — a pull replaces in-memory state with whatever the
+    // cloud returns, so pulling before an unsaved edit lands would
+    // destroy it.
+    await saveLibrary();
+    await saveUserSettings();
+    await loadLibrary();
+  } else {
+    // Nothing of our own to protect — pull first. This is the actual
+    // core fix: previously nothing in this app ever pulled fresh data
+    // after the initial page load, on any trigger, manual or automatic
+    // — a change made on another device would simply never appear here
+    // without a full page reload, no matter how long you waited.
+    await loadLibrary();
+    await saveLibrary();
+    await saveUserSettings();
+  }
+  render();
+}
 async function manualSync(){
   if (!state.currentUser || !supabaseClient) return;
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -1180,24 +1207,35 @@ async function manualSync(){
   syncInFlight = true;
   updateSyncIndicator();
   try {
-    await saveLibrary();
-    await saveUserSettings();
+    await doFullSync();
     showToast(state.hasUnsyncedChanges ? 'Could not sync — check your connection and try again.' : 'Synced.');
   } finally {
     syncInFlight = false;
     updateSyncIndicator();
   }
 }
-/* Upserts the current in-memory library in one batched request (Postgres upsert
-   accepts an array, so this is a single round trip regardless of library size).
-   Note: this does NOT delete rows that were removed locally — see deleteMcqRows(). */
-async function saveLibrary(){
+/* Upserts the current in-memory library. Pass an array of specific
+   changed ids to target only those rows — this is what actually matters
+   for correctness: without it, every single save (even flagging one
+   question) re-uploaded the ENTIRE library every time. That meant a
+   device with a stale copy of even one question could silently
+   overwrite a freshly-edited question elsewhere just by saving anything
+   at all, the same class of bug Kardex had before its per-record fix,
+   just showing up through "always push everything" instead of "one
+   blob" — same effective result. Omit the argument for genuinely bulk
+   operations (import, deck move/copy, "reschedule all") where pushing
+   everything really is correct. */
+async function saveLibrary(changedIds){
   persistLocalMirror(); /* local-first, unconditional, before any network attempt */
   state.lastSaveHadPermanentConflict = false;
   if (!state.currentUser || !supabaseClient) return;
   if (!state.mcqs.length) return;
+  var source = (changedIds && changedIds.length)
+    ? state.mcqs.filter(function(m){ return changedIds.indexOf(m.id) !== -1; })
+    : state.mcqs;
+  if (!source.length) return;
   try {
-    var rows = state.mcqs.map(function(m){
+    var rows = source.map(function(m){
       return { id: m.id, user_id: state.currentUser.id, data: m, updated_at: new Date().toISOString() };
     });
     var res = await supabaseClient.from('mcqs').upsert(rows);
@@ -1580,7 +1618,7 @@ async function attachImageToMcq(mcqId, file, field){
     if (m[field].indexOf(hash) === -1) m[field].push(hash);
     renderMcqImageGrid(m, field, field === 'answerImages' ? 'mcqAnswerImageGrid' : 'mcqImageGrid');
     showToast('Image added.');
-    saveLibrary();
+    saveLibrary([m.id]);
   } catch(err) {
     console.error('attachImageToMcq:', err);
     showToast('Could not add that image.');
@@ -1866,7 +1904,7 @@ async function saveEditMcq(id){
   if (tagsEl) m.tags = tagsEl.value.split(',').map(function(s){return s.trim();}).filter(Boolean);
   closeModal();
   render();
-  await saveLibrary(); /* awaited — same reasoning as the deck operations above */
+  await saveLibrary([m.id]); /* awaited — same reasoning as the deck operations above */
   showToast('Question updated.');
 }
 
@@ -3525,7 +3563,7 @@ async function advanceAfterReveal(){
   s.questionShownAt = Date.now(); s.revealedAt = null; s.lastTimeToAnswerMs = null; /* start the clock fresh for whatever's next */
   if (s.index >= s.ids.length) state.view = 'summary';
   render(); /* update the screen immediately — don't make the person wait on a network round trip just to see the next question */
-  saveLibrary(); /* fire-and-forget in the background; it has its own error toast if it fails */
+  saveLibrary([m.id]); /* fire-and-forget in the background; it has its own error toast if it fails */
   if (justAutoSlept) showToast('That question is asleep now — ' + (state.autoSleepStreak||4) + ' correct in a row. Wake it anytime from its row in the library.');
 }
 
@@ -3547,7 +3585,7 @@ async function undoLastAnswer(){
   s.shortAnswerCorrect = null; /* re-grade on the way back in, rather than trusting a stale self-grade */
   s.revealedAt = Date.now(); s.lastTimeToAnswerMs = null; /* fresh timing for whatever rating they give it this time */
   render();
-  saveLibrary();
+  saveLibrary(mm ? [mm.id] : undefined);
 }
 
 function renderSummary(){
@@ -3662,7 +3700,7 @@ async function onClick(e){
     if (!mq.asleep) mq.autoSlept = false; // waking it manually also clears the auto-slept flag
     showToast(mq.asleep ? 'Question asleep — paused from FSRS review everywhere.' : 'Question awake again — back in FSRS review.');
     render();
-    saveLibrary();
+    saveLibrary([mq.id]);
     return;
   }
   if (action === 'toggle-dark-mode') {
@@ -3940,7 +3978,7 @@ async function onClick(e){
       rmM[rmField] = rmM[rmField].filter(function(h){ return h !== rmHash; });
       renderMcqImageGrid(rmM, rmField, rmField === 'answerImages' ? 'mcqAnswerImageGrid' : 'mcqImageGrid');
       showToast('Image removed.');
-      await saveLibrary();
+      await saveLibrary([rmM.id]);
       await purgeOrphanedImageHashes([rmHash]); /* only actually deletes it if no other question still uses this hash */
     }
     return;
@@ -4191,7 +4229,7 @@ async function onClick(e){
     var m2 = state.mcqs.find(function(x){ return x.id === s2.ids[s2.viewIndex]; });
     m2.flagged = !m2.flagged;
     render();
-    saveLibrary();
+    saveLibrary([m2.id]);
     return;
   }
 
@@ -4445,7 +4483,7 @@ document.addEventListener('keydown', function(e){
 
   /* F toggles bookmark */
   if(e.key==='f'||e.key==='F'){
-    e.preventDefault(); m.flagged=!m.flagged; saveLibrary(); render(); return;
+    e.preventDefault(); m.flagged=!m.flagged; saveLibrary([m.id]); render(); return;
   }
 
   /* Space: before reveal, acts as Check Answer (only if something is selected);
