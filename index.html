@@ -1226,6 +1226,18 @@ function exportLibrary(){
 }
 
 /* ---------------- Bulk image ZIP import ---------------- */
+/* Re-schedules the whole library using the current FSRS ceiling rules, for
+   questions whose due date was computed before a scheduling-logic fix
+   shipped. Doesn't touch history, ratings, or FSRS stability/difficulty —
+   purely recomputes the derived due date from what's already stored. */
+function recomputeAllDueDates(){
+  var changed = 0;
+  state.mcqs.forEach(function(m){
+    if (LearningEngine.recomputeDue(m)) changed++;
+  });
+  return changed;
+}
+
 function csvEscape(s){
   s = String(s == null ? '' : s);
   if (/[",\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
@@ -1521,8 +1533,13 @@ function renderSettingsModalContent(){
       '<span class="settings-toggle' + (state.learningMode.enabled?' on':'') + '" data-action="toggle-fsrs-mode" role="switch" aria-checked="' + (state.learningMode.enabled?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
     '<div class="settings-row"><span>Auto-sleep a question after it\'s right N times in a row</span>' +
       '<span class="settings-toggle' + (state.autoSleepEnabled?' on':'') + '" data-action="toggle-auto-sleep" role="switch" aria-checked="' + (state.autoSleepEnabled?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
-    (state.autoSleepEnabled ? '<div class="settings-row" style="border-bottom:none;"><span>Streak needed (N)</span>' +
+    (state.autoSleepEnabled ? '<div class="settings-row"><span>Streak needed (N)</span>' +
       '<input type="number" min="2" max="15" id="autoSleepStreakInput" value="' + state.autoSleepStreak + '" data-action="set-auto-sleep-streak" style="width:56px;padding:5px 8px;border:1px solid var(--rule-strong);border-radius:6px;background:var(--card);color:var(--ink);font-size:13px;text-align:center;"></div>' : '') +
+    '<div class="settings-row" style="border-bottom:none;flex-direction:column;align-items:stretch;gap:8px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;"><span>Re-schedule library with the current rules</span>' +
+      '<button class="btn btn-ghost btn-sm" data-action="recompute-due-dates">' + icon('refresh-cw',13) + ' Run</button></div>' +
+      '<div class="view-sub" style="margin-bottom:0;">Fixes due dates on questions scheduled before a recent scheduling fix. Doesn\'t touch your answer history, only recomputes when things are due — safe to run anytime.</div>' +
+    '</div>' +
     '</div>';
 
   showRichModal(html);
@@ -3051,6 +3068,41 @@ const LearningEngine={
     mcq.learning.lastReviewed = now;
     mcq.learning.due = now + mcq.learning.interval;
 
+  },
+
+  /* Re-derives a question's due date from data ALREADY stored on it (its existing
+     FSRS stability, its own classification, and the rating its last attempt actually
+     got) without touching or re-simulating any history. This exists because the
+     ceiling logic above was buggy for a while — it force-capped "new" questions to a
+     10-minute interval regardless of how confidently correct they were, throwing away
+     a perfectly correct FSRS-computed stability every time. That stability was never
+     wrong, only the ceiling applied on top of it was — so a question answered before
+     the fix doesn't need to be re-answered or re-graded, just re-scheduled using the
+     current (fixed) ceiling rules against the number that was already right. Anchored
+     to the last actual review time, not "now" — this reconstructs what the due date
+     should have been computed as back then, not a fresh interval starting today.
+     Safe to run on every question, repeatedly — a question already scheduled under
+     the current rules just recomputes to the same due date, no-op. */
+  recomputeDue(mcq){
+    if (!mcq.learning || !mcq.learning.fsrs || !mcq.learning.history || !mcq.learning.history.length) return false;
+    const clsState = this.classify(mcq);
+    const lastEntry = mcq.learning.history[mcq.learning.history.length - 1];
+    const rating = lastEntry.rating || 3;
+    const anchor = mcq.learning.lastReviewed || mcq.learning.fsrs.lastReview || Date.now();
+
+    var intervalDays = fsrsIntervalDays(mcq.learning.fsrs.stability);
+    if (clsState === 'misconception') intervalDays = Math.min(intervalDays, 0.5);
+    else if (clsState === 'noconcept') intervalDays = Math.min(intervalDays, 30/1440);
+    else if (clsState === 'new' && rating <= 2) intervalDays = Math.min(intervalDays, 10/1440);
+    intervalDays = Math.min(intervalDays, 30);
+
+    const newInterval = intervalDays * DAY;
+    const newDue = anchor + newInterval;
+    const changed = Math.round(newDue) !== Math.round(mcq.learning.due || 0);
+    mcq.learning.state = clsState;
+    mcq.learning.interval = newInterval;
+    mcq.learning.due = newDue;
+    return changed;
   }
 
 };
@@ -3459,6 +3511,13 @@ async function onClick(e){
     state.autoSleepEnabled = !state.autoSleepEnabled;
     saveAutoSleepSettings();
     render();
+    return;
+  }
+  if (action === 'recompute-due-dates') {
+    var changedCount = recomputeAllDueDates();
+    showToast(changedCount ? changedCount + ' question' + (changedCount===1?'':'s') + ' re-scheduled with the current rules.' : 'Nothing to change — everything\'s already scheduled with the current rules.');
+    render();
+    saveLibrary();
     return;
   }
   if (action === 'toggle-fsrs-card') {
