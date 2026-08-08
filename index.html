@@ -197,10 +197,13 @@ input,textarea,select{font-family:inherit;color:inherit;}
 .undo-btn{font-size:11.5px;color:var(--ink-soft);text-decoration:underline;text-underline-offset:2px;}
 .undo-btn:hover{color:var(--ink);}
 
-/* Row icon buttons (edit / history) */
+/* Row icon buttons (edit / history / per-question sleep) */
 .mcq-row-actions{display:flex;gap:4px;align-items:flex-start;flex-shrink:0;}
 .mcq-icon-btn{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:13px;}
 .mcq-icon-btn:hover{background:var(--paper);color:var(--ink);}
+.mcq-icon-btn.on{color:var(--cover);background:var(--pen-blue-bg);}
+.mcq-icon-btn.on svg{fill:currentColor;}
+.mcq-row.mcq-asleep{opacity:0.62;}
 
 /* Rich modal (edit / history) */
 .modal-card.wide{width:min(640px,100%);max-height:86vh;overflow-y:auto;}
@@ -244,11 +247,14 @@ input,textarea,select{font-family:inherit;color:inherit;}
 .image-lightbox img{max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.5);cursor:zoom-out;}
 .image-lightbox-close{position:absolute;top:18px;right:18px;background:rgba(255,255,255,0.15);color:#fff;}
 .image-lightbox-close:hover{background:rgba(255,255,255,0.3);color:#fff;}
-.history-item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--rule);font-size:12.5px;}
+.history-item{display:flex;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--rule);font-size:12.5px;gap:10px;}
 .history-item:last-child{border-bottom:none;}
-.history-verdict{font-weight:600;padding:2px 8px;border-radius:99px;font-size:10.5px;}
+.history-verdict{font-weight:600;padding:2px 8px;border-radius:99px;font-size:10.5px;flex-shrink:0;}
 .history-verdict.correct{background:var(--pen-green-bg);color:var(--pen-green);}
 .history-verdict.wrong{background:var(--pen-red-bg);color:var(--pen-red);}
+.history-timing{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--ink-faint);margin-top:3px;}
+.history-remarks{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;}
+.remark-pill{font-size:10.5px;color:var(--ink-soft);background:var(--paper);padding:2px 7px;border-radius:99px;}
 .fsrs-stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
 .fsrs-stat-grid div{background:var(--paper);border-radius:8px;padding:8px;text-align:center;}
 .fsrs-stat-grid .stat-num{font-size:16px;font-weight:700;}
@@ -696,6 +702,8 @@ var state = {
   currentUser: null,
   imageUrlMap: {}, /* hash -> ImgBB URL, the only image-related thing that ever reaches Supabase (plain text) */
   editingMcqId: null,
+  autoSleepEnabled: true,
+  autoSleepStreak: 4,
   zipImportJob: null /* {active, processed, total, attached, notFound, skippedNames} — survives navigating away mid-import */
 };
 
@@ -955,6 +963,8 @@ async function loadLibrary(){
     state.streak = (row && row.streak) || { count: 0, lastDate: null };
     state.fsrsCardExpanded = row ? (row.fsrs_card_expanded !== false) : true;
     state.sleepingSubjects = (row && row.sleeping_subjects) || {};
+    state.autoSleepEnabled = row ? (row.auto_sleep_enabled !== false) : true;
+    state.autoSleepStreak = (row && row.auto_sleep_streak) || 4;
   } catch(e) {
     console.error('loadLibrary (settings):', e);
   }
@@ -974,6 +984,8 @@ async function saveUserSettings(){
       streak: state.streak,
       fsrs_card_expanded: state.fsrsCardExpanded,
       sleeping_subjects: state.sleepingSubjects,
+      auto_sleep_enabled: state.autoSleepEnabled,
+      auto_sleep_streak: state.autoSleepStreak,
       updated_at: new Date().toISOString()
     });
     if (res.error) throw res.error;
@@ -987,6 +999,7 @@ function saveSleepingSubjects(){ return saveUserSettings(); }
 function saveFsrsMode(){ return saveUserSettings(); }
 function saveDarkMode(){ return saveUserSettings(); }
 function saveStreak(){ return saveUserSettings(); }
+function saveAutoSleepSettings(){ return saveUserSettings(); }
 async function saveSources(){ return saveUserSettings(); }
 async function savePausedSession(){ return saveUserSettings(); }
 function dateStr(ts){
@@ -1237,6 +1250,7 @@ async function importLibraryFromFile(file){
       if (!Array.isArray(m.tags)) m.tags = [];
       if (!Array.isArray(m.images)) m.images = [];
       if (!Array.isArray(m.answerImages)) m.answerImages = [];
+      if (typeof m.asleep !== 'boolean') m.asleep = false;
       if (!Array.isArray(m.options)) m.options = [];
       if (!Array.isArray(m.answer) || !m.answer.length) m.answer = ['UNKNOWN'];
       if (!m.subject) m.subject = 'Unsorted';
@@ -1372,14 +1386,36 @@ function renderSettingsModalContent(){
   html += '<div class="settings-section" style="margin-bottom:0;"><h4>Appearance &amp; scheduling</h4>' +
     '<div class="settings-row"><span>Dark mode</span>' +
       '<span class="settings-toggle' + (state.darkMode?' on':'') + '" data-action="toggle-dark-mode" role="switch" aria-checked="' + (state.darkMode?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
-    '<div class="settings-row" style="border-bottom:none;"><span>FSRS mode</span>' +
+    '<div class="settings-row"><span>FSRS mode</span>' +
       '<span class="settings-toggle' + (state.learningMode.enabled?' on':'') + '" data-action="toggle-fsrs-mode" role="switch" aria-checked="' + (state.learningMode.enabled?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
+    '<div class="settings-row"><span>Auto-sleep a question after it\'s right N times in a row</span>' +
+      '<span class="settings-toggle' + (state.autoSleepEnabled?' on':'') + '" data-action="toggle-auto-sleep" role="switch" aria-checked="' + (state.autoSleepEnabled?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
+    (state.autoSleepEnabled ? '<div class="settings-row" style="border-bottom:none;"><span>Streak needed (N)</span>' +
+      '<input type="number" min="2" max="15" id="autoSleepStreakInput" value="' + state.autoSleepStreak + '" data-action="set-auto-sleep-streak" style="width:56px;padding:5px 8px;border:1px solid var(--rule-strong);border-radius:6px;background:var(--card);color:var(--ink);font-size:13px;text-align:center;"></div>' : '') +
     '</div>';
 
   showRichModal(html);
+  var streakInput = document.getElementById('autoSleepStreakInput');
+  if (streakInput) {
+    streakInput.addEventListener('change', function(e){
+      var n = parseInt(e.target.value, 10);
+      if (!n || n < 2) n = 2;
+      if (n > 15) n = 15;
+      state.autoSleepStreak = n;
+      saveAutoSleepSettings();
+      renderSettingsModalContent();
+    });
+  }
 }
 
 /* ---------------- Question history modal ---------------- */
+function formatDurationMs(ms){
+  if (typeof ms !== 'number' || ms < 0) return null;
+  var s = Math.round(ms/1000);
+  if (s < 60) return s + 's';
+  var m = Math.floor(s/60); var rem = s % 60;
+  return m + 'm' + (rem ? ' ' + rem + 's' : '');
+}
 function openHistoryModal(id){
   var m = state.mcqs.find(function(x){ return x.id === id; });
   if (!m) return;
@@ -1388,14 +1424,14 @@ function openHistoryModal(id){
   var snippet = m.question.replace(/\n/g,' ').slice(0, 140) + (m.question.length > 140 ? '…' : '');
 
   var html = '<h3>Review history</h3>';
-  html += '<p style="margin-bottom:14px;">' + escapeHtml(snippet) + '</p>';
+  html += '<p style="margin-bottom:14px;">' + escapeHtml(snippet) + (m.asleep ? ' <span class="sleep-badge">Asleep</span>' : '') + '</p>';
   html += '<div class="fsrs-stat-grid">' +
     '<div><div class="stat-num">' + (fs ? (Math.round(fs.stability*10)/10) : '–') + '</div><div class="stat-label">Stability (d)</div></div>' +
     '<div><div class="stat-num">' + (fs ? (Math.round(fs.difficulty*10)/10) : '–') + '</div><div class="stat-label">Difficulty</div></div>' +
     '<div><div class="stat-num">' + (fs ? fs.reps : 0) + '</div><div class="stat-label">Reviews</div></div>' +
     '</div>';
   html += '<div class="view-sub" style="margin-bottom:10px;">Current state: <strong>' + escapeHtml(cls) + '</strong>' +
-    (m.learning.due ? ' · next due ' + escapeHtml(new Date(m.learning.due).toLocaleString()) : '') + '</div>';
+    (m.asleep ? ' · asleep — excluded from FSRS review and Start Practice' : (m.learning.due ? ' · next due ' + escapeHtml(new Date(m.learning.due).toLocaleString()) : '')) + '</div>';
 
   var hist = (m.learning.history || []).slice().reverse();
   if (!hist.length) {
@@ -1405,7 +1441,17 @@ function openHistoryModal(id){
     html += '<div>';
     hist.forEach(function(h){
       var label = ratingLabels[h.rating];
-      html += '<div class="history-item"><span>' + escapeHtml(new Date(h.ts).toLocaleString()) + (label ? ' · ' + label : '') + '</span>' +
+      var answerDur = formatDurationMs(h.timeToAnswerMs);
+      var explainDur = formatDurationMs(h.timeOnExplanationMs);
+      html += '<div class="history-item"><div>' +
+        '<span>' + escapeHtml(new Date(h.ts).toLocaleString()) + (label ? ' · ' + label : '') + '</span>' +
+        (answerDur || explainDur ? '<div class="history-timing">' +
+          (answerDur ? icon('clock',10) + ' ' + answerDur + ' to answer' : '') +
+          (answerDur && explainDur ? ' · ' : '') +
+          (explainDur ? explainDur + ' on explanation' : '') +
+          '</div>' : '') +
+        (h.remarks && h.remarks.length ? '<div class="history-remarks">' + h.remarks.map(function(r){ return '<span class="remark-pill">' + escapeHtml(r) + '</span>'; }).join('') + '</div>' : '') +
+        '</div>' +
         '<span class="history-verdict ' + (h.correct ? 'correct' : 'wrong') + '">' + (h.correct ? 'Correct' : 'Wrong') + '</span></div>';
     });
     html += '</div>';
@@ -1732,6 +1778,7 @@ function parseLibraryText(raw, sourceOverride){
           flagged: false,
           images: [],
           answerImages: [],
+          asleep: false,
           addedAt: Date.now(),
           learning: {
             due: Date.now(),
@@ -1992,7 +2039,7 @@ function getLearningStats(){
   var stats = { due: 0, new: 0, noconcept: 0, misconception: 0, learning: 0, mastered: 0, tomorrow: 0, recovering: 0 };
   state.mcqs.forEach(function(q){
     if(!q.learning) return;
-    if(state.sleepingSubjects[q.subject]) return; /* asleep subjects don't contribute to due/state counts */
+    if(state.sleepingSubjects[q.subject] || q.asleep) return; /* asleep subjects/questions don't contribute to due/state counts */
     var s = getLearningState(q);
     if(stats[s] !== undefined) stats[s]++;
     if((q.learning.due || 0) <= now) stats.due++;
@@ -2016,10 +2063,10 @@ function getDashboardData(){
   var totalTracked = state.mcqs.length;
   var masteryPct = totalTracked ? Math.round((ls.mastered / totalTracked) * 100) : 0;
 
-  // Weakest subjects (asleep subjects excluded — not recommended)
+  // Weakest subjects (asleep subjects/questions excluded — not recommended)
   var subjMap = {};
   state.mcqs.forEach(function(m){
-    if (state.sleepingSubjects[m.subject]) return;
+    if (state.sleepingSubjects[m.subject] || m.asleep) return;
     if(!subjMap[m.subject]) subjMap[m.subject] = { total: 0, mastered: 0 };
     subjMap[m.subject].total++;
     if(getLearningState(m) === 'mastered') subjMap[m.subject].mastered++;
@@ -2030,10 +2077,10 @@ function getDashboardData(){
     return { subject: sub, percentage: pct };
   }).sort(function(a,b){ return a.percentage - b.percentage; });
 
-  // Persistent misconceptions (asleep subjects excluded — not recommended)
+  // Persistent misconceptions (asleep subjects/questions excluded — not recommended)
   var miscMap = {};
   state.mcqs.forEach(function(m){
-    if (state.sleepingSubjects[m.subject]) return;
+    if (state.sleepingSubjects[m.subject] || m.asleep) return;
     if(getLearningState(m) === 'misconception') {
       var trap = getMostRepeatedWrong(m);
       var key = m.subject + ' (' + trap + ')';
@@ -2389,7 +2436,7 @@ function renderQuestionList(tree, node, searchAll){
   var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
   var list = ids.map(function(id){ return byId[id]; }).filter(Boolean).filter(passesFilters);
   /* Sleeping subjects stay visible for browsing, but drop out of the root-level "Start practice" pool/count. */
-  var practiceCount = (searchAll || !node) ? list.filter(function(m){ return !state.sleepingSubjects[m.subject]; }).length : list.length;
+  var practiceCount = (searchAll || !node) ? list.filter(function(m){ return !state.sleepingSubjects[m.subject] && !m.asleep; }).length : list.filter(function(m){ return !m.asleep; }).length;
 
   var html = '<div class="view-head">';
   html += searchAll ? '<div class="breadcrumb"><button class="breadcrumb-link" data-action="clear-search">' + icon('chevron-left',12) + ' Library</button></div>' : renderBreadcrumb();
@@ -2411,9 +2458,9 @@ function renderQuestionList(tree, node, searchAll){
     list.slice(0, 200).forEach(function(m){
       var statusClass = m.flagged ? 'flagged' : (m.learning.history.length === 0 ? '' : (getLearningState(m) === 'mastered' ? 'correct' : 'wrong'));
       var snippet = m.question.replace(/\n/g,' ').slice(0, 140);
-      html += '<div class="card mcq-row" data-action="preview-mcq" data-id="' + m.id + '">' +
+      html += '<div class="card mcq-row' + (m.asleep ? ' mcq-asleep' : '') + '" data-action="preview-mcq" data-id="' + m.id + '">' +
         '<div class="mcq-status-dot ' + statusClass + '"></div>' +
-        '<div class="mcq-row-text">' + escapeHtml(snippet) + (m.question.length > 140 ? '…' : '') +
+        '<div class="mcq-row-text">' + escapeHtml(snippet) + (m.question.length > 140 ? '…' : '') + (m.asleep ? ' <span class="sleep-badge">Asleep</span>' : '') +
         '<div class="mcq-row-meta">' +
         '<span class="source-pill" style="background:' + colorForSource(m.source) + '">' + escapeHtml(m.source) + '</span>' +
         (m.images && m.images.length ? '<span class="tag-pill icon-inline" title="' + m.images.length + ' image' + (m.images.length===1?'':'s') + ' attached">' + icon('image',11) + ' ' + m.images.length + '</span>' : '') +
@@ -2421,6 +2468,7 @@ function renderQuestionList(tree, node, searchAll){
         (m.tags.length > 2 ? '<span class="tag-pill-more">+' + (m.tags.length-2) + '</span>' : '') +
         '</div></div>' +
         '<div class="mcq-row-actions">' +
+        '<button class="mcq-icon-btn' + (m.asleep ? ' on' : '') + '" data-action="toggle-mcq-sleep" data-id="' + m.id + '" title="' + (m.asleep ? 'Asleep — click to wake, resuming FSRS review' : 'Put just this question to sleep — pauses its FSRS review and excludes it from Start Practice') + '">' + icon('moon',14) + '</button>' +
         '<button class="mcq-icon-btn" data-action="view-history" data-id="' + m.id + '" title="Review history">' + icon('clock',14) + '</button>' +
         '<button class="mcq-icon-btn" data-action="edit-mcq" data-id="' + m.id + '" title="Edit question">' + icon('pencil',14) + '</button>' +
         '</div></div>';
@@ -2608,7 +2656,7 @@ function getLearningQueue(ids){
   var byId = {};
   state.mcqs.forEach(function(m){ byId[m.id]=m; });
   var due = ids.map(function(id){ return byId[id]; }).filter(Boolean).filter(function(q){
-    return q.learning && (q.learning.due||0) <= now && !state.sleepingSubjects[q.subject];
+    return q.learning && (q.learning.due||0) <= now && !state.sleepingSubjects[q.subject] && !q.asleep;
   });
   due.sort(function(a,b){
     var order={misconception:0,noconcept:1,learning:2,mastered:3,new:4};
@@ -2677,8 +2725,12 @@ function fsrsIntervalDays(stability){ return Math.max(1/144, stability); } /* re
 const LearningEngine={
 
   MAX_HISTORY:8,
+  SLOW_ANSWER_MS: 45000,       // deliberated more than 45s before checking — treated as hesitant, not confident
+  SLOW_EXPLANATION_MS: 20000,  // spent more than 20s on the explanation — treated as "actually studying it", not skimming
 
-  record(mcq,picked,correct){
+  /* timeToAnswerMs/timeOnExplanationMs are optional — pass null if unavailable (e.g.
+     undo doesn't have a clean re-measurement) rather than guessing. */
+  record(mcq,picked,correct,timeToAnswerMs,timeOnExplanationMs){
 
     if(!mcq.learning){
       mcq.learning={
@@ -2691,12 +2743,17 @@ const LearningEngine={
     }
     if(mcq.learning.fsrs===undefined) mcq.learning.fsrs=null;
 
+    var remarks = this.deriveRemarks(correct, timeToAnswerMs, timeOnExplanationMs);
+
     mcq.learning.history.push({
       correct,
       picked,
       rating:null,
       expected:mcq.answer[0],
-      ts:Date.now()
+      ts:Date.now(),
+      timeToAnswerMs: (typeof timeToAnswerMs === 'number') ? timeToAnswerMs : null,
+      timeOnExplanationMs: (typeof timeOnExplanationMs === 'number') ? timeOnExplanationMs : null,
+      remarks: remarks
     });
 
     if(mcq.learning.history.length>this.MAX_HISTORY){
@@ -2709,20 +2766,67 @@ const LearningEngine={
     /* Auto-derive an Again/Hard/Good/Easy-equivalent (1-4) rating from the question's
        own tracked history, instead of asking the user to self-report one after every
        question. classify() below reflects history INCLUDING the attempt just pushed. */
-    const rating = this.deriveRating(mcq, correct);
+    const rating = this.deriveRating(mcq, correct, timeToAnswerMs);
     mcq.learning.history[mcq.learning.history.length-1].rating = rating;
 
     this.schedule(mcq, rating);
+    this.checkAutoSleep(mcq);
 
   },
 
-  deriveRating(mcq, correct){
+  /* Lightweight, background-only qualitative tags per attempt — not shown during
+     practice itself, just recorded for later review (the question's History modal)
+     and to inform deriveRating below. Purely heuristic flat thresholds, not adjusted
+     per question length — a reasonable starting point, not a precise model. */
+  deriveRemarks(correct, timeToAnswerMs, timeOnExplanationMs){
+    var remarks = [];
+    var slow = typeof timeToAnswerMs === 'number' && timeToAnswerMs > this.SLOW_ANSWER_MS;
+    var fast = typeof timeToAnswerMs === 'number' && timeToAnswerMs < 5000;
+    if (correct && slow) remarks.push('Hesitant — took a while but got there');
+    else if (correct && fast) remarks.push('Confident — quick and correct');
+    else if (correct === false && fast) remarks.push('Rushed — answered quickly but missed it');
+    else if (correct === false && slow) remarks.push('Struggled — spent time and still missed it');
+    if (typeof timeOnExplanationMs === 'number' && timeOnExplanationMs > this.SLOW_EXPLANATION_MS) {
+      remarks.push('Reviewed the explanation closely');
+    }
+    return remarks;
+  },
+
+  deriveRating(mcq, correct, timeToAnswerMs){
     if(!correct) return 1; // Again — wrong this round, always, no exceptions
 
     const cls = this.classify(mcq);
-    if(cls === 'misconception' || cls === 'noconcept') return 2; // Hard — right this time, but the pattern says you're not solid
-    if(cls === 'mastered') return 4; // Easy
-    return 3; // Good — new / learning
+    var rating;
+    if(cls === 'misconception' || cls === 'noconcept') rating = 2; // Hard — right this time, but the pattern says you're not solid
+    else if(cls === 'mastered') rating = 4; // Easy
+    else rating = 3; // Good — new / learning
+
+    /* A correct answer that took unusually long is a weaker fluency signal than the
+       classification alone suggests — nudge the rating down a notch (never below
+       Hard, since it was still right) so FSRS doesn't push the interval out as
+       aggressively as it would for a fast, confident correct answer. This is the
+       "extra edge" — response time feeding the scheduler, not just right/wrong. */
+    if (typeof timeToAnswerMs === 'number' && timeToAnswerMs > this.SLOW_ANSWER_MS && rating > 2) {
+      rating -= 1;
+    }
+    return rating;
+  },
+
+  /* Puts a question to sleep on its own (independent of subject-level sleep) once
+     it's been answered correctly N times in a row — same due-date pause and
+     Start-Practice exclusion subject-sleep gets, just scoped to one question instead
+     of a whole deck. Purely additive to a streak of correct answers; a single wrong
+     answer resets the streak naturally since history stops being all-correct. */
+  checkAutoSleep(mcq){
+    if (!state.autoSleepEnabled || mcq.asleep) return;
+    var streakNeeded = state.autoSleepStreak || 4;
+    var h = mcq.learning.history;
+    if (h.length < streakNeeded) return;
+    var recent = h.slice(-streakNeeded);
+    if (recent.every(function(x){ return x.correct === true; })) {
+      mcq.asleep = true;
+      mcq.autoSlept = true; // one-shot flag — the caller shows a toast and clears it
+    }
   },
 
   classify(mcq){
@@ -2900,7 +3004,10 @@ function startPractice(ids){
     shortAnswerCorrect: null,
     results: [],
     undoStack: [],
-    stats: { correct:0, wrong:0, misconception:0, learning:0, mastered:0, noconcept:0 }
+    stats: { correct:0, wrong:0, misconception:0, learning:0, mastered:0, noconcept:0 },
+    questionShownAt: Date.now(), /* silent timing — when the current question first became interactive */
+    revealedAt: null,            /* silent timing — when it was revealed, so time-on-explanation can be measured */
+    lastTimeToAnswerMs: null
   };
   state.view = 'practice';
   render();
@@ -3077,6 +3184,8 @@ function evaluateCorrect(m, selected){
 function revealCurrent(){
   var s = state.session;
   s.revealed = true;
+  s.lastTimeToAnswerMs = s.questionShownAt ? (Date.now() - s.questionShownAt) : null; /* silent timing — how long they deliberated before checking */
+  s.revealedAt = Date.now();
   render();
 }
 
@@ -3086,18 +3195,21 @@ async function advanceAfterReveal(){
   if (!m) return;
   var correct = evaluateCorrect(m, s.selected);
   var pickedStr = m.isShortAnswer ? (s.selected || '') : (s.selected ? s.selected.join(',') : '');
+  var timeToAnswerMs = s.lastTimeToAnswerMs;
+  var timeOnExplanationMs = s.revealedAt ? (Date.now() - s.revealedAt) : null;
 
   if (!s.undoStack) s.undoStack = [];
   s.undoStack.push({
     mcqId: m.id,
     learningBefore: JSON.parse(JSON.stringify(m.learning)),
+    asleepBefore: m.asleep,
     statsBefore: JSON.parse(JSON.stringify(s.stats)),
     resultsLenBefore: s.results.length,
     index: s.index,
     selected: s.selected
   });
 
-  LearningEngine.record(m, pickedStr, correct); /* rating is auto-derived inside, from this question's own history */
+  LearningEngine.record(m, pickedStr, correct, timeToAnswerMs, timeOnExplanationMs); /* rating is auto-derived inside, from this question's own history and how long it took */
 
   var cls = LearningEngine.classify(m);
   if (s.stats && s.stats[cls] !== undefined) s.stats[cls]++;
@@ -3107,10 +3219,15 @@ async function advanceAfterReveal(){
   s.results.push({ id: m.id, correct: correct, selected: s.selected });
   bumpStreak();
 
+  var justAutoSlept = m.autoSlept;
+  if (justAutoSlept) m.autoSlept = false; // one-shot — don't re-toast on a future render
+
   s.index++; s.selected = null; s.revealed = false; s.shortAnswerCorrect = null; s.viewIndex = s.index;
+  s.questionShownAt = Date.now(); s.revealedAt = null; s.lastTimeToAnswerMs = null; /* start the clock fresh for whatever's next */
   if (s.index >= s.ids.length) state.view = 'summary';
   render(); /* update the screen immediately — don't make the person wait on a network round trip just to see the next question */
   saveLibrary(); /* fire-and-forget in the background; it has its own error toast if it fails */
+  if (justAutoSlept) showToast('That question is asleep now — ' + (state.autoSleepStreak||4) + ' correct in a row. Wake it anytime from its row in the library.');
 }
 
 async function undoLastAnswer(){
@@ -3118,7 +3235,10 @@ async function undoLastAnswer(){
   if (!s || !s.undoStack || !s.undoStack.length) return;
   var last = s.undoStack.pop();
   var mm = state.mcqs.find(function(x){ return x.id === last.mcqId; });
-  if (mm) mm.learning = last.learningBefore;
+  if (mm) {
+    mm.learning = last.learningBefore;
+    if ('asleepBefore' in last) mm.asleep = last.asleepBefore; /* undo the auto-sleep too, if that's what this attempt triggered */
+  }
   s.results.length = last.resultsLenBefore;
   s.stats = last.statsBefore;
   s.index = last.index;
@@ -3126,6 +3246,7 @@ async function undoLastAnswer(){
   s.selected = last.selected;
   s.revealed = true;
   s.shortAnswerCorrect = null; /* re-grade on the way back in, rather than trusting a stale self-grade */
+  s.revealedAt = Date.now(); s.lastTimeToAnswerMs = null; /* fresh timing for whatever rating they give it this time */
   render();
   saveLibrary();
 }
@@ -3201,6 +3322,12 @@ async function onClick(e){
     render();
     return;
   }
+  if (action === 'toggle-auto-sleep') {
+    state.autoSleepEnabled = !state.autoSleepEnabled;
+    saveAutoSleepSettings();
+    render();
+    return;
+  }
   if (action === 'toggle-fsrs-card') {
     state.fsrsCardExpanded = !state.fsrsCardExpanded;
     saveFsrsCardExpanded();
@@ -3218,6 +3345,17 @@ async function onClick(e){
     }
     saveSleepingSubjects();
     render();
+    return;
+  }
+  if (action === 'toggle-mcq-sleep') {
+    var mqId = el.getAttribute('data-id');
+    var mq = state.mcqs.find(function(x){ return x.id === mqId; });
+    if (!mq) return;
+    mq.asleep = !mq.asleep;
+    if (!mq.asleep) mq.autoSlept = false; // waking it manually also clears the auto-slept flag
+    showToast(mq.asleep ? 'Question asleep — paused from FSRS review everywhere.' : 'Question awake again — back in FSRS review.');
+    render();
+    saveLibrary();
     return;
   }
   if (action === 'toggle-dark-mode') {
@@ -3316,6 +3454,7 @@ async function onClick(e){
     var ids = node ? collectIds(node) : state.mcqs.map(function(m){ return m.id; });
     var byId = {}; state.mcqs.forEach(function(m){ byId[m.id]=m; });
     if (!node) ids = ids.filter(function(id){ return byId[id] && !state.sleepingSubjects[byId[id].subject]; }); /* root-level "Start Practice" skips sleeping subjects entirely */
+    ids = ids.filter(function(id){ return byId[id] && !byId[id].asleep; }); /* individually-slept questions are excluded everywhere, not just from the root */
     var filtered = ids.filter(function(id){ return byId[id] && passesFilters(byId[id]); });
     requestStartPractice(filtered, state.learningMode.enabled);
     return;
