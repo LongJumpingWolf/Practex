@@ -950,7 +950,7 @@ async function loadLibrary(){
     var row = setRes.data;
     state.sources = (row && row.sources) || {};
     state.pausedSession = (row && row.paused_session) || null;
-    state.learningMode.enabled = row ? (row.fsrs_mode_enabled !== false) : true;
+    state.learningMode.enabled = row ? (row.fsrs_mode_enabled !== false) : false; /* brand-new accounts start in plain practice mode — FSRS is opt-in, not the default */
     state.darkMode = !!(row && row.dark_mode);
     state.streak = (row && row.streak) || { count: 0, lastDate: null };
     state.fsrsCardExpanded = row ? (row.fsrs_card_expanded !== false) : true;
@@ -2788,12 +2788,27 @@ const LearningEngine={
     mcq.learning.fsrs = fsrsStep(mcq.learning.fsrs, rating, now);
     var intervalDays = fsrsIntervalDays(mcq.learning.fsrs.stability);
 
-    /* Pedagogical ceilings: cards flagged as a recurring misconception, showing
-       no grasp of the concept, or still brand-new get pulled back sooner than
-       raw FSRS math alone would schedule them, regardless of this review's rating. */
+    /* Pedagogical ceilings: cards flagged as a recurring misconception or showing no
+       grasp of the concept get pulled back sooner than raw FSRS math alone would
+       schedule them, regardless of this review's rating — that part is deliberate,
+       it's the "focus more on the wrong ones" behavior.
+       "new" (fewer than 3 attempts so far) is different: it should ONLY be crammed
+       back quickly if you actually struggled (rating 1-2). A confidently correct
+       first answer (rating 3-4) has no evidence it needs to be seen again in 10
+       minutes — capping it there anyway was overriding the real FSRS-computed
+       interval (often several days) on literally every question's first two
+       attempts, which is why a full day's questions kept coming right back the
+       next day regardless of how well they went. */
     if (clsState === 'misconception') intervalDays = Math.min(intervalDays, 0.5);       /* ≤ 12h */
     else if (clsState === 'noconcept') intervalDays = Math.min(intervalDays, 30/1440);  /* ≤ 30m */
-    else if (clsState === 'new') intervalDays = Math.min(intervalDays, 10/1440);        /* ≤ 10m */
+    else if (clsState === 'new' && rating <= 2) intervalDays = Math.min(intervalDays, 10/1440); /* ≤ 10m — only when you actually struggled */
+
+    /* This is exam-prep MCQ practice, not an open-ended flashcard deck meant to be
+       remembered forever — even a thoroughly "mastered" question should resurface at
+       least monthly rather than drift out for a whole season the way pure FSRS math
+       alone would eventually push a high-stability card. */
+    var MAX_PRACTICE_INTERVAL_DAYS = 30;
+    intervalDays = Math.min(intervalDays, MAX_PRACTICE_INTERVAL_DAYS);
 
     mcq.learning.interval = intervalDays * DAY;
     mcq.learning.lastReviewed = now;
