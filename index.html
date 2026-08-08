@@ -85,7 +85,7 @@ body.dark-mode.fsrs-mode{
   --cover-dark:#6B4F92;
 }
 body.dark-mode{ background-image: linear-gradient(var(--rule) 1px, transparent 1px); }
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html,body{height:100%;touch-action:manipulation;}
 body{
   font-family:'IBM Plex Sans',-apple-system,sans-serif;
@@ -426,6 +426,7 @@ select.status-select{
   display:inline-flex;align-items:center;gap:7px;
 }
 .btn:hover{border-color:var(--ink);}
+.btn:active{transform:scale(0.97);}
 .btn-primary{background:var(--cover);color:#fff;border-color:var(--cover);}
 .btn-primary:hover{background:var(--cover-dark);border-color:var(--cover-dark);}
 .btn-danger{color:var(--pen-red);border-color:var(--pen-red);}
@@ -512,6 +513,7 @@ textarea.ingest-area{
   transition:border-color .15s,background .15s;
 }
 .bubble:hover:not(.locked){border-color:var(--ink);}
+.bubble:active:not(.locked):not(:disabled){transform:scale(0.985);}
 .bubble.selected{background:var(--paper);border-color:var(--ink);}
 .bubble-mark{position:relative;width:30px;height:30px;flex-shrink:0;}
 .bubble-letter{
@@ -1919,9 +1921,11 @@ function passesFilters(m){
   var tagF = activeTagFilterList();
   if (tagF && !m.tags.some(function(t){ return tagF.indexOf(t) !== -1; })) return false;
   var st = state.filters.status;
-  if (st === 'unanswered' && m.learning.history.length > 0) return false;
-  if (st === 'correct' && getLearningState(m) !== 'mastered') return false;
-  if (st === 'wrong' && getLearningState(m) === 'mastered') return false;
+  var hist = m.learning.history || [];
+  var lastAttempt = hist.length ? hist[hist.length - 1] : null;
+  if (st === 'unanswered' && hist.length > 0) return false;
+  if (st === 'correct' && (!lastAttempt || lastAttempt.correct !== true)) return false; /* most recent attempt was right — not the FSRS "mastered" classification, which needs 3+ attempts before it means anything */
+  if (st === 'wrong' && (!lastAttempt || lastAttempt.correct !== false)) return false; /* most recent attempt was wrong */
   if (st === 'flagged' && !m.flagged) return false;
   var q = (state.filters.search || '').trim().toLowerCase();
   if (q) {
@@ -3568,7 +3572,31 @@ async function onClick(e){
   }
   if (action === 'resume-paused') {
     if(!state.pausedSession){ closeModal(); return; }
-    state.session=JSON.parse(JSON.stringify(state.pausedSession)); state.pausedSession=null; await savePausedSession(); state.view='practice'; closeModal(); render(); return;
+    var restored = JSON.parse(JSON.stringify(state.pausedSession));
+    /* Defensive normalization — a paused session saved by an older version of the app
+       (or corrupted some other way) could be missing fields the current code expects.
+       Without this, a missing viewIndex specifically made the practice view look up
+       s.ids[undefined], find no question, and silently jump straight to a 0%/empty
+       summary screen instead of resuming anything. */
+    if (!Array.isArray(restored.ids)) restored.ids = [];
+    if (typeof restored.index !== 'number' || restored.index < 0) restored.index = 0;
+    if (restored.index > restored.ids.length) restored.index = restored.ids.length;
+    if (typeof restored.viewIndex !== 'number' || restored.viewIndex < 0 || restored.viewIndex > restored.index) restored.viewIndex = restored.index;
+    if (!Array.isArray(restored.results)) restored.results = [];
+    if (!Array.isArray(restored.undoStack)) restored.undoStack = [];
+    if (!restored.stats) restored.stats = { correct:0, wrong:0, misconception:0, learning:0, mastered:0, noconcept:0 };
+    if (restored.shortAnswerCorrect === undefined) restored.shortAnswerCorrect = null;
+    if (!restored.ids.length) {
+      showToast('That paused test looks corrupted and can\'t be resumed — sorry about that. Starting fresh is the safest option.');
+      state.pausedSession = null; await savePausedSession(); closeModal(); render(); return;
+    }
+    state.session = restored;
+    state.pausedSession = null;
+    await savePausedSession();
+    state.view = 'practice';
+    closeModal();
+    render();
+    return;
   }
   if (action === 'confirm-new-test') {
     var pending=state.pendingStart; state.pendingStart=null; closeModal();
@@ -3668,7 +3696,10 @@ async function signInWithGoogle(){
   try {
     var res = await supabaseClient.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin + window.location.pathname } /* deliberately NOT window.location.href — that can carry forward a stale #hash from a previous sign-in and produce a malformed "##" redirect that Supabase's own client fails to parse */
+      options: {
+        redirectTo: window.location.origin + window.location.pathname, /* deliberately NOT window.location.href — that can carry forward a stale #hash from a previous sign-in and produce a malformed "##" redirect that Supabase's own client fails to parse */
+        queryParams: { prompt: 'select_account' } /* Signing out of Practex only ever clears Practex's own session — it can't and shouldn't touch Google's separate login cookie in the browser. Without this, Google sees that cookie is still there and silently re-authenticates the same account with no picker. This forces the account chooser to actually show, every time. */
+      }
     });
     if (res.error) throw res.error;
     /* Browser navigates to Google's consent screen and back — nothing else to do here. */
