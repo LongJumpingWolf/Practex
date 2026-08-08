@@ -387,6 +387,10 @@ input,textarea,select{font-family:inherit;color:inherit;}
 select.status-select{
   border:1px solid var(--rule-strong);border-radius:999px;padding:5px 22px 5px 10px;font-size:12px;background:var(--card);color:var(--ink-soft);
 }
+select.status-select-unanswered{border-color:var(--cover);color:var(--cover);background:var(--pen-blue-bg);}
+select.status-select-correct{border-color:var(--pen-green);color:var(--pen-green);background:var(--pen-green-bg);}
+select.status-select-wrong{border-color:var(--pen-red);color:var(--pen-red);background:var(--pen-red-bg);}
+select.status-select-flagged{border-color:#D6A900;color:#8A6A00;background:#FFF4BF;}
 .tag-panel{
   display:flex;flex-wrap:wrap;gap:6px;
   padding:12px 2px 4px;
@@ -1248,9 +1252,9 @@ async function importLibraryFromFile(file){
         if (!state.sources[k]) state.sources[k] = payload.sources[k];
       });
     }
-    await saveLibrary();
-    await saveSources();
     render();
+    saveLibrary();
+    saveSources();
     showToast(added + ' question' + (added===1?'':'s') + ' imported' + (incoming.length-added ? ' (' + (incoming.length-added) + ' duplicates skipped)' : '') + '.');
   } catch(e) {
     showToast('Could not read that file — is it a valid Practex export?');
@@ -1309,9 +1313,9 @@ async function attachImageToMcq(mcqId, file, field){
     var hash = await storeImageFromFile(file);
     if (!m[field]) m[field] = [];
     if (m[field].indexOf(hash) === -1) m[field].push(hash);
-    await saveLibrary();
     renderMcqImageGrid(m, field, field === 'answerImages' ? 'mcqAnswerImageGrid' : 'mcqImageGrid');
     showToast('Image added.');
+    saveLibrary();
   } catch(err) {
     console.error('attachImageToMcq:', err);
     showToast('Could not add that image.');
@@ -1559,10 +1563,10 @@ async function saveEditMcq(id){
   if (!m.chapterPath.length) m.chapterPath = ['Unsorted'];
   var tagsEl = document.getElementById('editTags');
   if (tagsEl) m.tags = tagsEl.value.split(',').map(function(s){return s.trim();}).filter(Boolean);
-  await saveLibrary();
   closeModal();
   render();
   showToast('Question updated.');
+  saveLibrary();
 }
 
 function currentSessionSnapshot(){ return state.session ? JSON.parse(JSON.stringify(state.session)) : null; }
@@ -1608,6 +1612,7 @@ function applyPendingNav(){
     state.view = 'browse';
     state.expanded[nav.path] = true;
     state.forceList = false;
+    resetFolderFilters();
   } else {
     state.view = 'browse';
   }
@@ -1914,6 +1919,17 @@ function activeSourceFilterList(){
 function activeTagFilterList(){
   var chosen = Object.keys(state.filters.tags).filter(function(k){ return state.filters.tags[k]; });
   return chosen.length ? chosen : null;
+}
+/* Filters are scoped to "however you're browsing right now" rather than persisting
+   forever — leaving a folder and coming back (even to the same one) starts clean,
+   rather than silently carrying over a status/tag/source filter from a previous visit
+   that's easy to forget is still active. Search stays put — it's a deliberately
+   cross-folder tool, not a per-visit one. */
+function resetFolderFilters(){
+  state.filters.status = 'all';
+  state.filters.sources = {};
+  state.filters.tags = {};
+  state.filters.tagPanelOpen = false;
 }
 function passesFilters(m){
   var srcF = activeSourceFilterList();
@@ -2445,9 +2461,10 @@ function renderFilters(){
 
   html += '<div class="filter-divider"></div>';
   html += '<div class="filter-toolbar-group">' +
-    '<select class="status-select" data-action="set-status-filter">' +
+    '<select class="status-select status-select-' + state.filters.status + '" data-action="set-status-filter">' +
     ['all','unanswered','correct','wrong','flagged'].map(function(v){
-      return '<option value="'+v+'"' + (state.filters.status===v?' selected':'') + '>' + v.charAt(0).toUpperCase()+v.slice(1) + '</option>';
+      var label = v === 'flagged' ? 'Bookmarked' : (v.charAt(0).toUpperCase()+v.slice(1));
+      return '<option value="'+v+'"' + (state.filters.status===v?' selected':'') + '>' + label + '</option>';
     }).join('') + '</select></div>';
 
   if (anyFilterActive) {
@@ -3074,11 +3091,11 @@ async function advanceAfterReveal(){
 
   s.results.push({ id: m.id, correct: correct, selected: s.selected });
   bumpStreak();
-  await saveLibrary();
 
   s.index++; s.selected = null; s.revealed = false; s.shortAnswerCorrect = null; s.viewIndex = s.index;
   if (s.index >= s.ids.length) state.view = 'summary';
-  render();
+  render(); /* update the screen immediately — don't make the person wait on a network round trip just to see the next question */
+  saveLibrary(); /* fire-and-forget in the background; it has its own error toast if it fails */
 }
 
 async function undoLastAnswer(){
@@ -3094,8 +3111,8 @@ async function undoLastAnswer(){
   s.selected = last.selected;
   s.revealed = true;
   s.shortAnswerCorrect = null; /* re-grade on the way back in, rather than trusting a stale self-grade */
-  await saveLibrary();
   render();
+  saveLibrary();
 }
 
 function renderSummary(){
@@ -3235,6 +3252,7 @@ async function onClick(e){
     state.expanded[key2] = true;
     state.forceList = false;
     state.sidebarOpen = false;
+    resetFolderFilters();
     render(); return;
   }
   if (action === 'view-node-questions') {
@@ -3244,9 +3262,10 @@ async function onClick(e){
     state.expanded[key4] = true;
     state.forceList = true;
     state.sidebarOpen = false;
+    resetFolderFilters();
     render(); return;
   }
-  if (action === 'clear-selection') { state.selectedPath = null; state.forceList = false; render(); return; }
+  if (action === 'clear-selection') { state.selectedPath = null; state.forceList = false; resetFolderFilters(); render(); return; }
 
   if (action === 'toggle-source-filter') {
     var s = el.getAttribute('data-source');
@@ -3384,12 +3403,12 @@ async function onClick(e){
       if (!state.sources[m.source]) state.sources[m.source] = { color: colorForSource(m.source) };
     });
     state.mcqs = state.mcqs.concat(pending);
-    await saveLibrary();
-    await saveSources();
     document.getElementById('ingestArea').value = '';
     showToast(pending.length + ' questions logged to your library.');
     state.view = 'browse';
     render();
+    saveLibrary();
+    saveSources();
     return;
   }
 
@@ -3398,10 +3417,10 @@ async function onClick(e){
     if (!confirm('Delete "' + srcName + '" and all its MCQs? This cannot be undone.')) return;
     state.mcqs = state.mcqs.filter(function(m){ return m.source !== srcName; });
     delete state.sources[srcName];
-    await saveLibrary();
-    await saveSources();
     showToast('Source deleted.');
     render();
+    saveLibrary();
+    saveSources();
     return;
   }
 
@@ -3410,10 +3429,10 @@ async function onClick(e){
     state.mcqs = [];
     state.sources = {};
     state.selectedPath = null;
-    await saveLibrary();
-    await saveSources();
     showToast('Library cleared.');
     render();
+    saveLibrary();
+    saveSources();
     return;
   }
 
@@ -3435,10 +3454,10 @@ async function onClick(e){
     var rmM = state.mcqs.find(function(x){ return x.id === rmId; });
     if (rmM && rmM[rmField]) {
       rmM[rmField] = rmM[rmField].filter(function(h){ return h !== rmHash; });
-      await saveLibrary();
-      await purgeOrphanedImageHashes([rmHash]); /* only actually deletes it if no other question still uses this hash */
       renderMcqImageGrid(rmM, rmField, rmField === 'answerImages' ? 'mcqAnswerImageGrid' : 'mcqImageGrid');
       showToast('Image removed.');
+      await saveLibrary();
+      await purgeOrphanedImageHashes([rmHash]); /* only actually deletes it if no other question still uses this hash */
     }
     return;
   }
@@ -3457,8 +3476,8 @@ async function onClick(e){
     var rInput = document.getElementById('renameDeckInput');
     var rNewName = rInput ? rInput.value : '';
     if (renameDeck(rPath.split('␟'), rNewName)) {
-      await saveLibrary(); await saveSleepingSubjects();
       closeModal(); render(); showToast('Renamed to "' + rNewName.trim() + '".');
+      saveLibrary(); saveSleepingSubjects();
     } else {
       showToast('Enter a name first.');
     }
@@ -3476,23 +3495,23 @@ async function onClick(e){
     var movedName = mvArr[mvArr.length-1];
     if (mvDest === '__LIBRARY_ROOT__') {
       moveDeckUnder(mvArr, []);
-      await saveLibrary();
       closeModal(); render(); showToast('"' + movedName + '" is now a top-level subject in the Library.');
+      saveLibrary();
       return;
     }
     if (isPathWithinOrEqual([mvDest], mvArr)) { showToast('Can\'t move a deck into itself.'); return; }
     moveDeckUnder(mvArr, [mvDest]);
-    await saveLibrary();
     closeModal(); render(); showToast('Moved "' + movedName + '" under "' + mvDest + '".');
+    saveLibrary();
     return;
   }
 
   if (action === 'deck-copy') {
     var cpPath = el.getAttribute('data-path');
     var cpCount = duplicateDeck(cpPath.split('␟'));
-    await saveLibrary();
     closeModal(); render();
     showToast('Copied — ' + cpCount + ' question' + (cpCount===1?'':'s') + ' duplicated as "' + cpPath.split('␟').pop() + ' (copy)".');
+    saveLibrary();
     return;
   }
 
@@ -3517,10 +3536,10 @@ async function onClick(e){
       }
       var promotedName = state.clipboardNode.name;
       moveDeckUnder(state.clipboardNode.path, []);
-      await saveLibrary();
       state.clipboardNode = null;
       render();
       showToast('"' + promotedName + '" moved to the Library root as a top-level subject.');
+      saveLibrary();
       return;
     }
     if (isPathWithinOrEqual(destPathArr, state.clipboardNode.path)) {
@@ -3530,11 +3549,11 @@ async function onClick(e){
       return;
     }
     moveDeckUnder(state.clipboardNode.path, destPathArr);
-    await saveLibrary();
     var pastedName = state.clipboardNode.name;
     state.clipboardNode = null;
     render();
     showToast('"' + pastedName + '" moved here.');
+    saveLibrary();
     return;
   }
 
@@ -3549,15 +3568,15 @@ async function onClick(e){
       if (state.selectedPath && state.selectedPath.join('␟').indexOf(delPath) === 0) {
         state.selectedPath = null; state.forceList = false;
       }
-      await deleteMcqRows(removedIds);
+      closeModal(); render();
+      showToast('Deleted ' + removedIds.length + ' question' + (removedIds.length===1?'':'s') + '.');
       var candidateHashes = [];
       removedMcqs.forEach(function(m){
         (m.images || []).forEach(function(h){ candidateHashes.push(h); });
         (m.answerImages || []).forEach(function(h){ candidateHashes.push(h); });
       });
+      await deleteMcqRows(removedIds);
       await purgeOrphanedImageHashes(candidateHashes);
-      closeModal(); render();
-      showToast('Deleted ' + removedIds.length + ' question' + (removedIds.length===1?'':'s') + '.');
     } else {
       closeModal();
     }
@@ -3565,7 +3584,7 @@ async function onClick(e){
   }
   if (action === 'leave-practice') { requestLeavePractice(); return; }
   if (action === 'pause-and-leave') {
-    state.pausedSession=currentSessionSnapshot(); await savePausedSession(); state.session=null; applyPendingNav(); closeModal(); render(); return;
+    state.pausedSession=currentSessionSnapshot(); state.session=null; applyPendingNav(); closeModal(); render(); savePausedSession(); return;
   }
   if (action === 'leave-without-pausing') {
     state.session=null; applyPendingNav(); closeModal(); render(); return;
@@ -3588,14 +3607,14 @@ async function onClick(e){
     if (restored.shortAnswerCorrect === undefined) restored.shortAnswerCorrect = null;
     if (!restored.ids.length) {
       showToast('That paused test looks corrupted and can\'t be resumed — sorry about that. Starting fresh is the safest option.');
-      state.pausedSession = null; await savePausedSession(); closeModal(); render(); return;
+      state.pausedSession = null; closeModal(); render(); savePausedSession(); return;
     }
     state.session = restored;
     state.pausedSession = null;
-    await savePausedSession();
     state.view = 'practice';
     closeModal();
     render();
+    savePausedSession();
     return;
   }
   if (action === 'confirm-new-test') {
@@ -3604,7 +3623,7 @@ async function onClick(e){
     return;
   }
   if (action === 'jump-subject') {
-    state.selectedPath=[el.getAttribute('data-subject')]; state.view='browse'; state.forceList=false; state.expanded[state.selectedPath.join('␟')]=true; render(); return;
+    state.selectedPath=[el.getAttribute('data-subject')]; state.view='browse'; state.forceList=false; state.expanded[state.selectedPath.join('␟')]=true; resetFolderFilters(); render(); return;
   }
 
   if (action === 'select-option') {
@@ -3662,8 +3681,8 @@ async function onClick(e){
     var s2 = state.session;
     var m2 = state.mcqs.find(function(x){ return x.id === s2.ids[s2.viewIndex]; });
     m2.flagged = !m2.flagged;
-    await saveLibrary();
     render();
+    saveLibrary();
     return;
   }
 
