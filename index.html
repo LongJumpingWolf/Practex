@@ -485,6 +485,26 @@ textarea.ingest-area{
 }
 
 .multi-select-hint{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--cover);background:var(--pen-blue-bg);padding:6px 10px;border-radius:7px;margin-bottom:10px;}
+
+/* Reviewing an already-answered question (viewIndex < index) */
+.reviewing-banner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;font-weight:600;color:var(--cover);background:var(--pen-blue-bg);padding:8px 12px;border-radius:8px;margin-bottom:12px;}
+.reviewing-banner .link-btn{margin-left:auto;display:inline-flex;align-items:center;gap:3px;font-weight:600;}
+
+/* Question overview (birds-eye) grid */
+.q-ov-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:11.5px;color:var(--ink-soft);margin-bottom:14px;}
+.q-ov-legend-item{display:inline-flex;align-items:center;gap:5px;}
+.q-ov-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.q-ov-dot.correct{background:var(--pen-green);}
+.q-ov-dot.wrong{background:var(--pen-red);}
+.q-ov-dot.upcoming{background:var(--rule-strong);}
+.q-ov-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(44px,1fr));gap:8px;}
+.q-ov-cell{position:relative;height:44px;border-radius:8px;border:1.5px solid var(--rule-strong);background:var(--card);color:var(--ink-soft);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;}
+.q-ov-cell:hover:not(:disabled){border-color:var(--cover);}
+.q-ov-cell.correct{background:var(--pen-green-bg);border-color:var(--pen-green);color:var(--pen-green);}
+.q-ov-cell.wrong{background:var(--pen-red-bg);border-color:var(--pen-red);color:var(--pen-red);}
+.q-ov-cell.current{box-shadow:0 0 0 2px var(--cover);border-color:var(--cover);}
+.q-ov-cell.locked{opacity:0.4;cursor:not-allowed;}
+.q-ov-bookmark{position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:var(--highlighter);color:#5B4A0E;display:flex;align-items:center;justify-content:center;}
 .bubbles{display:flex;flex-direction:column;gap:10px;}
 .bubble{
   display:flex;align-items:center;gap:12px;text-align:left;width:100%;
@@ -494,9 +514,6 @@ textarea.ingest-area{
 .bubble:hover:not(.locked){border-color:var(--ink);}
 .bubble.selected{background:var(--paper);border-color:var(--ink);}
 .bubble-mark{position:relative;width:30px;height:30px;flex-shrink:0;}
-.bubble-ring{position:absolute;inset:-5px;overflow:visible;fill:none;stroke-width:3;opacity:0;transform:scale(0.6);transform-origin:50% 50%;transition:opacity .2s ease, transform .35s cubic-bezier(.34,1.56,.64,1);}
-.bubble.reveal-correct .bubble-ring{stroke:var(--pen-green);opacity:1;transform:scale(1);}
-.bubble.reveal-wrong .bubble-ring{stroke:var(--pen-red);opacity:1;transform:scale(1);}
 .bubble-letter{
   width:30px;height:30px;border-radius:50%;border:1.5px solid var(--ink-faint);
   display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;
@@ -885,6 +902,8 @@ var ICON_PATHS = {
   moon: '<path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>',
   'more-vertical': '<circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>',
   'log-in': '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/>',
+  'layout-grid': '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+  bookmark: '<path d="M6 3h12v18l-6-4-6 4V3z"/>',
   copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   scissors: '<circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/>',
   'trash-2': '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
@@ -2839,6 +2858,7 @@ function startPractice(ids){
   state.session = {
     ids: pool.map(function(m){ return m.id; }),
     index: 0,
+    viewIndex: 0, /* which question is currently displayed — usually equals index (the frontier), but can sit behind it while reviewing an already-answered question */
     selected: null,
     revealed: false,
     shortAnswerCorrect: null,
@@ -2850,20 +2870,64 @@ function startPractice(ids){
   render();
 }
 
+/* Birds-eye view of the whole session — jump to any already-reached question, see at
+   a glance what's correct/wrong/unattempted, and which ones are bookmarked. */
+function openQuestionOverview(){
+  var s = state.session;
+  if (!s) return;
+  var html = '<h3>Question overview</h3>';
+  html += '<div class="q-ov-legend">' +
+    '<span class="q-ov-legend-item"><span class="q-ov-dot correct"></span>Correct</span>' +
+    '<span class="q-ov-legend-item"><span class="q-ov-dot wrong"></span>Wrong</span>' +
+    '<span class="q-ov-legend-item"><span class="q-ov-dot upcoming"></span>Not attempted</span>' +
+    '<span class="q-ov-legend-item">' + icon('bookmark',11) + ' Bookmarked</span>' +
+    '</div>';
+  html += '<div class="q-ov-grid">';
+  s.ids.forEach(function(id, i){
+    var mcq = state.mcqs.find(function(x){ return x.id === id; });
+    var result = s.results[i];
+    var statusCls = 'upcoming';
+    if (result) statusCls = result.correct ? 'correct' : (result.correct === false ? 'wrong' : 'unknown');
+    var reachable = i <= s.index;
+    var isCurrent = i === s.viewIndex;
+    html += '<button class="q-ov-cell ' + statusCls + (isCurrent ? ' current' : '') + (!reachable ? ' locked' : '') + '"' +
+      (reachable ? ' data-action="jump-to-question" data-index="' + i + '"' : ' disabled title="Not reached yet"') + '>' +
+      (i+1) +
+      (mcq && mcq.flagged ? '<span class="q-ov-bookmark">' + icon('bookmark',9) + '</span>' : '') +
+      '</button>';
+  });
+  html += '</div>';
+  html += '<div class="action-row" style="margin-top:14px;margin-bottom:0;"><button class="btn btn-ghost" data-action="close-modal">Close</button></div>';
+  showRichModal(html, 'narrow');
+}
+
 function renderPractice(){
   var s = state.session;
-  var m = state.mcqs.find(function(x){ return x.id === s.ids[s.index]; });
+  var isReviewing = s.viewIndex < s.index;
+  var m = state.mcqs.find(function(x){ return x.id === s.ids[s.viewIndex]; });
   if (!m) { state.view = 'summary'; return renderSummary(); }
+  var result = isReviewing ? s.results[s.viewIndex] : null;
+  var viewSelected = isReviewing ? (result ? result.selected : null) : s.selected;
+  var viewRevealed = isReviewing ? true : s.revealed;
   var pct = Math.round((s.index / s.ids.length) * 100);
 
   var html = '<div class="practice-wrap">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap;">' +
-    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
     '<button class="btn btn-ghost btn-sm" data-action="leave-practice">' + icon('chevron-left',14) + ' Back</button>' +
-    (s.undoStack && s.undoStack.length ? '<button class="undo-btn icon-inline" data-action="undo-answer">' + icon('undo',13) + ' Undo last answer</button>' : '') +
+    '<button class="btn btn-ghost btn-sm" data-action="practice-prev"' + (s.viewIndex > 0 ? '' : ' disabled') + ' title="Previous question">' + icon('chevron-left',14) + '</button>' +
+    '<button class="btn btn-ghost btn-sm" data-action="practice-next"' + (s.viewIndex < s.index ? '' : ' disabled') + ' title="Next question">' + icon('chevron-right',14) + '</button>' +
+    '<button class="btn btn-ghost btn-sm" data-action="open-question-overview" title="Question overview">' + icon('layout-grid',14) + ' Overview</button>' +
+    (!isReviewing && s.undoStack && s.undoStack.length ? '<button class="undo-btn icon-inline" data-action="undo-answer">' + icon('undo',13) + ' Undo last answer</button>' : '') +
     '</div>' +
     bookmarkButton(m) +
     '</div>';
+
+  if (isReviewing) {
+    html += '<div class="reviewing-banner">' + icon('layout-grid',14) + ' Reviewing question ' + (s.viewIndex+1) + ' of ' + s.ids.length + ' — already answered.' +
+      '<button class="link-btn" data-action="jump-to-current">Jump to current question ' + icon('chevron-right',12) + '</button></div>';
+  }
+
   var nextM = state.mcqs.find(function(x){ return x.id === s.ids[s.index+1]; });
   var nextLabel = nextM && nextM.learning ? LearningEngine.classify(nextM) : (nextM ? 'new' : null);
   html += '<div class="practice-progress"><div class="progress-track"><div class="progress-fill" style="width:' + pct + '%;"></div></div>' +
@@ -2871,7 +2935,7 @@ function renderPractice(){
     (nextLabel ? '<br>Next: ' + escapeHtml(nextLabel) : '') + '</div></div>';
 
   html += '<div class="card answer-sheet">';
-  html += '<div class="qmeta"><span class="qnum mono">Q.' + (s.index+1) + '</span><div class="qmeta-tags">' +
+  html += '<div class="qmeta"><span class="qnum mono">Q.' + (s.viewIndex+1) + '</span><div class="qmeta-tags">' +
     '<span class="source-pill" style="background:' + colorForSource(m.source) + '">' + escapeHtml(m.source) + '</span>' +
     m.tags.map(function(t){ return '<span class="tag-pill">' + escapeHtml(t) + '</span>'; }).join('') +
     '</div></div>';
@@ -2885,8 +2949,8 @@ function renderPractice(){
   }
 
   if (m.isShortAnswer) {
-    html += '<div class="short-answer-box"><textarea id="shortAnswerInput" placeholder="Type your answer, then reveal to check yourself" ' + (s.revealed ? 'disabled' : '') + '>' + (s.selected||'') + '</textarea></div>';
-    if (!s.revealed) {
+    html += '<div class="short-answer-box"><textarea id="shortAnswerInput" placeholder="Type your answer, then reveal to check yourself" ' + (viewRevealed ? 'disabled' : '') + '>' + escapeHtml(viewSelected||'') + '</textarea></div>';
+    if (!viewRevealed) {
       html += '<div class="answer-footer" style="justify-content:flex-end;"><button class="btn btn-primary" data-action="reveal-short">Reveal answer</button></div>';
     }
   } else {
@@ -2895,30 +2959,29 @@ function renderPractice(){
     }
     html += '<div class="bubbles">';
     m.options.forEach(function(opt){
-      var isSelected = s.selected && s.selected.indexOf(opt.letter) !== -1;
+      var isSelected = viewSelected && viewSelected.indexOf(opt.letter) !== -1;
       var isCorrectLetter = m.answer.indexOf(opt.letter) !== -1;
       var cls = 'bubble';
       if (isSelected) cls += ' selected';
-      if (s.revealed) {
+      if (viewRevealed) {
         cls += ' locked';
         if (isCorrectLetter) cls += ' reveal-correct';
         else if (isSelected) cls += ' reveal-wrong';
       }
-      html += '<button class="' + cls + '" ' + (s.revealed ? 'disabled' : '') + ' data-action="select-option" data-letter="' + opt.letter + '">' +
-        '<span class="bubble-mark"><svg class="bubble-ring" viewBox="0 0 30 30"><ellipse cx="15" cy="15" rx="12" ry="12" pathLength="100"></ellipse></svg>' +
-        '<span class="bubble-letter">' + opt.letter + '</span></span>' +
+      html += '<button class="' + cls + '" ' + (isReviewing || viewRevealed ? 'disabled' : '') + ' data-action="select-option" data-letter="' + opt.letter + '">' +
+        '<span class="bubble-mark"><span class="bubble-letter">' + opt.letter + '</span></span>' +
         '<span class="bubble-text">' + escapeHtml(opt.text) + '</span></button>';
     });
     html += '</div>';
-    if (!s.revealed) {
+    if (!viewRevealed) {
       html += '<div class="answer-footer" style="justify-content:flex-end;">' +
         '<button class="btn btn-primary" data-action="reveal-mcq"' + (s.selected && s.selected.length ? '' : ' disabled') + '>Check answer</button></div>';
     }
   }
 
-  if (s.revealed) {
-    var needsSelfGrade = m.isShortAnswer && s.shortAnswerCorrect === null;
-    var isCorrect = evaluateCorrect(m, s.selected);
+  if (viewRevealed) {
+    var needsSelfGrade = !isReviewing && m.isShortAnswer && s.shortAnswerCorrect === null;
+    var isCorrect = isReviewing ? (result ? result.correct : null) : evaluateCorrect(m, s.selected);
     html += '<div class="reveal-panel">';
     if (needsSelfGrade) {
       html += '<div class="reveal-verdict pending">Grade yourself</div>';
@@ -2932,7 +2995,9 @@ function renderPractice(){
       html += '<div class="view-sub" style="margin-bottom:8px;">Answer on record: ' + escapeHtml(m.answer[0]) + '</div>';
     }
     html += renderReveal(m);
-    if (needsSelfGrade) {
+    if (isReviewing) {
+      /* Nothing to submit here — movement happens via the Prev/Next/Overview controls up top. */
+    } else if (needsSelfGrade) {
       html += '<div class="view-sub" style="margin-top:14px;">Compare your answer above with the record — did you get it right?</div>';
       html += '<div class="answer-footer" style="justify-content:flex-end;gap:10px;">' +
         '<button class="btn btn-danger" data-action="self-grade" data-correct="false">' + icon('x',15) + ' I was wrong</button>' +
@@ -3003,11 +3068,11 @@ async function advanceAfterReveal(){
   if (correct === true) s.stats.correct++;
   if (correct === false) s.stats.wrong++;
 
-  s.results.push({ id: m.id, correct: correct });
+  s.results.push({ id: m.id, correct: correct, selected: s.selected });
   bumpStreak();
   await saveLibrary();
 
-  s.index++; s.selected = null; s.revealed = false; s.shortAnswerCorrect = null;
+  s.index++; s.selected = null; s.revealed = false; s.shortAnswerCorrect = null; s.viewIndex = s.index;
   if (s.index >= s.ids.length) state.view = 'summary';
   render();
 }
@@ -3021,6 +3086,7 @@ async function undoLastAnswer(){
   s.results.length = last.resultsLenBefore;
   s.stats = last.statsBefore;
   s.index = last.index;
+  s.viewIndex = s.index;
   s.selected = last.selected;
   s.revealed = true;
   s.shortAnswerCorrect = null; /* re-grade on the way back in, rather than trusting a stale self-grade */
@@ -3541,9 +3607,32 @@ async function onClick(e){
 
   if (action === 'undo-answer') { undoLastAnswer(); return; }
 
+  if (action === 'practice-prev') {
+    if (state.session && state.session.viewIndex > 0) { state.session.viewIndex--; render(); }
+    return;
+  }
+  if (action === 'practice-next') {
+    if (state.session && state.session.viewIndex < state.session.index) { state.session.viewIndex++; render(); }
+    return;
+  }
+  if (action === 'jump-to-current') {
+    if (state.session) { state.session.viewIndex = state.session.index; render(); }
+    return;
+  }
+  if (action === 'jump-to-question') {
+    var jumpIdx = parseInt(el.getAttribute('data-index'), 10);
+    if (state.session && jumpIdx >= 0 && jumpIdx <= state.session.index) {
+      state.session.viewIndex = jumpIdx;
+      closeModal();
+      render();
+    }
+    return;
+  }
+  if (action === 'open-question-overview') { openQuestionOverview(); return; }
+
   if (action === 'bookmark-current') {
     var s2 = state.session;
-    var m2 = state.mcqs.find(function(x){ return x.id === s2.ids[s2.index]; });
+    var m2 = state.mcqs.find(function(x){ return x.id === s2.ids[s2.viewIndex]; });
     m2.flagged = !m2.flagged;
     await saveLibrary();
     render();
@@ -3719,8 +3808,20 @@ document.addEventListener('keydown', function(e){
   var active=document.activeElement;
   var typing=active && (active.tagName==='INPUT'||active.tagName==='TEXTAREA'||active.tagName==='SELECT'||active.isContentEditable);
   if(typing) return;
-  var s=state.session, m=state.mcqs.find(function(x){return x.id===s.ids[s.index];});
+  var s=state.session;
+  var isReviewing = s.viewIndex < s.index;
+  var m=state.mcqs.find(function(x){return x.id===s.ids[s.viewIndex];}); /* the question actually on screen, not necessarily the frontier */
   if(!m) return;
+
+  /* Left/Right move between questions regardless of review state — mirrors the
+     Prev/Next buttons above the question. */
+  if(e.key==='ArrowLeft'){ e.preventDefault(); if(s.viewIndex>0){ s.viewIndex--; render(); } return; }
+  if(e.key==='ArrowRight'){ e.preventDefault(); if(s.viewIndex<s.index){ s.viewIndex++; render(); } return; }
+
+  /* Everything below mutates answer state, so it only applies to the current frontier
+     question — while reviewing a past one, selecting/revealing/advancing would
+     silently act on a different (frontier) question than what's on screen otherwise. */
+  if(isReviewing) return;
 
   /* Number keys 1-9 select the corresponding option (pre-reveal only) */
   if(/^[1-9]$/.test(e.key) && !s.revealed && !m.isShortAnswer){
