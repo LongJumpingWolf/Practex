@@ -171,10 +171,13 @@ input,textarea,select{font-family:inherit;color:inherit;}
 .sidebar-gear-btn{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);color:#EAF0F5;font-size:15px;flex-shrink:0;transition:background .15s,transform .2s;}
 .sidebar-gear-btn:hover{background:rgba(255,255,255,0.2);transform:rotate(20deg);}
 
-.sync-status-pill{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:6px 10px;border-radius:8px;color:#EAF0F5;}
+.sync-status-pill{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:6px 10px;border-radius:8px;color:#EAF0F5;cursor:pointer;}
+.sync-status-pill:hover{background:rgba(255,255,255,0.18);}
 .sync-status-pill.offline{background:rgba(178,58,46,0.22);}
 .sync-status-pill.syncing{background:rgba(255,255,255,0.12);}
 .sync-status-pill.syncing svg{animation:sync-spin .8s linear infinite;}
+.sync-status-pill.synced{background:rgba(47,110,69,0.18);}
+.sync-status-pill.unsynced{background:rgba(199,123,46,0.25);}
 @keyframes sync-spin{to{transform:rotate(360deg);}}
 
 /* Settings modal */
@@ -1133,14 +1136,37 @@ function updateSyncIndicator(){
   if (!el) return; // not on a screen that shows it right now — nothing to update
   el.outerHTML = renderSyncStatusPill();
 }
+/* Always visible when signed in — not hidden-by-default. A status indicator that
+   disappears the moment everything's fine is easy to mistake for "not there at all";
+   this always shows something, and doubles as a manual "sync now" button. */
 function renderSyncStatusPill(){
-  if (!state.currentUser) return '';
+  if (!state.currentUser) return '<div id="syncStatusPill"></div>';
   var offline = typeof navigator !== 'undefined' && navigator.onLine === false;
-  if (!offline && !state.hasUnsyncedChanges) return '<div id="syncStatusPill"></div>'; /* nothing to report — stay quiet, this is the normal state */
-  if (offline) {
-    return '<div id="syncStatusPill" class="sync-status-pill offline">' + icon('wifi-off',13) + ' Offline — saved locally, will sync when you\'re back</div>';
+  var cls, label, iconName;
+  if (syncInFlight) { cls = 'syncing'; label = 'Syncing…'; iconName = 'refresh-cw'; }
+  else if (offline) { cls = 'offline'; label = 'Offline — saved locally'; iconName = 'wifi-off'; }
+  else if (state.hasUnsyncedChanges) { cls = 'unsynced'; label = 'Unsynced — tap to retry'; iconName = 'refresh-cw'; }
+  else { cls = 'synced'; label = 'Synced'; iconName = 'check-circle'; }
+  return '<div id="syncStatusPill" class="sync-status-pill ' + cls + '" data-action="manual-sync" role="button" tabindex="0" title="Click to sync now">' +
+    icon(iconName, 13) + ' ' + label + '</div>';
+}
+async function manualSync(){
+  if (!state.currentUser || !supabaseClient) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    showToast('You\'re offline — Practex will sync automatically once you\'re back.');
+    return;
   }
-  return '<div id="syncStatusPill" class="sync-status-pill syncing">' + icon('refresh-cw',13) + ' Syncing…</div>';
+  if (syncInFlight) return;
+  syncInFlight = true;
+  updateSyncIndicator();
+  try {
+    await saveLibrary();
+    await saveUserSettings();
+    showToast(state.hasUnsyncedChanges ? 'Could not sync — check your connection and try again.' : 'Synced.');
+  } finally {
+    syncInFlight = false;
+    updateSyncIndicator();
+  }
 }
 /* Upserts the current in-memory library in one batched request (Postgres upsert
    accepts an array, so this is a single round trip regardless of library size).
@@ -1410,9 +1436,14 @@ async function importLibraryFromFile(file){
       });
     }
     render();
-    saveLibrary();
-    saveSources();
-    showToast(added + ' question' + (added===1?'':'s') + ' imported' + (incoming.length-added ? ' (' + (incoming.length-added) + ' duplicates skipped)' : '') + '.');
+    showToast('Saving ' + added + ' question' + (added===1?'':'s') + '…');
+    await saveLibrary(); /* awaited — same reasoning as confirm-import: this is a bulk operation, not a frequent tap, worth the wait for correctness */
+    await saveSources();
+    if (state.hasUnsyncedChanges) {
+      showToast(added + ' question' + (added===1?'':'s') + ' saved locally — will sync once you\'re back online.');
+    } else {
+      showToast(added + ' question' + (added===1?'':'s') + ' imported' + (incoming.length-added ? ' (' + (incoming.length-added) + ' duplicates skipped)' : '') + '.');
+    }
   } catch(e) {
     showToast('Could not read that file — is it a valid Practex export?');
   }
@@ -1759,8 +1790,8 @@ async function saveEditMcq(id){
   if (tagsEl) m.tags = tagsEl.value.split(',').map(function(s){return s.trim();}).filter(Boolean);
   closeModal();
   render();
+  await saveLibrary(); /* awaited — same reasoning as the deck operations above */
   showToast('Question updated.');
-  saveLibrary();
 }
 
 function currentSessionSnapshot(){ return state.session ? JSON.parse(JSON.stringify(state.session)) : null; }
@@ -3498,6 +3529,7 @@ async function onClick(e){
   var action = el.getAttribute('data-action');
 
   if (action === 'toggle-sidebar') { state.sidebarOpen = !state.sidebarOpen; render(); return; }
+  if (action === 'manual-sync') { manualSync(); return; }
   if (action === 'set-view') { if (guardNavigation(action, el)) return; state.view = el.getAttribute('data-view'); state.sidebarOpen = false; render(); return; }
   if (action === 'open-dashboard') { if (guardNavigation(action, el)) return; state.view = 'dashboard'; state.sidebarOpen = false; render(); return; }
   if (action === 'toggle-fsrs-mode') {
@@ -3750,35 +3782,53 @@ async function onClick(e){
     });
     state.mcqs = state.mcqs.concat(pending);
     document.getElementById('ingestArea').value = '';
-    showToast(pending.length + ' questions logged to your library.');
     state.view = 'browse';
+    showToast('Saving ' + pending.length + ' question' + (pending.length===1?'':'s') + '…');
     render();
-    saveLibrary();
-    saveSources();
+    /* Deliberately AWAITED, not fire-and-forget — this is exactly the operation that
+       broke before: showing "success" and letting you navigate/reload away while the
+       actual Supabase write was still in flight meant a reload could abort it before
+       it ever reached the server, silently losing the whole import. Bulk import is
+       rare enough that the extra wait is worth the correctness; frequent taps
+       (Next question, Bookmark, etc.) stay optimistic on purpose. */
+    await saveLibrary();
+    await saveSources();
+    if (state.hasUnsyncedChanges) {
+      showToast(pending.length + ' question' + (pending.length===1?'':'s') + ' saved locally — will sync once you\'re back online.');
+    } else {
+      showToast(pending.length + ' question' + (pending.length===1?'':'s') + ' imported and saved.');
+    }
     return;
   }
 
   if (action === 'delete-source') {
     var srcName = el.getAttribute('data-source');
     if (!confirm('Delete "' + srcName + '" and all its MCQs? This cannot be undone.')) return;
+    var removedSrcIds = state.mcqs.filter(function(m){ return m.source === srcName; }).map(function(m){ return m.id; });
     state.mcqs = state.mcqs.filter(function(m){ return m.source !== srcName; });
     delete state.sources[srcName];
-    showToast('Source deleted.');
+    showToast('Deleting source…');
     render();
-    saveLibrary();
-    saveSources();
+    /* Awaited, and an explicit delete rather than an upsert of what's left — upsert
+       only ever updates/inserts rows present in the payload, it never removes rows
+       that are simply missing from it, so this always needed a real DELETE call. */
+    await deleteMcqRows(removedSrcIds);
+    await saveSources();
+    showToast('Source deleted.');
     return;
   }
 
   if (action === 'clear-all') {
     if (!confirm('Delete your entire Practex library? This cannot be undone.')) return;
+    var allMcqIds = state.mcqs.map(function(m){ return m.id; });
     state.mcqs = [];
     state.sources = {};
     state.selectedPath = null;
-    showToast('Library cleared.');
+    showToast('Clearing your library…');
     render();
-    saveLibrary();
-    saveSources();
+    await deleteMcqRows(allMcqIds); /* same reasoning as delete-source above — upsert can't remove rows */
+    await saveSources();
+    showToast('Library cleared.');
     return;
   }
 
@@ -3822,8 +3872,13 @@ async function onClick(e){
     var rInput = document.getElementById('renameDeckInput');
     var rNewName = rInput ? rInput.value : '';
     if (renameDeck(rPath.split('␟'), rNewName)) {
-      closeModal(); render(); showToast('Renamed to "' + rNewName.trim() + '".');
-      saveLibrary(); saveSleepingSubjects();
+      closeModal(); render();
+      /* Awaited — a rename/move/copy/delete is rare and high-stakes enough that
+         showing "done" and letting a reload interrupt the actual save (aborting it
+         mid-flight, same failure mode that lost imports) is worse than the extra
+         half-second wait. Frequent taps during practice stay optimistic on purpose. */
+      await saveLibrary(); await saveSleepingSubjects();
+      showToast('Renamed to "' + rNewName.trim() + '".');
     } else {
       showToast('Enter a name first.');
     }
@@ -3841,14 +3896,16 @@ async function onClick(e){
     var movedName = mvArr[mvArr.length-1];
     if (mvDest === '__LIBRARY_ROOT__') {
       moveDeckUnder(mvArr, []);
-      closeModal(); render(); showToast('"' + movedName + '" is now a top-level subject in the Library.');
-      saveLibrary();
+      closeModal(); render();
+      await saveLibrary();
+      showToast('"' + movedName + '" is now a top-level subject in the Library.');
       return;
     }
     if (isPathWithinOrEqual([mvDest], mvArr)) { showToast('Can\'t move a deck into itself.'); return; }
     moveDeckUnder(mvArr, [mvDest]);
-    closeModal(); render(); showToast('Moved "' + movedName + '" under "' + mvDest + '".');
-    saveLibrary();
+    closeModal(); render();
+    await saveLibrary();
+    showToast('Moved "' + movedName + '" under "' + mvDest + '".');
     return;
   }
 
@@ -3856,8 +3913,8 @@ async function onClick(e){
     var cpPath = el.getAttribute('data-path');
     var cpCount = duplicateDeck(cpPath.split('␟'));
     closeModal(); render();
+    await saveLibrary();
     showToast('Copied — ' + cpCount + ' question' + (cpCount===1?'':'s') + ' duplicated as "' + cpPath.split('␟').pop() + ' (copy)".');
-    saveLibrary();
     return;
   }
 
@@ -3884,8 +3941,8 @@ async function onClick(e){
       moveDeckUnder(state.clipboardNode.path, []);
       state.clipboardNode = null;
       render();
+      await saveLibrary();
       showToast('"' + promotedName + '" moved to the Library root as a top-level subject.');
-      saveLibrary();
       return;
     }
     if (isPathWithinOrEqual(destPathArr, state.clipboardNode.path)) {
@@ -3898,8 +3955,8 @@ async function onClick(e){
     var pastedName = state.clipboardNode.name;
     state.clipboardNode = null;
     render();
+    await saveLibrary();
     showToast('"' + pastedName + '" moved here.');
-    saveLibrary();
     return;
   }
 
