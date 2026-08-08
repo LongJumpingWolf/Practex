@@ -178,6 +178,21 @@ input,textarea,select{font-family:inherit;color:inherit;}
 .sync-status-pill.syncing svg{animation:sync-spin .8s linear infinite;}
 .sync-status-pill.synced{background:transparent;color:rgba(234,240,245,0.55);} /* nothing to report — quiet on purpose, no colored badge needed for "all fine" */
 .sync-status-pill.unsynced{background:rgba(199,123,46,0.25);color:#EAF0F5;}
+/* The sidebar copy above is styled for the sidebar's own dark background.
+   This copy lives in the mobile topbar, which sits on the light main
+   content background instead — same states, same tokens the rest of the
+   light-themed UI already uses (var(--pen-red)/--pen-amber etc.), so it
+   also adapts automatically if dark mode redefines these same variables,
+   same as everything else on the page already does. */
+.mobile-topbar .sync-status-pill{
+  background:var(--card); color:var(--ink); border:1px solid var(--rule-strong);
+  flex:1; justify-content:center;
+}
+.mobile-topbar .sync-status-pill:hover{ border-color:var(--ink); background:var(--card); }
+.mobile-topbar .sync-status-pill.offline{ background:var(--pen-red-bg); color:var(--pen-red); border-color:var(--pen-red); }
+.mobile-topbar .sync-status-pill.syncing{ color:var(--ink-soft); }
+.mobile-topbar .sync-status-pill.synced{ background:var(--card); color:var(--ink-soft); }
+.mobile-topbar .sync-status-pill.unsynced{ background:var(--pen-amber-bg); color:var(--pen-amber); border-color:var(--pen-amber); }
 @keyframes sync-spin{to{transform:rotate(360deg);}}
 
 /* Settings modal */
@@ -1149,25 +1164,32 @@ function autoSync(){
   retryUnsyncedChangesIfAny();
 }
 
-/* Re-renders just the small status pill in the sidebar rather than the whole
-   app — cheap, and safe to call from anywhere including mid-network-request. */
+/* Re-renders both copies of the small status pill — one lives in the
+   sidebar (always visible on desktop, where the sidebar stays open),
+   the other in the always-visible mobile topbar (the sidebar itself is
+   a collapsible drawer on mobile, hidden by default — without a second
+   copy here, mobile users had no way to see sync/offline status without
+   first opening the drawer). Cheap either way, and safe to call from
+   anywhere including mid-network-request. */
 function updateSyncIndicator(){
-  var el = document.getElementById('syncStatusPill');
-  if (!el) return; // not on a screen that shows it right now — nothing to update
-  el.outerHTML = renderSyncStatusPill();
+  ['syncStatusPill', 'syncStatusPillMobile'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (el) el.outerHTML = renderSyncStatusPill(id);
+  });
 }
 /* Always visible when signed in — not hidden-by-default. A status indicator that
    disappears the moment everything's fine is easy to mistake for "not there at all";
    this always shows something, and doubles as a manual "sync now" button. */
-function renderSyncStatusPill(){
-  if (!state.currentUser) return '<div id="syncStatusPill"></div>';
+function renderSyncStatusPill(id){
+  id = id || 'syncStatusPill';
+  if (!state.currentUser) return '<div id="' + id + '"></div>';
   var offline = typeof navigator !== 'undefined' && navigator.onLine === false;
   var cls, label, iconName;
   if (syncInFlight) { cls = 'syncing'; label = 'Syncing…'; iconName = 'refresh-cw'; }
   else if (offline) { cls = 'offline'; label = 'Offline — saved locally'; iconName = 'wifi-off'; }
   else if (state.hasUnsyncedChanges) { cls = 'unsynced'; label = 'Unsynced — tap to retry'; iconName = 'refresh-cw'; }
   else { cls = 'synced'; label = 'Synced'; iconName = 'check-circle'; }
-  return '<div id="syncStatusPill" class="sync-status-pill ' + cls + '" data-action="manual-sync" role="button" tabindex="0" title="Click to sync now">' +
+  return '<div id="' + id + '" class="sync-status-pill ' + cls + '" data-action="manual-sync" role="button" tabindex="0" title="Click to sync now">' +
     icon(iconName, 13) + ' ' + label + '</div>';
 }
 /* Shared core for both the manual sync button and the automatic
@@ -2316,7 +2338,7 @@ function render(){
     '<main class="main">' +
       '<div class="mobile-topbar"><button class="btn btn-sm" data-action="toggle-sidebar">' +
         (state.sidebarOpen ? icon('x',15) + ' Close' : icon('menu',15) + ' Menu') +
-      '</button></div>' +
+      '</button>' + renderSyncStatusPill('syncStatusPillMobile') + '</div>' +
       renderMain() +
     '</main>';
   bindEvents();
