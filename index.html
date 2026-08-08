@@ -1431,6 +1431,7 @@ async function handleImportFileSelected(file){
   }
 }
 function openImportChoiceModal(newCount){
+  state.activeModal = 'import-choice'; /* explicit, not left as whatever was open before (e.g. 'settings') — otherwise a stray render() elsewhere could re-render the PREVIOUS modal's content over this one, since render() re-renders whatever state.activeModal still points at */
   var html = '<h3>Import ' + newCount + ' question' + (newCount===1?'':'s') + '</h3>';
   html += '<p>This file also carries each question\'s answer history and FSRS scheduling from whenever it was exported. What should happen to that?</p>';
   html += '<div class="deck-menu" style="padding:0;">' +
@@ -1598,9 +1599,8 @@ function renderSettingsModalContent(){
   html += '<div class="settings-section"><h4>Your data</h4>' +
     '<div class="data-btn-row">' +
       '<button class="data-btn primary" data-action="export-library">' + icon('download',15) + ' Export library</button>' +
-      '<button class="data-btn" data-action="import-library">' + icon('upload',15) + ' Import library</button>' +
     '</div>' +
-    '<div class="view-sub" style="margin-top:8px;margin-bottom:0;">Everything lives in this browser only — export regularly so a cache clear can\'t wipe your library.</div>' +
+    '<div class="view-sub" style="margin-top:8px;margin-bottom:0;">Your library syncs to your account automatically — export is just for keeping an offline backup, or moving questions somewhere else on purpose. Importing a backup file now lives on the Add Source screen.</div>' +
     '</div>';
 
   html += '<div class="settings-section"><h4>Progress</h4>' +
@@ -2838,10 +2838,16 @@ function renderAddSource(){
     '<div id="parseReport"></div>' +
     '</div>';
 
+  html += '<div class="card section-block">' +
+    '<h3>3. Restore from a backup file (optional)</h3>' +
+    '<div class="view-sub" style="margin-bottom:12px;">Import a <code class="mono">.json</code> file you previously exported (Settings → Export library). You\'ll be asked whether to keep each question\'s existing progress or start it fresh, before anything\'s added.</div>' +
+    '<div class="action-row"><button class="btn btn-ghost" data-action="import-library">' + icon('upload',14) + ' Choose a library file…</button></div>' +
+    '</div>';
+
   if (state.mcqs.length) {
     var sourceOptions = Object.keys(state.sources).map(function(s){ return '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + '</option>'; }).join('');
     html += '<div class="card section-block">' +
-      '<h3>3. Bulk-attach images (optional)</h3>' +
+      '<h3>4. Bulk-attach images (optional)</h3>' +
       '<div class="view-sub" style="margin-bottom:12px;">Every question has a unique ID. Download the ID sheet below, name your image ' +
       'files to match — <code class="mono">&lt;id&gt;_q.jpg</code> for an image shown alongside the question, ' +
       '<code class="mono">&lt;id&gt;_a.jpg</code> for one shown alongside the answer/explanation — zip them up, and upload the zip here. ' +
