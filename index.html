@@ -1332,11 +1332,23 @@ async function purgeOrphanedImageHashes(candidateHashes){
   }
 }
 function exportLibrary(){
+  exportMcqSubset(state.mcqs, 'library');
+}
+/* Reused by both the Settings "export everything" button and the Library browser's
+   "Export this view" action — the export itself doesn't need to know or care whether
+   it's the whole library or something scoped by folder/filters, it just needs the
+   final list of questions to write out. Sources are trimmed to only the ones actually
+   represented in this subset, so a scoped export doesn't drag in irrelevant source
+   metadata for content that isn't included. */
+function exportMcqSubset(mcqs, filenameLabel){
+  if (!mcqs.length) { showToast('Nothing to export.'); return; }
+  var relevantSources = {};
+  mcqs.forEach(function(m){ if (state.sources[m.source]) relevantSources[m.source] = state.sources[m.source]; });
   var payload = {
     exportedAt: Date.now(),
     version: 1,
-    mcqs: state.mcqs,
-    sources: state.sources,
+    mcqs: mcqs,
+    sources: relevantSources,
     streak: state.streak
   };
   var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -1344,12 +1356,12 @@ function exportLibrary(){
   var a = document.createElement('a');
   var stamp = new Date().toISOString().slice(0,10);
   a.href = url;
-  a.download = 'practex-library-' + stamp + '.json';
+  a.download = 'practex-' + (filenameLabel || 'export') + '-' + stamp + '.json';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
-  showToast('Library exported.');
+  showToast(mcqs.length + ' question' + (mcqs.length===1?'':'s') + ' exported.');
 }
 
 /* ---------------- Bulk image ZIP import ---------------- */
@@ -1771,7 +1783,7 @@ function renderSettingsModalContent(){
     '<div class="data-btn-row">' +
       '<button class="data-btn primary" data-action="export-library">' + icon('download',15) + ' Export library</button>' +
     '</div>' +
-    '<div class="view-sub" style="margin-top:8px;margin-bottom:0;">Your library syncs to your account automatically — export is just for keeping an offline backup, or moving questions somewhere else on purpose. Importing a backup file now lives on the Add Source screen.</div>' +
+    '<div class="view-sub" style="margin-top:8px;margin-bottom:0;">Your library syncs to your account automatically — export is just for keeping an offline backup, or moving questions somewhere else on purpose. This exports everything; for just one subject or filtered set, use "Export this view" in the Library screen instead. Importing a backup file now lives on the Add Source screen.</div>' +
     '</div>';
 
   html += '<div class="settings-section"><h4>Progress</h4>' +
@@ -2852,7 +2864,8 @@ function renderQuestionList(tree, node, searchAll){
   html += renderFilters();
 
   html += '<div class="action-row">' +
-    '<button class="btn btn-primary" data-action="start-practice"' + (practiceCount ? '' : ' disabled') + '>Start practice (' + practiceCount + ')</button>';
+    '<button class="btn btn-primary" data-action="start-practice"' + (practiceCount ? '' : ' disabled') + '>Start practice (' + practiceCount + ')</button>' +
+    '<button class="btn btn-ghost" data-action="export-current-view"' + (list.length ? '' : ' disabled') + '>' + icon('download',14) + ' Export this view (' + list.length + ')</button>';
   html += '</div>';
 
   if (!state.mcqs.length) {
@@ -3927,6 +3940,20 @@ async function onClick(e){
     ids = ids.filter(function(id){ return byId[id] && !byId[id].asleep; }); /* individually-slept questions are excluded everywhere, not just from the root */
     var filtered = ids.filter(function(id){ return byId[id] && passesFilters(byId[id]); });
     requestStartPractice(filtered, state.learningMode.enabled);
+    return;
+  }
+  if (action === 'export-current-view') {
+    /* Deliberately mirrors renderQuestionList()'s own list computation exactly (not
+       start-practice's, which is close but doesn't account for an active search) —
+       the whole point is "export exactly what's on screen right now". */
+    var expSearchAll = !!(state.filters.search || '').trim();
+    var expTree = buildTree();
+    var expNode = state.selectedPath ? getNodeByPath(expTree, state.selectedPath) : null;
+    var expIds = (expSearchAll || !expNode) ? state.mcqs.map(function(m){ return m.id; }) : collectIds(expNode);
+    var expById = {}; state.mcqs.forEach(function(m){ expById[m.id] = m; });
+    var expList = expIds.map(function(id){ return expById[id]; }).filter(Boolean).filter(passesFilters);
+    var expLabel = expSearchAll ? 'search-results' : (state.selectedPath ? state.selectedPath[state.selectedPath.length-1].toLowerCase().replace(/[^a-z0-9]+/g,'-') : 'all-subjects');
+    exportMcqSubset(expList, expLabel);
     return;
   }
 
