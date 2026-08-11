@@ -3403,6 +3403,8 @@ function renderExplanation(mcq){
 
 function renderReveal(mcq){
   const state=LearningEngine.classify(mcq);
+  const hist=mcq.learning.history||[];
+  const justAnsweredCorrectly=hist.length && hist[hist.length-1].correct===true;
   let banner="";
   switch(state){
     case "new":
@@ -3413,7 +3415,18 @@ function renderReveal(mcq){
       break;
     case "misconception":
       var trap=getMostRepeatedWrong(mcq);
-      banner='<div class="learning-banner misconception">Recurring Misconception<br>You\'ve repeatedly selected <strong>' + escapeHtml(trap) + '</strong><br>Review why this option is incorrect.</div>';
+      if(justAnsweredCorrectly){
+        /* classify() looks at the whole recent pattern, not just this attempt — so it's
+           entirely possible to land on "misconception" right after answering correctly
+           (e.g. 2 of your last 3 attempts leaned on the same wrong option, but this one
+           landed). The underlying signal is still worth keeping — it's still scheduled
+           to come back sooner than a clean pass would warrant — but saying "you've
+           repeatedly selected X" in the same breath as "Correct" reads as a flat
+           contradiction, so the wording needs to actually reflect what just happened. */
+        banner='<div class="learning-banner misconception">Good, But Keep An Eye On This<br>Right this time — but you\'ve often picked <strong>' + escapeHtml(trap) + '</strong> before, so it\'s scheduled to come back sooner than usual.</div>';
+      } else {
+        banner='<div class="learning-banner misconception">Recurring Misconception<br>You\'ve repeatedly selected <strong>' + escapeHtml(trap) + '</strong><br>Review why this option is incorrect.</div>';
+      }
       break;
     case "learning":
       banner='<div class="learning-banner learning">Recovering<br>You\'re beginning to answer this correctly.</div>';
