@@ -178,21 +178,6 @@ input,textarea,select{font-family:inherit;color:inherit;}
 .sync-status-pill.syncing svg{animation:sync-spin .8s linear infinite;}
 .sync-status-pill.synced{background:transparent;color:rgba(234,240,245,0.55);} /* nothing to report — quiet on purpose, no colored badge needed for "all fine" */
 .sync-status-pill.unsynced{background:rgba(199,123,46,0.25);color:#EAF0F5;}
-/* The sidebar copy above is styled for the sidebar's own dark background.
-   This copy lives in the mobile topbar, which sits on the light main
-   content background instead — same states, same tokens the rest of the
-   light-themed UI already uses (var(--pen-red)/--pen-amber etc.), so it
-   also adapts automatically if dark mode redefines these same variables,
-   same as everything else on the page already does. */
-.mobile-topbar .sync-status-pill{
-  background:var(--card); color:var(--ink); border:1px solid var(--rule-strong);
-  flex:1; justify-content:center;
-}
-.mobile-topbar .sync-status-pill:hover{ border-color:var(--ink); background:var(--card); }
-.mobile-topbar .sync-status-pill.offline{ background:var(--pen-red-bg); color:var(--pen-red); border-color:var(--pen-red); }
-.mobile-topbar .sync-status-pill.syncing{ color:var(--ink-soft); }
-.mobile-topbar .sync-status-pill.synced{ background:var(--card); color:var(--ink-soft); }
-.mobile-topbar .sync-status-pill.unsynced{ background:var(--pen-amber-bg); color:var(--pen-amber); border-color:var(--pen-amber); }
 @keyframes sync-spin{to{transform:rotate(360deg);}}
 
 /* Settings modal */
@@ -574,6 +559,18 @@ textarea.ingest-area{
 .reveal-explain{font-size:13.5px;line-height:1.65;color:var(--ink-soft);}
 .reveal-explain p{margin-bottom:6px;}
 
+/* Notes — deliberately visually distinct from the answer key itself: tinted like a
+   sticky note, so there's never any confusion between "what the source says" and
+   "what I wrote myself". */
+.notes-section{margin-top:16px;padding-top:14px;border-top:1px dashed var(--rule-strong);}
+.notes-header{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:700;color:var(--ink-soft);margin-bottom:8px;}
+.notes-header .link-btn{font-size:12.5px;font-weight:600;}
+.note-entry{background:var(--pen-yellow-bg);border:1px solid #D6A900;border-radius:8px;padding:10px 12px;margin-bottom:8px;}
+.note-entry:last-child{margin-bottom:0;}
+.note-entry-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.note-entry-date{font-size:10.5px;color:var(--ink-faint);font-weight:600;}
+.note-entry-text{font-size:13px;line-height:1.55;color:var(--ink);}
+
 .learning-banner{padding:18px;border-radius:12px;margin-bottom:18px;font-size:15px;line-height:1.6;color:var(--ink);}
 .learning-banner.new{background:var(--pen-green-bg);border-left:5px solid var(--pen-green);}
 .learning-banner.noconcept{background:var(--pen-yellow-bg);border-left:5px solid var(--highlighter);}
@@ -734,7 +731,8 @@ var state = {
   zipImportJob: null, /* {active, processed, total, attached, notFound, skippedNames} — survives navigating away mid-import */
   hasUnsyncedChanges: false, /* true whenever a save to Supabase has failed and hasn't been confirmed since — drives the retry loop and the sync status pill */
   lastSaveHadPermanentConflict: false, /* true right after a save fails specifically due to an ownership conflict (RLS) — a permanent failure, not something the retry loop should keep hammering */
-  pendingImportPayload: null /* a parsed JSON import file, waiting on the user to choose keep-progress vs start-fresh before it actually gets applied */
+  pendingImportPayload: null, /* a parsed JSON import file, waiting on the user to choose keep-progress vs start-fresh before it actually gets applied */
+  pendingNoteDraft: null /* {mcqId, images} while the Add Note modal is open, before it's actually saved onto the question */
 };
 
 /* ================= Local-first data mirror =================
@@ -990,6 +988,7 @@ var ICON_PATHS = {
   'refresh-cw': '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   'layout-grid': '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
   home: '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  notes: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   bookmark: '<path d="M6 3h12v18l-6-4-6 4V3z"/>',
   copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   scissors: '<circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/>',
@@ -1143,11 +1142,12 @@ var lastAutoSyncAt = 0;
 var AUTO_SYNC_MIN_INTERVAL_MS = 15000; // throttle — don't hammer retries more than once per 15s
 
 async function retryUnsyncedChangesIfAny(){
-  if (!state.currentUser || !supabaseClient || syncInFlight) return;
+  if (!state.hasUnsyncedChanges || !state.currentUser || !supabaseClient || syncInFlight) return;
   syncInFlight = true;
   updateSyncIndicator();
   try {
-    await doFullSync();
+    await saveLibrary();
+    await saveUserSettings();
   } finally {
     syncInFlight = false;
     updateSyncIndicator();
@@ -1157,83 +1157,32 @@ setInterval(retryUnsyncedChangesIfAny, 30000);
 
 function autoSync(){
   if (!state.currentUser) return;
-  if (state.view === 'practice' && state.session) return; // don't replace state.mcqs out from under an active practice session mid-question
   var now = Date.now();
   if (now - lastAutoSyncAt < AUTO_SYNC_MIN_INTERVAL_MS) return;
   lastAutoSyncAt = now;
   retryUnsyncedChangesIfAny();
 }
 
-/* Re-renders both copies of the small status pill — one lives in the
-   sidebar (always visible on desktop, where the sidebar stays open),
-   the other in the always-visible mobile topbar (the sidebar itself is
-   a collapsible drawer on mobile, hidden by default — without a second
-   copy here, mobile users had no way to see sync/offline status without
-   first opening the drawer). Cheap either way, and safe to call from
-   anywhere including mid-network-request. */
+/* Re-renders just the small status pill in the sidebar rather than the whole
+   app — cheap, and safe to call from anywhere including mid-network-request. */
 function updateSyncIndicator(){
-  ['syncStatusPill', 'syncStatusPillMobile'].forEach(function(id){
-    var el = document.getElementById(id);
-    if (el) el.outerHTML = renderSyncStatusPill(id);
-  });
+  var el = document.getElementById('syncStatusPill');
+  if (!el) return; // not on a screen that shows it right now — nothing to update
+  el.outerHTML = renderSyncStatusPill();
 }
 /* Always visible when signed in — not hidden-by-default. A status indicator that
    disappears the moment everything's fine is easy to mistake for "not there at all";
    this always shows something, and doubles as a manual "sync now" button. */
-function renderSyncStatusPill(id){
-  id = id || 'syncStatusPill';
-  if (!state.currentUser) return '<div id="' + id + '"></div>';
+function renderSyncStatusPill(){
+  if (!state.currentUser) return '<div id="syncStatusPill"></div>';
   var offline = typeof navigator !== 'undefined' && navigator.onLine === false;
   var cls, label, iconName;
   if (syncInFlight) { cls = 'syncing'; label = 'Syncing…'; iconName = 'refresh-cw'; }
   else if (offline) { cls = 'offline'; label = 'Offline — saved locally'; iconName = 'wifi-off'; }
   else if (state.hasUnsyncedChanges) { cls = 'unsynced'; label = 'Unsynced — tap to retry'; iconName = 'refresh-cw'; }
   else { cls = 'synced'; label = 'Synced'; iconName = 'check-circle'; }
-  return '<div id="' + id + '" class="sync-status-pill ' + cls + '" data-action="manual-sync" role="button" tabindex="0" title="Click to sync now">' +
+  return '<div id="syncStatusPill" class="sync-status-pill ' + cls + '" data-action="manual-sync" role="button" tabindex="0" title="Click to sync now">' +
     icon(iconName, 13) + ' ' + label + '</div>';
-}
-/* Shared core for both the manual sync button and the automatic
-   retry/sync path — used to be two separate, independently-maintained
-   implementations (manualSync() only ever pushed, same as the old
-   retryUnsyncedChangesIfAny()), which is exactly how something like this
-   quietly drifts apart over time. One implementation now; the two
-   callers below just differ in whether they show toast feedback. */
-/* Tracks exactly WHICH questions have an unconfirmed local edit, not just
-   whether any exist. This is what the retry/reconnect path actually
-   needs: pushing "everything" as a safety-net fallback is precisely
-   what caused real, reproduced data loss — a device that was offline
-   for a while has a stale local copy of everything it didn't personally
-   edit, and a blanket push on reconnect would overwrite anything another
-   device had already pushed in the meantime with that stale copy. With
-   specific ids tracked, reconnecting only ever re-pushes what THIS
-   device actually changed, never anything it merely still remembers. */
-var unsyncedQuestionIds = {};
-
-async function doFullSync(){
-  if (state.view === 'practice' && state.session) return; // never replace state.mcqs mid-question, regardless of which caller triggered this (manual, focus/visibility/online, or the 30s timer)
-  if (state.hasUnsyncedChanges) {
-    // Push first — a pull replaces in-memory state with whatever the
-    // cloud returns, so pulling before an unsaved edit lands would
-    // destroy it. Only the SPECIFIC ids this device actually has pending
-    // — never a bare saveLibrary(), which falls back to pushing every
-    // question, stale copies included.
-    var idsToRetry = Object.keys(unsyncedQuestionIds);
-    if (idsToRetry.length) await saveLibrary(idsToRetry);
-    await saveUserSettings();
-    await loadLibrary();
-  } else {
-    // Nothing of our own to protect — pull first. This is the actual
-    // core fix from earlier: previously nothing in this app ever pulled
-    // fresh data after the initial page load, on any trigger, manual or
-    // automatic — a change made on another device would simply never
-    // appear here without a full page reload, no matter how long you
-    // waited. No push needed afterward here — a fresh pull already
-    // reflects the cloud's current state, so there's nothing to
-    // "reconfirm", and doing one anyway would just be the same stale-
-    // overwrite risk for no benefit.
-    await loadLibrary();
-  }
-  render();
 }
 async function manualSync(){
   if (!state.currentUser || !supabaseClient) return;
@@ -1245,45 +1194,29 @@ async function manualSync(){
   syncInFlight = true;
   updateSyncIndicator();
   try {
-    await doFullSync();
+    await saveLibrary();
+    await saveUserSettings();
     showToast(state.hasUnsyncedChanges ? 'Could not sync — check your connection and try again.' : 'Synced.');
   } finally {
     syncInFlight = false;
     updateSyncIndicator();
   }
 }
-/* Upserts the current in-memory library. Pass an array of specific
-   changed ids to target only those rows — this is what actually matters
-   for correctness: without it, every single save (even flagging one
-   question) re-uploaded the ENTIRE library every time. That meant a
-   device with a stale copy of even one question could silently
-   overwrite a freshly-edited question elsewhere just by saving anything
-   at all, the same class of bug Kardex had before its per-record fix,
-   just showing up through "always push everything" instead of "one
-   blob" — same effective result. Omit the argument for genuinely bulk
-   operations (import, deck move/copy, "reschedule all") where pushing
-   everything really is correct. */
-async function saveLibrary(changedIds){
+/* Upserts the current in-memory library in one batched request (Postgres upsert
+   accepts an array, so this is a single round trip regardless of library size).
+   Note: this does NOT delete rows that were removed locally — see deleteMcqRows(). */
+async function saveLibrary(){
   persistLocalMirror(); /* local-first, unconditional, before any network attempt */
   state.lastSaveHadPermanentConflict = false;
   if (!state.currentUser || !supabaseClient) return;
   if (!state.mcqs.length) return;
-  var idsToSave = (changedIds && changedIds.length) ? changedIds.slice() : state.mcqs.map(function(m){ return m.id; });
-  var source = state.mcqs.filter(function(m){ return idsToSave.indexOf(m.id) !== -1; });
-  if (!source.length) return;
-  // Mark these as pending BEFORE attempting the network call — if it
-  // fails partway through, they're already correctly flagged for retry,
-  // no separate catch-block bookkeeping needed for that part.
-  idsToSave.forEach(function(id){ unsyncedQuestionIds[id] = true; });
-  state.hasUnsyncedChanges = true;
   try {
-    var rows = source.map(function(m){
+    var rows = state.mcqs.map(function(m){
       return { id: m.id, user_id: state.currentUser.id, data: m, updated_at: new Date().toISOString() };
     });
     var res = await supabaseClient.from('mcqs').upsert(rows);
     if (res.error) throw res.error;
-    idsToSave.forEach(function(id){ delete unsyncedQuestionIds[id]; });
-    state.hasUnsyncedChanges = Object.keys(unsyncedQuestionIds).length > 0;
+    state.hasUnsyncedChanges = false;
     updateSyncIndicator();
   } catch(e) {
     console.error('saveLibrary:', e);
@@ -1292,17 +1225,15 @@ async function saveLibrary(changedIds){
          already exist in the table under a DIFFERENT account (e.g. a JSON export from
          one sign-in imported while signed into another). This is a permanent conflict,
          not a network hiccup — retrying it automatically forever would just repeat the
-         same failure, so this deliberately clears these ids from the retry set instead
-         of leaving them queued forever. Say so plainly instead of a generic "could not
-         save", and flag it so callers (e.g. the import flow) don't also show a
-         misleading "success" message right after this one. */
-      idsToSave.forEach(function(id){ delete unsyncedQuestionIds[id]; });
-      state.hasUnsyncedChanges = Object.keys(unsyncedQuestionIds).length > 0;
+         same failure, so this deliberately does NOT set hasUnsyncedChanges (which
+         would otherwise queue it for the retry loop). Say so plainly instead of a
+         generic "could not save", and flag it so callers (e.g. the import flow) don't
+         also show a misleading "success" message right after this one. */
       state.lastSaveHadPermanentConflict = true;
       showToast('Some questions couldn\'t sync — they already exist under a different Practex account. Sign in as whichever account originally created them.');
       return;
     }
-    state.hasUnsyncedChanges = true; // idsToSave are already marked pending above — nothing more to flag
+    state.hasUnsyncedChanges = true;
     updateSyncIndicator();
   }
 }
@@ -1580,6 +1511,7 @@ async function confirmImportWithChoice(resetProgress){
     if (!Array.isArray(m.tags)) m.tags = [];
     if (!Array.isArray(m.images)) m.images = [];
     if (!Array.isArray(m.answerImages)) m.answerImages = [];
+    if (!Array.isArray(m.notes)) m.notes = [];
     if (typeof m.asleep !== 'boolean') m.asleep = false;
     if (!Array.isArray(m.options)) m.options = [];
     if (!Array.isArray(m.answer) || !m.answer.length) m.answer = ['UNKNOWN'];
@@ -1663,7 +1595,7 @@ async function attachImageToMcq(mcqId, file, field){
     if (m[field].indexOf(hash) === -1) m[field].push(hash);
     renderMcqImageGrid(m, field, field === 'answerImages' ? 'mcqAnswerImageGrid' : 'mcqImageGrid');
     showToast('Image added.');
-    saveLibrary([m.id]);
+    saveLibrary();
   } catch(err) {
     console.error('attachImageToMcq:', err);
     showToast('Could not add that image.');
@@ -1678,6 +1610,84 @@ async function openImageLightbox(hash){
     '<img src="' + src + '" alt="">' +
     '</div>';
   state.activeModal = 'lightbox';
+}
+
+/* ---------------- Notes (the user's own annotations, distinct from the answer key) ----------------
+   A running log, not a single editable note — each entry is its own timestamped
+   text+images pair, so annotating the same question again after a later attempt adds
+   to the record rather than overwriting what you thought last time. Entries are
+   add/delete only, deliberately not editable after the fact, to keep that log-not-
+   document framing honest. */
+function renderNotesSection(mcq){
+  var notes = mcq.notes || [];
+  var html = '<div class="notes-section">';
+  html += '<div class="notes-header"><span>' + icon('notes',13) + ' Your notes' + (notes.length ? ' (' + notes.length + ')' : '') + '</span>' +
+    '<button class="link-btn" data-action="open-add-note" data-id="' + escapeHtml(mcq.id) + '">+ Add a note</button></div>';
+  if (notes.length) {
+    notes.slice().reverse().forEach(function(n){
+      html += '<div class="note-entry">' +
+        '<div class="note-entry-head"><span class="note-entry-date">' + escapeHtml(new Date(n.createdAt).toLocaleString()) + '</span>' +
+        '<button class="mcq-icon-btn" data-action="delete-note" data-id="' + escapeHtml(mcq.id) + '" data-note-id="' + escapeHtml(n.id) + '" title="Delete note" aria-label="Delete note">' + icon('x',12) + '</button></div>' +
+        (n.text ? '<div class="note-entry-text">' + renderContent(n.text) + '</div>' : '') +
+        (n.images && n.images.length ? '<div class="qimage-grid">' + n.images.map(function(hash){
+          return '<div class="qimage-thumb"><img data-hash-src="' + escapeHtml(hash) + '" data-action="view-mcq-image" data-hash="' + escapeHtml(hash) + '" alt=""></div>';
+        }).join('') + '</div>' : '') +
+        '</div>';
+    });
+  }
+  html += '</div>';
+  return html;
+}
+function openAddNoteModal(mcqId){
+  var m = state.mcqs.find(function(x){ return x.id === mcqId; });
+  if (!m) return;
+  state.pendingNoteDraft = { mcqId: mcqId, images: [] };
+  var html = '<h3>Add a note</h3>';
+  html += '<p class="view-sub" style="margin-bottom:12px;">' + escapeHtml(m.question.replace(/\n/g,' ').slice(0,100)) + (m.question.length > 100 ? '…' : '') + '</p>';
+  html += '<div class="form-field"><textarea id="noteTextInput" rows="4" placeholder="A mnemonic, a correction, a clearer explanation than the one given — anything you want next time."></textarea></div>';
+  html += '<div class="form-field"><label>Images (optional)</label>' +
+    '<div class="mcq-image-grid" id="noteImageGrid"></div>' +
+    '<input type="file" id="noteImageFileInput" accept="image/*" multiple style="display:none">' +
+    '</div>';
+  html += '<div class="action-row" style="margin-top:6px;margin-bottom:0;">' +
+    '<button class="btn btn-primary" data-action="save-note" data-id="' + escapeHtml(mcqId) + '">Save note</button>' +
+    '<button class="btn btn-ghost" data-action="cancel-add-note">Cancel</button></div>';
+  showRichModal(html, 'narrow');
+  renderNoteDraftImageGrid();
+  var fi = document.getElementById('noteImageFileInput');
+  if (fi) {
+    fi.addEventListener('change', function(e){
+      Array.prototype.slice.call(e.target.files || []).forEach(function(f){ attachImageToNoteDraft(f); });
+      e.target.value = '';
+    });
+  }
+}
+function renderNoteDraftImageGrid(){
+  var grid = document.getElementById('noteImageGrid');
+  if (!grid || !state.pendingNoteDraft) return;
+  var imgs = state.pendingNoteDraft.images;
+  var html = imgs.map(function(hash){
+    return '<div class="mcq-image-thumb">' +
+      '<img data-hash-src="' + escapeHtml(hash) + '" data-action="view-mcq-image" data-hash="' + escapeHtml(hash) + '" alt="">' +
+      '<button class="mcq-image-remove-btn" data-action="remove-note-draft-image" data-hash="' + escapeHtml(hash) + '" title="Remove image" aria-label="Remove image">' + icon('x',12) + '</button>' +
+      '</div>';
+  }).join('');
+  html += '<button class="mcq-image-add-tile" data-action="add-note-draft-image">' + icon('upload',18) + '<span>Add image</span></button>';
+  grid.innerHTML = html;
+  hydrateImages();
+}
+async function attachImageToNoteDraft(file){
+  if (!file || file.type.indexOf('image/') !== 0 || !state.pendingNoteDraft) { showToast('That file isn\'t an image.'); return; }
+  showToast('Uploading image…');
+  try {
+    var hash = await storeImageFromFile(file);
+    if (state.pendingNoteDraft.images.indexOf(hash) === -1) state.pendingNoteDraft.images.push(hash);
+    renderNoteDraftImageGrid();
+    showToast('Image added.');
+  } catch(err) {
+    console.error('attachImageToNoteDraft:', err);
+    showToast('Could not add that image.');
+  }
 }
 
 /* ---------------- Settings modal ---------------- */
@@ -1893,6 +1903,7 @@ function openEditModal(id){
     '<input type="file" id="mcqAnswerImageFileInput" accept="image/*" multiple style="display:none">' +
     '<div class="view-sub" style="margin-top:6px;">Shown after reveal, alongside the explanation.</div>' +
     '</div>';
+  html += '<div class="form-field">' + renderNotesSection(m) + '</div>';
   html += '<div class="form-field"><label>Subject</label><input type="text" id="editSubject" value="' + escapeHtml(m.subject||'') + '"></div>';
   html += '<div class="form-field"><label>Chapter path (use &gt; to separate levels)</label><input type="text" id="editChapter" value="' + escapeHtml((m.chapterPath||[]).join(' > ')) + '"></div>';
   html += '<div class="form-field"><label>Tags (comma-separated)</label><input type="text" id="editTags" value="' + escapeHtml((m.tags||[]).join(', ')) + '"></div>';
@@ -1949,7 +1960,7 @@ async function saveEditMcq(id){
   if (tagsEl) m.tags = tagsEl.value.split(',').map(function(s){return s.trim();}).filter(Boolean);
   closeModal();
   render();
-  await saveLibrary([m.id]); /* awaited — same reasoning as the deck operations above */
+  await saveLibrary(); /* awaited — same reasoning as the deck operations above */
   showToast('Question updated.');
 }
 
@@ -2116,6 +2127,7 @@ function parseLibraryText(raw, sourceOverride){
           flagged: false,
           images: [],
           answerImages: [],
+          notes: [],
           asleep: false,
           addedAt: Date.now(),
           learning: {
@@ -2361,7 +2373,7 @@ function render(){
     '<main class="main">' +
       '<div class="mobile-topbar"><button class="btn btn-sm" data-action="toggle-sidebar">' +
         (state.sidebarOpen ? icon('x',15) + ' Close' : icon('menu',15) + ' Menu') +
-      '</button>' + renderSyncStatusPill('syncStatusPillMobile') + '</div>' +
+      '</button></div>' +
       renderMain() +
     '</main>';
   bindEvents();
@@ -2805,6 +2817,7 @@ function renderQuestionList(tree, node, searchAll){
         '<div class="mcq-row-meta">' +
         '<span class="source-pill" style="background:' + colorForSource(m.source) + '">' + escapeHtml(m.source) + '</span>' +
         (m.images && m.images.length ? '<span class="tag-pill icon-inline" title="' + m.images.length + ' image' + (m.images.length===1?'':'s') + ' attached">' + icon('image',11) + ' ' + m.images.length + '</span>' : '') +
+        (m.notes && m.notes.length ? '<span class="tag-pill icon-inline" title="' + m.notes.length + ' note' + (m.notes.length===1?'':'s') + '">' + icon('notes',11) + ' ' + m.notes.length + '</span>' : '') +
         m.tags.slice(0,2).map(function(t){ return '<span class="tag-pill">' + escapeHtml(t) + '</span>'; }).join('') +
         (m.tags.length > 2 ? '<span class="tag-pill-more">+' + (m.tags.length-2) + '</span>' : '') +
         '</div></div>' +
@@ -3520,6 +3533,7 @@ function renderPractice(){
       html += '<div class="view-sub" style="margin-bottom:8px;">Answer on record: ' + escapeHtml(m.answer[0]) + '</div>';
     }
     html += renderReveal(m);
+    html += renderNotesSection(m); /* end of explanation, always — this is the one spot notes show during practice, deliberately never before reveal */
     if (isReviewing) {
       /* Nothing to submit here — movement happens via the Prev/Next/Overview controls up top. */
     } else if (needsSelfGrade) {
@@ -3608,7 +3622,7 @@ async function advanceAfterReveal(){
   s.questionShownAt = Date.now(); s.revealedAt = null; s.lastTimeToAnswerMs = null; /* start the clock fresh for whatever's next */
   if (s.index >= s.ids.length) state.view = 'summary';
   render(); /* update the screen immediately — don't make the person wait on a network round trip just to see the next question */
-  saveLibrary([m.id]); /* fire-and-forget in the background; it has its own error toast if it fails */
+  saveLibrary(); /* fire-and-forget in the background; it has its own error toast if it fails */
   if (justAutoSlept) showToast('That question is asleep now — ' + (state.autoSleepStreak||4) + ' correct in a row. Wake it anytime from its row in the library.');
 }
 
@@ -3630,7 +3644,7 @@ async function undoLastAnswer(){
   s.shortAnswerCorrect = null; /* re-grade on the way back in, rather than trusting a stale self-grade */
   s.revealedAt = Date.now(); s.lastTimeToAnswerMs = null; /* fresh timing for whatever rating they give it this time */
   render();
-  saveLibrary(mm ? [mm.id] : undefined);
+  saveLibrary();
 }
 
 function renderSummary(){
@@ -3745,7 +3759,7 @@ async function onClick(e){
     if (!mq.asleep) mq.autoSlept = false; // waking it manually also clears the auto-slept flag
     showToast(mq.asleep ? 'Question asleep — paused from FSRS review everywhere.' : 'Question awake again — back in FSRS review.');
     render();
-    saveLibrary([mq.id]);
+    saveLibrary();
     return;
   }
   if (action === 'toggle-dark-mode') {
@@ -3908,6 +3922,55 @@ async function onClick(e){
   if (action === 'download-id-sheet') { downloadIdSheet(); return; }
   if (action === 'confirm-import-file') { confirmImportWithChoice(el.getAttribute('data-reset') === 'true'); return; }
   if (action === 'cancel-import-file') { state.pendingImportPayload = null; closeModal(); return; }
+
+  if (action === 'open-add-note') { openAddNoteModal(el.getAttribute('data-id')); return; }
+  if (action === 'cancel-add-note') {
+    state.pendingNoteDraft = null;
+    if (state.editingMcqId) openEditModal(state.editingMcqId); else closeModal();
+    return;
+  }
+  if (action === 'add-note-draft-image') {
+    var noteFi = document.getElementById('noteImageFileInput');
+    if (noteFi) noteFi.click();
+    return;
+  }
+  if (action === 'remove-note-draft-image') {
+    if (state.pendingNoteDraft) {
+      var rmHash2 = el.getAttribute('data-hash');
+      state.pendingNoteDraft.images = state.pendingNoteDraft.images.filter(function(h){ return h !== rmHash2; });
+      renderNoteDraftImageGrid();
+    }
+    return;
+  }
+  if (action === 'save-note') {
+    var noteMcqId = el.getAttribute('data-id');
+    var noteM = state.mcqs.find(function(x){ return x.id === noteMcqId; });
+    var noteTextEl = document.getElementById('noteTextInput');
+    var noteText = noteTextEl ? noteTextEl.value.trim() : '';
+    var noteImages = state.pendingNoteDraft ? state.pendingNoteDraft.images.slice() : [];
+    if (!noteText && !noteImages.length) { showToast('Write something or add an image first.'); return; }
+    if (noteM) {
+      if (!Array.isArray(noteM.notes)) noteM.notes = [];
+      noteM.notes.push({ id: uid(), text: noteText, images: noteImages, createdAt: Date.now() });
+    }
+    state.pendingNoteDraft = null;
+    if (state.editingMcqId) openEditModal(state.editingMcqId); else closeModal();
+    render();
+    showToast('Note added.');
+    saveLibrary();
+    return;
+  }
+  if (action === 'delete-note') {
+    var delNoteMcqId = el.getAttribute('data-id'), delNoteId = el.getAttribute('data-note-id');
+    var delNoteM = state.mcqs.find(function(x){ return x.id === delNoteMcqId; });
+    if (delNoteM && Array.isArray(delNoteM.notes)) {
+      delNoteM.notes = delNoteM.notes.filter(function(n){ return n.id !== delNoteId; });
+      if (state.editingMcqId) openEditModal(state.editingMcqId); else render();
+      showToast('Note deleted.');
+      saveLibrary();
+    }
+    return;
+  }
   if (action === 'upload-image-zip') {
     var zipInput = document.getElementById('imageZipInput');
     var zipFile = zipInput && zipInput.files && zipInput.files[0];
@@ -4023,7 +4086,7 @@ async function onClick(e){
       rmM[rmField] = rmM[rmField].filter(function(h){ return h !== rmHash; });
       renderMcqImageGrid(rmM, rmField, rmField === 'answerImages' ? 'mcqAnswerImageGrid' : 'mcqImageGrid');
       showToast('Image removed.');
-      await saveLibrary([rmM.id]);
+      await saveLibrary();
       await purgeOrphanedImageHashes([rmHash]); /* only actually deletes it if no other question still uses this hash */
     }
     return;
@@ -4274,7 +4337,7 @@ async function onClick(e){
     var m2 = state.mcqs.find(function(x){ return x.id === s2.ids[s2.viewIndex]; });
     m2.flagged = !m2.flagged;
     render();
-    saveLibrary([m2.id]);
+    saveLibrary();
     return;
   }
 
@@ -4528,7 +4591,7 @@ document.addEventListener('keydown', function(e){
 
   /* F toggles bookmark */
   if(e.key==='f'||e.key==='F'){
-    e.preventDefault(); m.flagged=!m.flagged; saveLibrary([m.id]); render(); return;
+    e.preventDefault(); m.flagged=!m.flagged; saveLibrary(); render(); return;
   }
 
   /* Space: before reveal, acts as Check Answer (only if something is selected);
