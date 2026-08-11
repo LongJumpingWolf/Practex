@@ -4545,14 +4545,14 @@ async function init(){
      reconciles this local-only pause against whatever the cloud has next time the
      app opens — see the comment there. */
   document.addEventListener('visibilitychange', function(){
-    if (document.visibilityState === 'hidden' && state.session && !state.pausedSession) {
+    if (document.visibilityState === 'hidden' && isMidSession() && !state.pausedSession) {
       state.pausedSession = currentSessionSnapshot();
       state.pausedSession.pausedAt = Date.now();
       persistPausedSessionSync();
     }
   });
   window.addEventListener('pagehide', function(){
-    if (state.session && !state.pausedSession) {
+    if (isMidSession() && !state.pausedSession) {
       state.pausedSession = currentSessionSnapshot();
       state.pausedSession.pausedAt = Date.now();
       persistPausedSessionSync();
