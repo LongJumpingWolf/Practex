@@ -743,11 +743,39 @@ var state = {
    non-destructive (the edit still exists locally, and gets retried later —
    see retryUnsyncedChangesIfAny). Scoped per-user so switching accounts on
    the same browser can't leak one person's cached library into another's. */
-var LOCAL_MIRROR_KEY = 'practex_local_mirror_v1';
-function persistLocalMirror(){
+/* The full mirror lives in IndexedDB, not localStorage — a full library (thousands of
+   questions, each with history/notes/timing data) can realistically approach or
+   exceed localStorage's typical 5-10MB per-origin quota, while IndexedDB's quota is
+   an order of magnitude larger (commonly 50MB+, often a share of free disk space).
+   IndexedDB writes are async though, which is fine for this — it's read on normal
+   app load and written after every save, both of which have plenty of time to
+   complete. The one case that genuinely needs a write to survive even if the tab
+   closes mid-write — the auto-pause-on-close listeners in init() — uses a SEPARATE,
+   tiny, genuinely-synchronous localStorage entry instead (see
+   persistPausedSessionSync below), holding just one paused test's worth of data
+   rather than the whole library, so it stays trivially within quota regardless of
+   how large the library grows. */
+var DATA_MIRROR_DB_NAME = 'practex_data_mirror_v1';
+var DATA_MIRROR_STORE_NAME = 'mirror';
+var dataMirrorDbPromise = null;
+function openDataMirrorDb(){
+  if (dataMirrorDbPromise) return dataMirrorDbPromise;
+  dataMirrorDbPromise = new Promise(function(resolve, reject){
+    var req = indexedDB.open(DATA_MIRROR_DB_NAME, 1);
+    req.onupgradeneeded = function(){
+      var db = req.result;
+      if (!db.objectStoreNames.contains(DATA_MIRROR_STORE_NAME)) db.createObjectStore(DATA_MIRROR_STORE_NAME, { keyPath: 'key' });
+    };
+    req.onsuccess = function(){ resolve(req.result); };
+    req.onerror = function(){ reject(req.error || new Error('Could not open local data mirror')); };
+  });
+  return dataMirrorDbPromise;
+}
+async function persistLocalMirror(){
   if (!state.currentUser) return;
   try {
     var payload = {
+      key: 'current',
       version: 1,
       updatedAt: Date.now(),
       userId: state.currentUser.id,
@@ -762,16 +790,38 @@ function persistLocalMirror(){
       autoSleepStreak: state.autoSleepStreak,
       pausedSession: state.pausedSession
     };
-    localStorage.setItem(LOCAL_MIRROR_KEY, JSON.stringify(payload));
-  } catch(err) { console.warn('Local mirror save failed (localStorage full or unavailable):', err); }
+    var db = await openDataMirrorDb();
+    var tx = db.transaction(DATA_MIRROR_STORE_NAME, 'readwrite');
+    await requestToPromise(tx.objectStore(DATA_MIRROR_STORE_NAME).put(payload));
+  } catch(err) { console.warn('Local mirror save failed:', err); }
 }
-function loadLocalMirror(){
+async function loadLocalMirror(){
+  if (!state.currentUser) return null;
   try {
-    var raw = localStorage.getItem(LOCAL_MIRROR_KEY);
+    var db = await openDataMirrorDb();
+    var tx = db.transaction(DATA_MIRROR_STORE_NAME, 'readonly');
+    var payload = await requestToPromise(tx.objectStore(DATA_MIRROR_STORE_NAME).get('current'));
+    if (!payload || payload.userId !== state.currentUser.id) return null; // not this account's cache — don't leak it in
+    return payload;
+  } catch(err) { return null; }
+}
+/* The tiny, genuinely-synchronous companion to the above — see the big comment up
+   top for why this exists separately. Holds just one paused session, never the
+   library, so it's always trivially small regardless of how big the library gets. */
+var PAUSED_SESSION_SYNC_KEY = 'practex_paused_session_sync_v1';
+function persistPausedSessionSync(){
+  if (!state.currentUser) return;
+  try {
+    localStorage.setItem(PAUSED_SESSION_SYNC_KEY, JSON.stringify({ userId: state.currentUser.id, pausedSession: state.pausedSession }));
+  } catch(err) { console.warn('Paused-session quick-save failed:', err); }
+}
+function loadPausedSessionSync(){
+  try {
+    var raw = localStorage.getItem(PAUSED_SESSION_SYNC_KEY);
     if (!raw) return null;
     var payload = JSON.parse(raw);
-    if (!state.currentUser || payload.userId !== state.currentUser.id) return null; // not this account's cache — don't leak it in
-    return payload;
+    if (!state.currentUser || payload.userId !== state.currentUser.id) return null;
+    return payload.pausedSession || null;
   } catch(err) { return null; }
 }
 
@@ -1022,7 +1072,7 @@ async function loadLibrary(){
     state.mcqs = (mcqRes.data || []).map(function(row){ return row.data; });
   } catch(e) {
     console.error('loadLibrary (mcqs):', e);
-    var mirror = loadLocalMirror();
+    var mirror = await loadLocalMirror();
     if (mirror && Array.isArray(mirror.mcqs)) {
       state.mcqs = mirror.mcqs;
       usedMirrorFallback = true;
@@ -1037,17 +1087,20 @@ async function loadLibrary(){
     var row = setRes.data;
     state.sources = (row && row.sources) || {};
     state.pausedSession = (row && row.paused_session) || null;
-    /* Reconcile against the local mirror's pause too — an auto-pause captured on
-       tab-close (see the visibilitychange/pagehide listeners in init()) only ever
-       gets written synchronously to localStorage, since a real network save can't be
-       trusted to finish once the page is actually closing. If that local pause is
-       newer than whatever the cloud has (or the cloud has none at all), prefer it,
-       and push it up to Supabase now that we're back and can actually save it. */
-    var mirrorForPause = loadLocalMirror();
-    var localPausedAt = mirrorForPause && mirrorForPause.pausedSession ? (mirrorForPause.pausedSession.pausedAt || 0) : 0;
+    /* Reconcile against BOTH local pause sources — the tiny synchronous localStorage
+       entry (guaranteed to have survived an actual tab close) and the full IndexedDB
+       mirror's own pausedSession (kept current on every normal save). Whichever of
+       the three — cloud, sync entry, mirror — has the newest pausedAt wins, and if a
+       local one wins, it gets pushed up to Supabase now that we're back online and
+       have time to actually save it properly. */
+    var mirrorForPause = await loadLocalMirror();
+    var syncPaused = loadPausedSessionSync();
     var cloudPausedAt = state.pausedSession ? (state.pausedSession.pausedAt || 0) : 0;
-    if (mirrorForPause && mirrorForPause.pausedSession && localPausedAt > cloudPausedAt) {
-      state.pausedSession = mirrorForPause.pausedSession;
+    var mirrorPausedAt = mirrorForPause && mirrorForPause.pausedSession ? (mirrorForPause.pausedSession.pausedAt || 0) : 0;
+    var syncPausedAt = syncPaused ? (syncPaused.pausedAt || 0) : 0;
+    var bestPausedAt = Math.max(cloudPausedAt, mirrorPausedAt, syncPausedAt);
+    if (bestPausedAt > cloudPausedAt) {
+      state.pausedSession = (syncPausedAt === bestPausedAt) ? syncPaused : mirrorForPause.pausedSession;
       saveUserSettings(); /* best-effort push-up, not awaited — loadLibrary() shouldn't block on this */
     }
     state.learningMode.enabled = row ? (row.fsrs_mode_enabled !== false) : false; /* brand-new accounts start in plain practice mode — FSRS is opt-in, not the default */
@@ -1059,7 +1112,7 @@ async function loadLibrary(){
     state.autoSleepStreak = (row && row.auto_sleep_streak) || 4;
   } catch(e) {
     console.error('loadLibrary (settings):', e);
-    var mirror2 = loadLocalMirror();
+    var mirror2 = await loadLocalMirror();
     if (mirror2) {
       state.sources = mirror2.sources || {};
       state.pausedSession = mirror2.pausedSession || null;
@@ -4472,23 +4525,24 @@ async function init(){
      nothing was listening for that at all. 'pagehide' fires reliably even when the
      tab is genuinely closing, unlike most async work at that point — but a real
      network request still can't be trusted to complete once the page is actually
-     unloading, so this deliberately only does the SYNCHRONOUS part (snapshotting
-     into the local mirror via localStorage, which can't get interrupted) rather than
-     awaiting a Supabase save that might never finish. loadLibrary() reconciles this
-     local-only pause against whatever the cloud has next time the app opens — see
-     the comment there. */
+     unloading, so this deliberately only does the SYNCHRONOUS part (persistPausedSessionSync,
+     a small dedicated localStorage entry that can't get interrupted) rather than
+     awaiting the full IndexedDB mirror write or a Supabase save, neither of which
+     are guaranteed to finish once the page is actually closing. loadLibrary()
+     reconciles this local-only pause against whatever the cloud has next time the
+     app opens — see the comment there. */
   document.addEventListener('visibilitychange', function(){
     if (document.visibilityState === 'hidden' && state.session && !state.pausedSession) {
       state.pausedSession = currentSessionSnapshot();
       state.pausedSession.pausedAt = Date.now();
-      persistLocalMirror();
+      persistPausedSessionSync();
     }
   });
   window.addEventListener('pagehide', function(){
     if (state.session && !state.pausedSession) {
       state.pausedSession = currentSessionSnapshot();
       state.pausedSession.pausedAt = Date.now();
-      persistLocalMirror();
+      persistPausedSessionSync();
     }
   });
 
