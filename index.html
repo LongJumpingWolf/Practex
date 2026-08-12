@@ -3549,15 +3549,45 @@ async function confirmRenameSource(oldName){
   if (!newName) { showToast('Enter a name first.'); return; }
   if (newName === oldName) { closeModal(); return; }
   if (state.sources[newName]) {
-    // A different source already uses this exact name — refusing rather
-    // than silently merging the two together, since that's a much bigger,
-    // harder-to-undo operation than a rename and shouldn't happen by
-    // accident from a plain text field.
-    showToast('"' + newName + '" is already a source — pick a different name, or delete one of them first if you meant to merge.');
+    // A different source already uses this exact name — ask whether to
+    // merge into it rather than silently doing it (or just refusing and
+    // making the person go delete one manually).
+    openMergeSourceConfirm(oldName, newName);
     return;
   }
   closeModal();
-  state.sources[newName] = state.sources[oldName];
+  await applySourceRename(oldName, newName, { mergeIntoExisting: false });
+}
+
+function openMergeSourceConfirm(oldName, newName){
+  var count = state.mcqs.filter(function(m){ return m.source === oldName; }).length;
+  var html = '<h3>Merge sources?</h3>' +
+    '<p>"' + escapeHtml(newName) + '" already exists. Merging will move all ' + count + ' question' + (count===1?'':'s') +
+    ' from "' + escapeHtml(oldName) + '" into it, and "' + escapeHtml(oldName) + '" will stop existing as a separate source. This can\'t be undone.</p>' +
+    '<div class="action-row" style="margin-bottom:0;">' +
+    '<button class="btn btn-danger" data-action="confirm-merge-source" data-old-name="' + escapeHtml(oldName) + '" data-new-name="' + escapeHtml(newName) + '">Merge</button>' +
+    '<button class="btn btn-ghost" data-action="close-modal">Cancel</button>' +
+    '</div>';
+  showRichModal(html, 'narrow');
+}
+
+async function confirmMergeSource(oldName, newName){
+  if (!oldName || !newName || !state.sources[oldName] || !state.sources[newName]) { closeModal(); return; }
+  closeModal();
+  await applySourceRename(oldName, newName, { mergeIntoExisting: true });
+}
+
+// Shared by a plain rename (target name is free) and a merge (target name
+// already belongs to a different source) — the only real difference is
+// which source's color/metadata survives: a plain rename carries the old
+// source's own color forward onto its new name, a merge keeps the
+// EXISTING target source's color rather than overwriting it, since that's
+// the one the person is merging into.
+async function applySourceRename(oldName, newName, opts){
+  opts = opts || {};
+  if (!opts.mergeIntoExisting) {
+    state.sources[newName] = state.sources[oldName];
+  }
   delete state.sources[oldName];
   var affected = 0;
   state.mcqs.forEach(function(m){ if (m.source === oldName) { m.source = newName; affected++; } });
@@ -3565,16 +3595,17 @@ async function confirmRenameSource(oldName){
   // exact source string too — nothing else needs touching since they all
   // read m.source / state.sources fresh on every render rather than
   // caching the old name anywhere.
-  showToast('Renaming "' + oldName + '" to "' + newName + '"…');
+  showToast((opts.mergeIntoExisting ? 'Merging "' : 'Renaming "') + oldName + '" ' + (opts.mergeIntoExisting ? 'into' : 'to') + ' "' + newName + '"…');
   render();
-  /* Awaited — same reasoning as delete-source above: a bulk rename touching
-     potentially thousands of questions is exactly the kind of operation
-     worth waiting on rather than leaving fire-and-forget. saveLibrary()'s
-     dirty-tracking only pushes the questions whose source actually changed,
-     not the whole library, so this stays cheap even for a big source. */
+  /* Awaited — same reasoning as delete-source above: a bulk rename/merge
+     touching potentially thousands of questions is exactly the kind of
+     operation worth waiting on rather than leaving fire-and-forget.
+     saveLibrary()'s dirty-tracking only pushes the questions whose source
+     actually changed, not the whole library, so this stays cheap even for
+     a big source. */
   await saveLibrary();
   await saveSources();
-  showToast('Renamed to "' + newName + '" — ' + affected + ' question' + (affected===1?'':'s') + ' updated.');
+  showToast((opts.mergeIntoExisting ? 'Merged into "' : 'Renamed to "') + newName + '" — ' + affected + ' question' + (affected===1?'':'s') + (opts.mergeIntoExisting ? ' moved.' : ' updated.'));
 }
 
 /* ---------------- Practice / session ---------------- */
@@ -4491,6 +4522,10 @@ async function onClick(e){
   }
   if (action === 'confirm-rename-source') {
     confirmRenameSource(el.getAttribute('data-old-name'));
+    return;
+  }
+  if (action === 'confirm-merge-source') {
+    confirmMergeSource(el.getAttribute('data-old-name'), el.getAttribute('data-new-name'));
     return;
   }
   if (action === 'copy-prompt') {
