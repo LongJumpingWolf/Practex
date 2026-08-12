@@ -500,6 +500,7 @@ textarea.ingest-area{
   background:var(--card);color:var(--ink);resize:vertical;
 }
 .field-row{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;}
+.source-manage-name{flex:1;min-width:0;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .field{flex:1;min-width:180px;}
 .field label{font-size:11.5px;color:var(--ink-soft);display:block;margin-bottom:4px;}
 .field input{width:100%;border:1px solid var(--rule-strong);border-radius:6px;padding:8px 10px;font-size:13px;background:var(--card);color:var(--ink);}
@@ -611,6 +612,32 @@ textarea.ingest-area{
 .bookmark-btn.bookmarked{color:#8A6A00;background:#FFF4BF;border-color:#D6A900;}
 .bookmark-btn.bookmarked svg{fill:#F0C33C;stroke:#8A6A00;}
 .paused-card{padding:16px 18px;margin-bottom:18px;border-left:4px solid var(--highlighter);}
+
+/* ---------- Review heatmap (Dashboard) ---------- */
+.heatmap-wrap{overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;}
+.heatmap-inner{display:inline-block;min-width:100%;}
+.heatmap-months{display:grid;grid-template-columns:24px repeat(53,10px);column-gap:3px;font-size:9.5px;color:var(--ink-soft);margin-bottom:6px;font-family:'IBM Plex Mono',monospace;}
+.heatmap-grid{display:grid;grid-template-columns:24px repeat(53,10px);grid-template-rows:repeat(7,10px);grid-auto-flow:column;column-gap:3px;row-gap:3px;}
+.heatmap-daylabel{grid-column:1;font-size:8.5px;color:var(--ink-soft);font-family:'IBM Plex Mono',monospace;display:flex;align-items:center;}
+.heatmap-cell{width:10px;height:10px;border-radius:3px;}
+.heatmap-legend{display:flex;align-items:center;gap:6px;margin-top:12px;font-size:10px;color:var(--ink-soft);font-family:'IBM Plex Mono',monospace;flex-wrap:wrap;}
+.heatmap-legend-sw{width:10px;height:10px;border-radius:3px;display:inline-block;}
+
+/* ---------- Due-this-week forecast (Dashboard) ---------- */
+.forecast-row{display:flex;align-items:flex-end;gap:10px;padding:0 2px;}
+.forecast-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;}
+.forecast-total{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink);font-weight:600;}
+.forecast-bar-stack{display:flex;flex-direction:column-reverse;width:100%;max-width:28px;height:90px;border-radius:5px 5px 3px 3px;overflow:hidden;background:var(--paper);}
+.forecast-bar-review{background:var(--cover);width:100%;min-height:1px;}
+.forecast-bar-new{background:#8FB8D1;width:100%;min-height:1px;}
+.forecast-day{font-size:10.5px;color:var(--ink-soft);white-space:nowrap;}
+.forecast-day.today{color:var(--cover);font-weight:700;}
+.forecast-legend{display:flex;gap:16px;margin-top:14px;font-size:11px;color:var(--ink-soft);flex-wrap:wrap;}
+.forecast-legend span{display:flex;align-items:center;gap:6px;}
+.forecast-legend-sw{width:9px;height:9px;border-radius:3px;display:inline-block;}
+.forecast-legend-sw.review{background:var(--cover);}
+.forecast-legend-sw.new{background:#8FB8D1;}
+
 .modal-backdrop{position:fixed;inset:0;background:rgba(20,28,34,.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:100;}
 .modal-card{width:min(520px,100%);background:var(--card);border:1px solid var(--rule-strong);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.22);padding:clamp(16px,5vw,22px);}
 .modal-card h3{font-family:'Fraunces',Georgia,serif;font-size:20px;margin-bottom:8px;}
@@ -2046,6 +2073,14 @@ function renderSettingsModalContent(){
     '<div class="settings-row"><span>Questions tracked</span><strong>' + state.mcqs.length + '</strong></div>' +
     '</div>';
 
+  var landingPref = loadDefaultLandingPref();
+  html += '<div class="settings-section"><h4>Default landing page</h4>' +
+    '<div class="view-sub" style="margin-bottom:10px;">What you see when Practex loads — the Dashboard (streak, due today, review heatmap), or straight into your Library.</div>' +
+    '<div class="action-row" style="margin-bottom:0;">' +
+      '<button class="btn btn-sm ' + (landingPref==='dashboard'?'btn-primary':'btn-ghost') + '" data-action="set-default-landing" data-landing="dashboard">Dashboard</button>' +
+      '<button class="btn btn-sm ' + (landingPref==='browse'?'btn-primary':'btn-ghost') + '" data-action="set-default-landing" data-landing="browse">Library</button>' +
+    '</div></div>';
+
   html += '<div class="settings-section" style="margin-bottom:0;"><h4>Appearance &amp; scheduling</h4>' +
     '<div class="settings-row"><span>Dark mode</span>' +
       '<span class="settings-toggle' + (state.darkMode?' on':'') + '" data-action="toggle-dark-mode" role="switch" aria-checked="' + (state.darkMode?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
@@ -2892,6 +2927,128 @@ function renderMain(){
 }
 
 /* ---------------- Learning Dashboard view ---------------- */
+// Aggregates every question's learning.history[].ts into a per-day count —
+// this is Practex's equivalent of a flat review log, just spread across
+// each question's own history array instead of one central list.
+function renderReviewHeatmapCard(){
+  var DAY = 86400000;
+  var byDay = {};
+  var maxCount = 1;
+  state.mcqs.forEach(function(m){
+    (m.learning && m.learning.history || []).forEach(function(h){
+      var k = dateStr(h.ts);
+      byDay[k] = (byDay[k]||0) + 1;
+      if (byDay[k] > maxCount) maxCount = byDay[k];
+    });
+  });
+
+  var end = new Date();
+  var totalDays = 371; // ~53 weeks, matches a classic contribution grid
+  var start = new Date(end.getTime() - (totalDays-1)*DAY);
+  start.setDate(start.getDate() - start.getDay()); // back up to the preceding Sunday so weeks align
+
+  // Practex's own blue ("cover") ramp, not a reused teal — this is the
+  // app's primary brand color, so the heatmap reads as unmistakably Practex.
+  var RAMP = ['var(--rule)', '#C9DCE8', '#8FB8D1', '#4F86AC', 'var(--cover)'];
+  function colorFor(count){
+    if (!count) return RAMP[0];
+    var frac = count / maxCount;
+    if (frac < 0.2) return RAMP[1];
+    if (frac < 0.45) return RAMP[2];
+    if (frac < 0.75) return RAMP[3];
+    return RAMP[4];
+  }
+
+  var days = [];
+  for (var d = new Date(start); d <= end; d.setDate(d.getDate()+1)){
+    var k = dateStr(d.getTime());
+    days.push({ date: new Date(d), key: k, count: byDay[k] || 0 });
+  }
+  var weeks = Math.ceil(days.length/7);
+
+  var monthsHtml = '<span></span>';
+  var lastMonth = -1;
+  for (var w=0; w<weeks; w++){
+    var dInWeek = days[w*7];
+    var label = '';
+    if (dInWeek && dInWeek.date.getMonth() !== lastMonth && dInWeek.date.getDate() <= 7){
+      lastMonth = dInWeek.date.getMonth();
+      label = dInWeek.date.toLocaleDateString('en-US',{month:'short'});
+    }
+    monthsHtml += '<span>' + label + '</span>';
+  }
+
+  var DOWLABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+  var gridHtml = '';
+  for (var dow=0; dow<7; dow++){ gridHtml += '<div class="heatmap-daylabel">' + DOWLABELS[dow] + '</div>'; }
+  days.forEach(function(dd){
+    if (dd.date > end) {
+      gridHtml += '<div class="heatmap-cell" style="visibility:hidden;"></div>';
+    } else {
+      var title = dd.count + ' answer' + (dd.count===1?'':'s') + ' \u00b7 ' + dd.date.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      gridHtml += '<div class="heatmap-cell" style="background:' + colorFor(dd.count) + ';" title="' + escapeHtml(title) + '"></div>';
+    }
+  });
+
+  var legendHtml = 'Less ' + RAMP.map(function(c){ return '<span class="heatmap-legend-sw" style="background:' + c + '"></span>'; }).join('') + ' More';
+
+  return '<div class="card section-block">' +
+    '<h3>Review activity</h3>' +
+    '<div class="view-sub" style="margin-bottom:12px;">Every square is a day \u00b7 darker = more questions answered</div>' +
+    '<div class="heatmap-wrap"><div class="heatmap-inner">' +
+      '<div class="heatmap-months">' + monthsHtml + '</div>' +
+      '<div class="heatmap-grid">' + gridHtml + '</div>' +
+    '</div></div>' +
+    '<div class="heatmap-legend">' + legendHtml + '</div>' +
+    '</div>';
+}
+
+// New vs. scheduled-review split for each of the next 7 days, from every
+// question's learning.due timestamp (never-answered questions all count as
+// "new", bucketed into today).
+function renderDueForecastCard(){
+  var DAY = 86400000;
+  var today = new Date(); today.setHours(0,0,0,0);
+  var buckets = [0,0,0,0,0,0,0];
+  var newCount = 0;
+  state.mcqs.forEach(function(m){
+    if (state.sleepingSubjects[m.subject] || m.asleep) return;
+    if (!m.learning || !m.learning.history || !m.learning.history.length) { newCount++; return; }
+    var due = (m.learning && m.learning.due) || 0;
+    var daysOut = Math.floor((due - today.getTime()) / DAY);
+    if (daysOut >= 0 && daysOut < 7) buckets[daysOut]++;
+  });
+  var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var maxTotal = 1;
+  for (var i=0; i<7; i++){ var t = buckets[i] + (i===0?newCount:0); if (t > maxTotal) maxTotal = t; }
+
+  var barsHtml = '';
+  for (var i=0; i<7; i++){
+    var dcol = new Date(today.getTime() + i*DAY);
+    var reviewCt = buckets[i];
+    var newCt = i===0 ? newCount : 0;
+    var total = reviewCt + newCt;
+    var reviewPct = Math.round((reviewCt/maxTotal)*100);
+    var newPct = Math.round((newCt/maxTotal)*100);
+    var dayLabel = i===0 ? 'Today' : DOW[dcol.getDay()];
+    barsHtml += '<div class="forecast-col">' +
+      '<div class="forecast-total">' + total + '</div>' +
+      '<div class="forecast-bar-stack">' +
+        '<div class="forecast-bar-review" style="height:' + reviewPct + '%;"></div>' +
+        '<div class="forecast-bar-new" style="height:' + newPct + '%;"></div>' +
+      '</div>' +
+      '<div class="forecast-day' + (i===0?' today':'') + '">' + dayLabel + '</div>' +
+      '</div>';
+  }
+
+  return '<div class="card section-block">' +
+    '<h3>Due this week</h3>' +
+    '<div class="view-sub" style="margin-bottom:12px;">New questions vs. scheduled reviews, next 7 days</div>' +
+    '<div class="forecast-row">' + barsHtml + '</div>' +
+    '<div class="forecast-legend"><span><span class="forecast-legend-sw review"></span>Review</span><span><span class="forecast-legend-sw new"></span>New</span></div>' +
+    '</div>';
+}
+
 function renderDashboard(){
   var d = getDashboardData();
   var html = '<div class="view-head"><div class="view-title serif">Learning Dashboard</div>' +
@@ -2913,6 +3070,9 @@ function renderDashboard(){
     '<span><strong>' + d.reviewsToday + '</strong> reviewed today</span>' +
     '</div>';
   html += '</div>';
+
+  html += renderReviewHeatmapCard();
+  html += renderDueForecastCard();
 
   html += '<div class="card section-block">';
   html += '<h3>Question States</h3>';
@@ -3126,7 +3286,12 @@ function renderQuestionList(tree, node, searchAll){
   var title = searchAll ? 'Search results' : (state.selectedPath ? state.selectedPath[state.selectedPath.length-1] : 'All subjects');
   var ids = (searchAll || !node) ? state.mcqs.map(function(m){return m.id;}) : collectIds(node);
   var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
-  var list = ids.map(function(id){ return byId[id]; }).filter(Boolean).filter(passesFilters);
+  // Unfiltered (source/tag/status filters not yet applied) — this is what
+  // defines which source chips even make sense to show, so toggling one
+  // chip on doesn't make sibling chips disappear, and a subject/chapter
+  // never shows chips for sources that have no questions in it at all.
+  var scopedMcqs = ids.map(function(id){ return byId[id]; }).filter(Boolean);
+  var list = scopedMcqs.filter(passesFilters);
   /* Sleeping subjects stay visible for browsing, but drop out of the root-level "Start practice" pool/count. */
   var practiceCount = (searchAll || !node) ? list.filter(function(m){ return !state.sleepingSubjects[m.subject] && !m.asleep; }).length : list.filter(function(m){ return !m.asleep; }).length;
 
@@ -3135,7 +3300,7 @@ function renderQuestionList(tree, node, searchAll){
   html += '<div class="view-title serif">' + escapeHtml(title) + '</div>' +
     '<div class="view-sub">' + list.length + ' question' + (list.length===1?'':'s') + ' match the filters below' + (searchAll || state.selectedPath ? '' : ' · pick a subject or chapter on the left to narrow down') + '</div></div>';
 
-  html += renderFilters();
+  html += renderFilters(scopedMcqs);
 
   html += '<div class="action-row">' +
     '<button class="btn btn-primary" data-action="start-practice"' + (practiceCount ? '' : ' disabled') + '>Start practice (' + practiceCount + ')</button>' +
@@ -3173,9 +3338,20 @@ function renderQuestionList(tree, node, searchAll){
   return html;
 }
 
-function renderFilters(){
-  var sources = Object.keys(state.sources);
-  var tags = allTags();
+function renderFilters(scopedMcqs){
+  // Scoped to the current subject/chapter's own questions (before source/tag/
+  // status filters are applied) rather than the whole library — otherwise
+  // this showed every source and tag that exist ANYWHERE, including ones
+  // with zero questions in the chapter actually being viewed.
+  var pool = scopedMcqs || state.mcqs;
+  var sourcesPresent = {};
+  var tagsPresent = {};
+  pool.forEach(function(m){
+    if (m && m.source) sourcesPresent[m.source] = true;
+    (m && m.tags || []).forEach(function(t){ tagsPresent[t] = true; });
+  });
+  var sources = Object.keys(state.sources).filter(function(s){ return sourcesPresent[s]; });
+  var tags = Object.keys(tagsPresent).sort();
   if (!sources.length) return '';
   var activeTagCount = Object.keys(state.filters.tags).filter(function(t){ return state.filters.tags[t]; }).length;
   var anyFilterActive = activeTagCount > 0 ||
@@ -3332,8 +3508,9 @@ function renderAddSource(){
       var count = state.mcqs.filter(function(m){ return m.source === s; }).length;
       html += '<div class="source-manage-row">' +
         '<span class="chip-dot" style="background:' + colorForSource(s) + '"></span>' +
-        '<span style="flex:1;">' + escapeHtml(s) + '</span>' +
+        '<span class="source-manage-name">' + escapeHtml(s) + '</span>' +
         '<span class="view-sub" style="margin:0;">' + count + ' MCQs</span>' +
+        '<button class="btn btn-ghost btn-sm" data-action="rename-source" data-source="' + escapeHtml(s) + '">' + icon('pencil',12) + ' Rename</button>' +
         '<button class="btn btn-sm btn-danger" data-action="delete-source" data-source="' + escapeHtml(s) + '">Delete</button>' +
         '</div>';
     });
@@ -3347,6 +3524,57 @@ function renderAddSource(){
   }
 
   return html;
+}
+
+function openRenameSourceModal(oldName){
+  if (!oldName || !state.sources[oldName]) return;
+  var html = '<h3>Rename source</h3>' +
+    '<div class="field-row"><div class="field"><label>New name</label>' +
+    '<input type="text" id="renameSourceInput" value="' + escapeHtml(oldName) + '"></div></div>' +
+    '<div class="action-row" style="margin-bottom:0;">' +
+    '<button class="btn btn-primary" data-action="confirm-rename-source" data-old-name="' + escapeHtml(oldName) + '">Save</button>' +
+    '<button class="btn btn-ghost" data-action="close-modal">Cancel</button>' +
+    '</div>';
+  showRichModal(html, 'narrow');
+  setTimeout(function(){
+    var input = document.getElementById('renameSourceInput');
+    if (input) { input.focus(); input.select(); }
+  }, 50);
+}
+
+async function confirmRenameSource(oldName){
+  var input = document.getElementById('renameSourceInput');
+  if (!input || !oldName || !state.sources[oldName]) { closeModal(); return; }
+  var newName = input.value.trim();
+  if (!newName) { showToast('Enter a name first.'); return; }
+  if (newName === oldName) { closeModal(); return; }
+  if (state.sources[newName]) {
+    // A different source already uses this exact name — refusing rather
+    // than silently merging the two together, since that's a much bigger,
+    // harder-to-undo operation than a rename and shouldn't happen by
+    // accident from a plain text field.
+    showToast('"' + newName + '" is already a source — pick a different name, or delete one of them first if you meant to merge.');
+    return;
+  }
+  closeModal();
+  state.sources[newName] = state.sources[oldName];
+  delete state.sources[oldName];
+  var affected = 0;
+  state.mcqs.forEach(function(m){ if (m.source === oldName) { m.source = newName; affected++; } });
+  // Filter/sleep state and image ID-sheet source dropdowns all key off the
+  // exact source string too — nothing else needs touching since they all
+  // read m.source / state.sources fresh on every render rather than
+  // caching the old name anywhere.
+  showToast('Renaming "' + oldName + '" to "' + newName + '"…');
+  render();
+  /* Awaited — same reasoning as delete-source above: a bulk rename touching
+     potentially thousands of questions is exactly the kind of operation
+     worth waiting on rather than leaving fire-and-forget. saveLibrary()'s
+     dirty-tracking only pushes the questions whose source actually changed,
+     not the whole library, so this stays cheap even for a big source. */
+  await saveLibrary();
+  await saveSources();
+  showToast('Renamed to "' + newName + '" — ' + affected + ' question' + (affected===1?'':'s') + ' updated.');
 }
 
 /* ---------------- Practice / session ---------------- */
@@ -4134,6 +4362,13 @@ async function onClick(e){
     render();
     return;
   }
+  if (action === 'set-default-landing') {
+    var pref = el.getAttribute('data-landing');
+    setDefaultLandingPref(pref);
+    showToast('Practex will now open to ' + (pref === 'browse' ? 'your Library' : 'the Dashboard') + ' next time.');
+    renderSettingsModalContent(); // re-render just the modal so the button highlight updates immediately
+    return;
+  }
   if (action === 'export-library') { exportLibrary(); return; }
   if (action === 'import-library') {
     var fi = document.getElementById('importFileInput');
@@ -4250,6 +4485,14 @@ async function onClick(e){
     return;
   }
 
+  if (action === 'rename-source') {
+    openRenameSourceModal(el.getAttribute('data-source'));
+    return;
+  }
+  if (action === 'confirm-rename-source') {
+    confirmRenameSource(el.getAttribute('data-old-name'));
+    return;
+  }
   if (action === 'copy-prompt') {
     var copied = false;
     try {
@@ -4824,9 +5067,20 @@ async function showApp(){
   document.getElementById('loadingScreen').textContent = 'Loading your library…';
   document.getElementById('appRoot').style.display = 'none';
   await loadLibrary();
+  state.view = loadDefaultLandingPref() === 'browse' ? 'browse' : 'dashboard';
   document.getElementById('loadingScreen').style.display = 'none';
   document.getElementById('appRoot').style.display = 'grid';
   render();
+}
+// 'dashboard' (streak/due/heatmap overview) or 'browse' (straight into the
+// Library). Read once at boot in showApp() above — changing it in Settings
+// only affects the NEXT load, same as most apps' "start on" preferences.
+function loadDefaultLandingPref(){
+  try { return localStorage.getItem('practex_default_landing') === 'browse' ? 'browse' : 'dashboard'; }
+  catch(e){ return 'dashboard'; }
+}
+function setDefaultLandingPref(pref){
+  try { localStorage.setItem('practex_default_landing', pref === 'browse' ? 'browse' : 'dashboard'); } catch(e){}
 }
 
 /* ---------------- Init ---------------- */
