@@ -1069,6 +1069,34 @@ function showToast(msg){
 }
 
 /* ---------------- Storage (Supabase, scoped to the signed-in user) ---------------- */
+// PostgREST (Supabase's REST layer) silently caps any unbounded .select() at
+// a default max-rows-per-request (commonly 1000) — it does NOT error when a
+// query would return more; it just returns that many rows with a normal
+// success response. For a library over that size, the plain single-call
+// select below was ALWAYS missing the tail end of the library, every single
+// load — which loadLibrary()'s reconciliation then (correctly, given what it
+// could see) treated as "unsynced, recover and re-push it", pushed it again,
+// and the next load truncated the exact same way. That's what was showing up
+// as an endless resync loop recovering the same few thousand questions over
+// and over: they were never actually missing from the cloud, just never
+// being fully fetched. This pages through with .range() until a page comes
+// back shorter than a full page, so the full library is always what
+// reconciliation is actually comparing against.
+var MCQ_FETCH_PAGE_SIZE = 1000;
+async function fetchAllMcqRows(){
+  var all = [];
+  var from = 0;
+  while (true) {
+    var res = await supabaseClient.from('mcqs').select('data').eq('user_id', state.currentUser.id).range(from, from + MCQ_FETCH_PAGE_SIZE - 1);
+    if (res.error) throw res.error;
+    var page = res.data || [];
+    all = all.concat(page);
+    if (page.length < MCQ_FETCH_PAGE_SIZE) break; // shorter than a full page — this was the last one
+    from += MCQ_FETCH_PAGE_SIZE;
+  }
+  return all;
+}
+
 async function loadLibrary(){
   if (!state.currentUser || !supabaseClient) { state.mcqs = []; state.sources = {}; return; }
   var usedMirrorFallback = false;
@@ -1145,9 +1173,7 @@ async function loadLibrary(){
   }
 
   try {
-    var mcqRes = await supabaseClient.from('mcqs').select('data').eq('user_id', state.currentUser.id);
-    if (mcqRes.error) throw mcqRes.error;
-    var cloudMcqs = (mcqRes.data || []).map(function(row){ return row.data; });
+    var cloudMcqs = (await fetchAllMcqRows()).map(function(row){ return row.data; });
     /* Reconcile against the local mirror instead of trusting a SUCCESSFUL pull
        blindly. A save that never actually finished reaching the server — tab closed
        mid-write, a network blip that got flagged but hadn't been retried yet, the OS
