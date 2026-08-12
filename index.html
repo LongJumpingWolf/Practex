@@ -732,7 +732,8 @@ var state = {
   hasUnsyncedChanges: false, /* true whenever a save to Supabase has failed and hasn't been confirmed since — drives the retry loop and the sync status pill */
   lastSaveHadPermanentConflict: false, /* true right after a save fails specifically due to an ownership conflict (RLS) — a permanent failure, not something the retry loop should keep hammering */
   pendingImportPayload: null, /* a parsed JSON import file, waiting on the user to choose keep-progress vs start-fresh before it actually gets applied */
-  pendingNoteDraft: null /* {mcqId, images} while the Add Note modal is open, before it's actually saved onto the question */
+  pendingNoteDraft: null, /* {mcqId, images} while the Add Note modal is open, before it's actually saved onto the question */
+  deletedMcqIds: {} /* id -> deletedAt ms — tombstones for questions removed on THIS or any other device, so a stale local mirror on a device that hasn't opened in a while doesn't resurrect something that was deliberately deleted elsewhere. Trimmed periodically — see trimDeletedMcqIds(). */
 };
 
 /* ================= Local-first data mirror =================
@@ -788,7 +789,8 @@ async function persistLocalMirror(){
       fsrsCardExpanded: state.fsrsCardExpanded,
       autoSleepEnabled: state.autoSleepEnabled,
       autoSleepStreak: state.autoSleepStreak,
-      pausedSession: state.pausedSession
+      pausedSession: state.pausedSession,
+      deletedMcqIds: state.deletedMcqIds
     };
     var db = await openDataMirrorDb();
     var tx = db.transaction(DATA_MIRROR_STORE_NAME, 'readwrite');
@@ -1066,27 +1068,19 @@ function showToast(msg){
 async function loadLibrary(){
   if (!state.currentUser || !supabaseClient) { state.mcqs = []; state.sources = {}; return; }
   var usedMirrorFallback = false;
-  try {
-    var mcqRes = await supabaseClient.from('mcqs').select('data').eq('user_id', state.currentUser.id);
-    if (mcqRes.error) throw mcqRes.error;
-    state.mcqs = (mcqRes.data || []).map(function(row){ return row.data; });
-  } catch(e) {
-    console.error('loadLibrary (mcqs):', e);
-    var mirror = await loadLocalMirror();
-    if (mirror && Array.isArray(mirror.mcqs)) {
-      state.mcqs = mirror.mcqs;
-      usedMirrorFallback = true;
-    } else {
-      state.mcqs = [];
-      showToast('Could not load your library — no local copy available either.');
-    }
-  }
+
+  // Settings (including deletedMcqIds, the tombstone list) load FIRST, before
+  // mcqs — the mcqs reconciliation below needs to know about deletions from
+  // any device before it decides whether a locally-cached question that's
+  // missing from the cloud is "unsynced, recover it" or "deleted elsewhere,
+  // leave it gone".
   try {
     var setRes = await supabaseClient.from('user_settings').select('*').eq('user_id', state.currentUser.id).maybeSingle();
     if (setRes.error) throw setRes.error;
     var row = setRes.data;
     state.sources = (row && row.sources) || {};
     state.pausedSession = (row && row.paused_session) || null;
+    state.deletedMcqIds = (row && row.deleted_mcq_ids) || {};
     /* Reconcile against BOTH local pause sources — the tiny synchronous localStorage
        entry (guaranteed to have survived an actual tab close) and the full IndexedDB
        mirror's own pausedSession (kept current on every normal save). Whichever of
@@ -1103,6 +1097,22 @@ async function loadLibrary(){
       state.pausedSession = (syncPausedAt === bestPausedAt) ? syncPaused : mirrorForPause.pausedSession;
       saveUserSettings(); /* best-effort push-up, not awaited — loadLibrary() shouldn't block on this */
     }
+    // Same idea as pausedSession above, but for tombstones: a delete recorded
+    // locally (e.g. offline, or the settings save itself hadn't landed yet)
+    // that the cloud doesn't have yet should still be respected THIS session,
+    // not just re-added to state.deletedMcqIds after the fact — merge it in
+    // now, before it's used below.
+    if (mirrorForPause && mirrorForPause.deletedMcqIds) {
+      var mergedTombstones = false;
+      Object.keys(mirrorForPause.deletedMcqIds).forEach(function(id){
+        if (!state.deletedMcqIds[id] || mirrorForPause.deletedMcqIds[id] > state.deletedMcqIds[id]) {
+          state.deletedMcqIds[id] = mirrorForPause.deletedMcqIds[id];
+          mergedTombstones = true;
+        }
+      });
+      if (mergedTombstones) saveUserSettings(); /* push the merged tombstone list back up, best-effort */
+    }
+    trimDeletedMcqIds();
     state.learningMode.enabled = row ? (row.fsrs_mode_enabled !== false) : false; /* brand-new accounts start in plain practice mode — FSRS is opt-in, not the default */
     state.darkMode = !!(row && row.dark_mode);
     state.streak = (row && row.streak) || { count: 0, lastDate: null };
@@ -1116,6 +1126,7 @@ async function loadLibrary(){
     if (mirror2) {
       state.sources = mirror2.sources || {};
       state.pausedSession = mirror2.pausedSession || null;
+      state.deletedMcqIds = mirror2.deletedMcqIds || {};
       state.learningMode.enabled = mirror2.fsrsModeEnabled !== false;
       state.darkMode = !!mirror2.darkMode;
       state.streak = mirror2.streak || { count: 0, lastDate: null };
@@ -1124,8 +1135,50 @@ async function loadLibrary(){
       state.autoSleepEnabled = mirror2.autoSleepEnabled !== false;
       state.autoSleepStreak = mirror2.autoSleepStreak || 4;
       usedMirrorFallback = true;
+    } else {
+      state.deletedMcqIds = {};
     }
   }
+
+  try {
+    var mcqRes = await supabaseClient.from('mcqs').select('data').eq('user_id', state.currentUser.id);
+    if (mcqRes.error) throw mcqRes.error;
+    var cloudMcqs = (mcqRes.data || []).map(function(row){ return row.data; });
+    /* Reconcile against the local mirror instead of trusting a SUCCESSFUL pull
+       blindly. A save that never actually finished reaching the server — tab closed
+       mid-write, a network blip that got flagged but hadn't been retried yet, the OS
+       killing the app before an in-flight request completed — doesn't throw an error
+       here; the query just comes back successful with an incomplete answer. Silently
+       overwriting state.mcqs with that incomplete copy is exactly what discarded a
+       freshly-imported deck that was still sitting safely in the local IndexedDB
+       mirror the whole time. Anything the mirror has that the cloud pull doesn't is
+       treated as not-yet-synced and recovered — UNLESS it's in the tombstone list
+       loaded above, in which case it was deliberately deleted (maybe on another
+       device) and a stale local copy shouldn't bring it back. */
+    var mirrorForReconcile = await loadLocalMirror();
+    var cloudIds = {};
+    cloudMcqs.forEach(function(m){ if (m && m.id) cloudIds[m.id] = true; });
+    var localOnly = (mirrorForReconcile && Array.isArray(mirrorForReconcile.mcqs))
+      ? mirrorForReconcile.mcqs.filter(function(m){ return m && m.id && !cloudIds[m.id] && !state.deletedMcqIds[m.id]; })
+      : [];
+    state.mcqs = cloudMcqs.concat(localOnly);
+    if (localOnly.length) {
+      state.hasUnsyncedChanges = true; // these never reached the server last time — get them pushed up now
+      showToast(localOnly.length + ' question' + (localOnly.length===1?'':'s') + ' from last time hadn\'t finished syncing — recovered from your local copy and re-saving now.');
+      retryUnsyncedChangesIfAny(); // don't just flag it and wait for the next focus/online event — push it up right away
+    }
+  } catch(e) {
+    console.error('loadLibrary (mcqs):', e);
+    var mirror = await loadLocalMirror();
+    if (mirror && Array.isArray(mirror.mcqs)) {
+      state.mcqs = mirror.mcqs;
+      usedMirrorFallback = true;
+    } else {
+      state.mcqs = [];
+      showToast('Could not load your library — no local copy available either.');
+    }
+  }
+
   await loadImageUrlMap();
   if (usedMirrorFallback) {
     state.hasUnsyncedChanges = true; // whatever's cached locally hasn't been confirmed against the server this session
@@ -1150,6 +1203,7 @@ async function saveUserSettings(){
       sleeping_subjects: state.sleepingSubjects,
       auto_sleep_enabled: state.autoSleepEnabled,
       auto_sleep_streak: state.autoSleepStreak,
+      deleted_mcq_ids: state.deletedMcqIds,
       updated_at: new Date().toISOString()
     });
     if (res.error) throw res.error;
@@ -1194,6 +1248,47 @@ var syncInFlight = false;
 var lastAutoSyncAt = 0;
 var AUTO_SYNC_MIN_INTERVAL_MS = 15000; // throttle — don't hammer retries more than once per 15s
 
+async function fullSync(opts){
+  opts = opts || {};
+  if (!state.currentUser || !supabaseClient) return;
+  if (syncInFlight) return;
+  syncInFlight = true;
+  updateSyncIndicator();
+  try {
+    // Push first if this device already has a pending local edit — otherwise
+    // the pull below would fetch a stale (pre-edit) cloud copy of that same
+    // row and silently overwrite the not-yet-saved change. Mirrors Kardex's
+    // doSync() ordering logic exactly.
+    if (state.hasUnsyncedChanges){
+      await saveLibrary();
+      await saveUserSettings();
+    }
+    // The actual fix for "coming back to the tab doesn't see what changed
+    // elsewhere" — this pulls fresh cloud state and reconciles it against
+    // the local mirror (recovering anything still-unsynced, respecting
+    // deletion tombstones — see loadLibrary()). Previously autoSync() only
+    // ever pushed pending changes and never pulled at all, so a change made
+    // on another device/tab was invisible here until a full page reload.
+    await loadLibrary();
+    // Don't re-render over an active practice session (mid-question state
+    // isn't something a background pull should disturb) or over unsaved
+    // text sitting in the Add Source paste box (a full render rebuilds that
+    // view from scratch, which would silently wipe out whatever's typed/
+    // pasted there and hasn't been parsed yet).
+    var hasUnparsedDraft = state.view === 'addsource' && document.getElementById('ingestArea') && document.getElementById('ingestArea').value.trim();
+    if (!isMidSession() && !hasUnparsedDraft) render();
+    if (!opts.silent){
+      showToast(state.hasUnsyncedChanges ? 'Synced from the cloud (local changes will retry automatically)' : 'Synced.');
+    }
+  } catch(e) {
+    console.error('fullSync:', e);
+    if (!opts.silent) showToast('Could not sync — check your connection and try again.');
+  } finally {
+    syncInFlight = false;
+    updateSyncIndicator();
+  }
+}
+
 async function retryUnsyncedChangesIfAny(){
   if (!state.hasUnsyncedChanges || !state.currentUser || !supabaseClient || syncInFlight) return;
   syncInFlight = true;
@@ -1206,14 +1301,15 @@ async function retryUnsyncedChangesIfAny(){
     updateSyncIndicator();
   }
 }
-setInterval(retryUnsyncedChangesIfAny, 30000);
+setInterval(retryUnsyncedChangesIfAny, 30000); // lightweight push-only safety net — same split as Kardex, which also keeps its 30s timer push-only and reserves the full pull+push for autoSync()'s event-driven triggers below
 
 function autoSync(){
   if (!state.currentUser) return;
+  if (isMidSession()) return; // don't yank a live practice session's data out from under it mid-question
   var now = Date.now();
   if (now - lastAutoSyncAt < AUTO_SYNC_MIN_INTERVAL_MS) return;
   lastAutoSyncAt = now;
-  retryUnsyncedChangesIfAny();
+  fullSync({ silent: true });
 }
 
 /* Re-renders just the small status pill in the sidebar rather than the whole
@@ -1243,17 +1339,10 @@ async function manualSync(){
     showToast('You\'re offline — Practex will sync automatically once you\'re back.');
     return;
   }
-  if (syncInFlight) return;
-  syncInFlight = true;
-  updateSyncIndicator();
-  try {
-    await saveLibrary();
-    await saveUserSettings();
-    showToast(state.hasUnsyncedChanges ? 'Could not sync — check your connection and try again.' : 'Synced.');
-  } finally {
-    syncInFlight = false;
-    updateSyncIndicator();
-  }
+  // Full pull+push, not just a push retry — tapping "sync now" should mean
+  // "get me current with the cloud", the same as clicking Kardex's sync
+  // button does, not just "retry saving my own pending changes".
+  await fullSync({ silent: false });
 }
 /* Upserts the current in-memory library in one batched request (Postgres upsert
    accepts an array, so this is a single round trip regardless of library size).
@@ -1292,8 +1381,31 @@ async function saveLibrary(){
 }
 /* Explicit server-side delete for questions removed locally (deck delete is currently
    the only path that removes mcqs — upsert alone never deletes rows). */
+// Tombstones older than this are pruned — generous enough that even a device
+// that hasn't opened Practex in 4 months still correctly respects a deletion
+// made elsewhere, while keeping this list from growing forever.
+var DELETED_MCQ_TOMBSTONE_MAX_AGE_MS = 120 * 24 * 60 * 60 * 1000;
+function trimDeletedMcqIds(){
+  var cutoff = Date.now() - DELETED_MCQ_TOMBSTONE_MAX_AGE_MS;
+  var kept = {};
+  Object.keys(state.deletedMcqIds || {}).forEach(function(id){
+    if (state.deletedMcqIds[id] > cutoff) kept[id] = state.deletedMcqIds[id];
+  });
+  state.deletedMcqIds = kept;
+}
 async function deleteMcqRows(ids){
-  if (!state.currentUser || !supabaseClient || !ids || !ids.length) return;
+  if (!ids || !ids.length) return;
+  // Recorded locally (and pushed to Supabase via saveUserSettings below)
+  // BEFORE the actual delete — a stale mirror on another device that hasn't
+  // synced this deletion yet needs to know these ids were deliberately
+  // removed, not just "missing from the cloud because a save never finished"
+  // (which loadLibrary()'s reconciliation would otherwise treat as
+  // unsynced-and-worth-recovering, resurrecting exactly what you just deleted).
+  var now = Date.now();
+  ids.forEach(function(id){ state.deletedMcqIds[id] = now; });
+  trimDeletedMcqIds();
+  saveUserSettings(); // best-effort, not awaited — same reasoning as other background saves here
+  if (!state.currentUser || !supabaseClient) return;
   try {
     var res = await supabaseClient.from('mcqs').delete().eq('user_id', state.currentUser.id).in('id', ids);
     if (res.error) throw res.error;
