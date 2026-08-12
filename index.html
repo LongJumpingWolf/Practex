@@ -3973,7 +3973,20 @@ async function advanceAfterReveal(){
 
   s.index++; s.selected = null; s.revealed = false; s.shortAnswerCorrect = null; s.viewIndex = s.index;
   s.questionShownAt = Date.now(); s.revealedAt = null; s.lastTimeToAnswerMs = null; /* start the clock fresh for whatever's next */
-  if (s.index >= s.ids.length) state.view = 'summary';
+  if (s.index >= s.ids.length) {
+    state.view = 'summary';
+    // A test that finished normally has nothing left to "resume" — but if
+    // the person had switched tabs even once mid-test (extremely common,
+    // triggers the auto-pause safety-net snapshot below), state.pausedSession
+    // was still sitting there from that moment, untouched, since nothing
+    // used to clear it just because the live session kept going and
+    // eventually finished on its own. That stale snapshot would then
+    // resurface as a "Paused test" banner pointing at a test that's already
+    // done — this is what was showing up as the paused-test card appearing
+    // "randomly". Clearing it here, and pushing that clear so it doesn't
+    // come back from another device's cloud copy either.
+    if (state.pausedSession) { state.pausedSession = null; savePausedSession(); }
+  }
   render(); /* update the screen immediately — don't make the person wait on a network round trip just to see the next question */
   saveLibrary(); /* fire-and-forget in the background; it has its own error toast if it fails */
   if (justAutoSlept) showToast('That question is asleep now — ' + (state.autoSleepStreak||4) + ' correct in a row. Wake it anytime from its row in the library.');
@@ -4612,6 +4625,13 @@ async function onClick(e){
     return;
   }
   if (action === 'leave-without-pausing') {
+    // "Don't save my progress" should also discard any stale auto-pause
+    // snapshot from earlier in THIS same session (e.g. a tab switch mid-test
+    // that silently set state.pausedSession as a safety net) — otherwise
+    // that old snapshot survives this explicit "I'm done with this" choice
+    // and resurfaces later as a paused-test card for a session the person
+    // just said to abandon.
+    if (state.pausedSession) { state.pausedSession = null; savePausedSession(); }
     state.session=null; applyPendingNav(); closeModal(); render(); return;
   }
   if (action === 'resume-paused') {
@@ -4864,6 +4884,21 @@ async function init(){
       state.pausedSession.pausedAt = Date.now();
       state.pausedSession.learningEnabled = state.learningMode.enabled; // see resume-paused for why this matters
       persistPausedSessionSync();
+    } else if (document.visibilityState === 'visible' && isMidSession() && state.pausedSession) {
+      // Coming back to a session that never actually closed — if the
+      // pending pausedSession is THIS SAME test's own auto-pause snapshot
+      // (set above when the tab went hidden), it's now redundant: the live
+      // session just picked back up normally, so the stale backup should go
+      // rather than sitting around to surface later as a "Paused test" card
+      // for a test that's still going or has already finished (this was the
+      // actual cause of the card appearing seemingly at random). Left alone
+      // if it's a DIFFERENT test's pause — started a new test while an
+      // earlier, unrelated one was still genuinely waiting to be resumed —
+      // that one shouldn't be touched.
+      var sameTest = state.session.ids && state.pausedSession.ids &&
+        state.session.ids.length === state.pausedSession.ids.length &&
+        state.session.ids.every(function(id, i){ return id === state.pausedSession.ids[i]; });
+      if (sameTest) { state.pausedSession = null; savePausedSession(); }
     }
   });
   window.addEventListener('pagehide', function(){
