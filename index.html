@@ -1166,6 +1166,14 @@ async function loadLibrary(){
       ? mirrorForReconcile.mcqs.filter(function(m){ return m && m.id && !cloudIds[m.id] && !state.deletedMcqIds[m.id]; })
       : [];
     state.mcqs = cloudMcqs.concat(localOnly);
+    // Seed the dirty-tracking snapshot cache (see saveLibrary()) with
+    // exactly what the cloud just confirmed it has — anything in cloudMcqs
+    // is known-synced right now, so it's excluded from the next save unless
+    // it actually changes. localOnly is deliberately left UNSEEDED: those
+    // rows still need pushing, and leaving them out of the cache is what
+    // correctly marks them dirty for the very next saveLibrary() call.
+    lastSyncedMcqSnapshots = {};
+    cloudMcqs.forEach(function(m){ if (m && m.id) lastSyncedMcqSnapshots[m.id] = JSON.stringify(m); });
     if (localOnly.length) {
       state.hasUnsyncedChanges = true; // these never reached the server last time — get them pushed up now
       showToast(localOnly.length + ' question' + (localOnly.length===1?'':'s') + ' from last time hadn\'t finished syncing — recovered from your local copy and re-saving now.');
@@ -1177,6 +1185,12 @@ async function loadLibrary(){
     if (mirror && Array.isArray(mirror.mcqs)) {
       state.mcqs = mirror.mcqs;
       usedMirrorFallback = true;
+      // Deliberately NOT seeding lastSyncedMcqSnapshots here — this is the
+      // offline/error fallback, so there's no confirmation any of this
+      // actually matches the cloud. Leaving the cache empty means the next
+      // successful saveLibrary() treats everything as dirty and does one
+      // full resync to re-establish a known-good baseline, which is exactly
+      // the safe/correct behavior when we're not sure what the server has.
     } else {
       state.mcqs = [];
       showToast('Could not load your library — no local copy available either.');
@@ -1366,18 +1380,21 @@ async function manualSync(){
 /* Upserts the current in-memory library in one batched request (Postgres upsert
    accepts an array, so this is a single round trip regardless of library size).
    Note: this does NOT delete rows that were removed locally — see deleteMcqRows(). */
-// Bulk saves send the whole library in chunks rather than one giant request —
-// with a library this size (thousands of full question objects, each with
-// options/explanation/notes/images/full answer history), a single request
-// covering everything risked hitting Supabase's request-size/statement-
-// timeout limits, which failed the ENTIRE save even if only one question had
-// actually changed, and gave no feedback while it was happening beyond a
-// spinning "Syncing…" pill. Chunking fixes both: smaller requests are far
-// less likely to time out or get rejected, and each chunk's completion is a
-// natural point to report progress. currentSyncProgress is read by
-// renderSyncStatusPill() to show a live bar during a genuinely large save;
-// it's left alone (single chunk) for routine small saves, so nothing changes
-// there.
+// Bulk saves send only what actually CHANGED since the last confirmed sync,
+// not the whole library — the earlier batching fix made resending everything
+// more reliable, but it was still resending everything, every single save,
+// even to update one question's answer history. That's the real gap versus
+// Kardex's per-record pushes. Manually marking every mutation site "dirty"
+// was ruled out here — with 30+ scattered places that touch a question
+// (answering, editing, flagging, notes, images, sleep state...), missing
+// even one would silently stop that data from ever syncing, which is worse
+// than the inefficiency being fixed. Instead: a content snapshot of every
+// question is kept from the last confirmed sync (lastSyncedMcqSnapshots,
+// id -> JSON string), and a save simply compares current vs. last-known —
+// anything different (or new) gets pushed, anything unchanged doesn't. This
+// can't miss a mutation, by construction: it doesn't need to know HOW a
+// question changed, only THAT it did.
+var lastSyncedMcqSnapshots = {}; // id -> JSON.stringify(question) as of the last confirmed successful sync
 var LIBRARY_SAVE_BATCH_SIZE = 300;
 var currentSyncProgress = null; // { done, total } while a multi-batch save is in flight, else null
 
@@ -1386,6 +1403,23 @@ async function saveLibrary(){
   state.lastSaveHadPermanentConflict = false;
   if (!state.currentUser || !supabaseClient) return;
   if (!state.mcqs.length) return;
+
+  var dirty = [];
+  state.mcqs.forEach(function(m){
+    if (!m || !m.id) return;
+    var serialized = JSON.stringify(m);
+    if (lastSyncedMcqSnapshots[m.id] !== serialized) dirty.push({ id: m.id, serialized: serialized });
+  });
+  if (!dirty.length) {
+    // Everything already matches what the server confirmed last time —
+    // genuinely nothing to push. Distinct from "nothing to do because the
+    // library is empty" above; this is the common case for a routine
+    // autoSync that finds no real changes.
+    state.hasUnsyncedChanges = false;
+    updateSyncIndicator();
+    return;
+  }
+
   // Flagged as unsynced BEFORE the network attempt — same reasoning as
   // saveUserSettings() above: an answer/rating/edit that's still genuinely
   // in flight needs a concurrent fullSync() (tab focus/visibility) to know
@@ -1394,15 +1428,22 @@ async function saveLibrary(){
   state.hasUnsyncedChanges = true;
   updateSyncIndicator();
   try {
-    var rows = state.mcqs.map(function(m){
-      return { id: m.id, user_id: state.currentUser.id, data: m, updated_at: new Date().toISOString() };
-    });
-    var total = rows.length;
+    var mcqById = {};
+    state.mcqs.forEach(function(m){ if (m && m.id) mcqById[m.id] = m; });
+    var total = dirty.length;
     if (total > LIBRARY_SAVE_BATCH_SIZE) currentSyncProgress = { done: 0, total: total };
     for (var i = 0; i < total; i += LIBRARY_SAVE_BATCH_SIZE){
-      var chunk = rows.slice(i, i + LIBRARY_SAVE_BATCH_SIZE);
-      var res = await supabaseClient.from('mcqs').upsert(chunk);
+      var chunk = dirty.slice(i, i + LIBRARY_SAVE_BATCH_SIZE);
+      var rows = chunk.map(function(d){
+        return { id: d.id, user_id: state.currentUser.id, data: mcqById[d.id], updated_at: new Date().toISOString() };
+      });
+      var res = await supabaseClient.from('mcqs').upsert(rows);
       if (res.error) throw res.error;
+      // Only this chunk's rows are confirmed synced now — updating their
+      // snapshots (not all of `dirty`) means a failure on a LATER chunk
+      // correctly leaves only the not-yet-sent rows marked dirty for retry,
+      // rather than incorrectly re-marking already-confirmed ones too.
+      chunk.forEach(function(d){ lastSyncedMcqSnapshots[d.id] = d.serialized; });
       if (currentSyncProgress){
         currentSyncProgress.done = Math.min(i + chunk.length, total);
         updateSyncIndicator();
@@ -1455,7 +1496,7 @@ async function deleteMcqRows(ids){
   // (which loadLibrary()'s reconciliation would otherwise treat as
   // unsynced-and-worth-recovering, resurrecting exactly what you just deleted).
   var now = Date.now();
-  ids.forEach(function(id){ state.deletedMcqIds[id] = now; });
+  ids.forEach(function(id){ state.deletedMcqIds[id] = now; delete lastSyncedMcqSnapshots[id]; });
   trimDeletedMcqIds();
   saveUserSettings(); // best-effort, not awaited — same reasoning as other background saves here
   if (!state.currentUser || !supabaseClient) return;
