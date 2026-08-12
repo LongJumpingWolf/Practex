@@ -178,6 +178,10 @@ input,textarea,select{font-family:inherit;color:inherit;}
 .sync-status-pill.syncing svg{animation:sync-spin .8s linear infinite;}
 .sync-status-pill.synced{background:transparent;color:rgba(234,240,245,0.55);} /* nothing to report — quiet on purpose, no colored badge needed for "all fine" */
 .sync-status-pill.unsynced{background:rgba(199,123,46,0.25);color:#EAF0F5;}
+.sync-status-pill{flex-direction:column;align-items:flex-start;gap:4px;} /* stacks the progress bar under the label when a bulk save is in flight */
+.sync-status-pill .sync-pill-row{display:flex;align-items:center;gap:6px;}
+.sync-progress-track{width:100%;height:3px;border-radius:2px;background:rgba(255,255,255,0.18);overflow:hidden;}
+.sync-progress-fill{height:100%;background:#7FB88A;border-radius:2px;transition:width .2s ease;}
 @keyframes sync-spin{to{transform:rotate(360deg);}}
 
 /* Settings modal */
@@ -1191,6 +1195,18 @@ async function saveUserSettings(){
   persistLocalMirror(); /* local-first, unconditional, before any network attempt */
   state.lastSaveHadPermanentConflict = false; /* this table is keyed by user_id only, so it can't hit the cross-account collision saveLibrary() can — reset here anyway so a stale value from an earlier saveLibrary() call can't mislead a caller checking this flag after just calling this function alone */
   if (!state.currentUser || !supabaseClient) return;
+  /* Flagged as unsynced BEFORE the network attempt, not just on failure — this
+     is what actually caused FSRS mode (and other settings) to "revert" on an
+     abrupt tab switch. A toggle calls this fire-and-forget; if a background
+     fullSync() (tab focus/visibility) fired while THIS request was still in
+     flight, it had no way to know a save was pending — hasUnsyncedChanges was
+     still false — so it skipped straight to pulling, sometimes winning the
+     race against this upsert and overwriting state.learningMode.enabled (or
+     whatever else was mid-save) with the stale pre-toggle value from the
+     server. Setting this up front means any concurrent fullSync() correctly
+     pushes first instead of pulling over an in-flight write. */
+  state.hasUnsyncedChanges = true;
+  updateSyncIndicator();
   try {
     var res = await supabaseClient.from('user_settings').upsert({
       user_id: state.currentUser.id,
@@ -1326,12 +1342,15 @@ function renderSyncStatusPill(){
   if (!state.currentUser) return '<div id="syncStatusPill"></div>';
   var offline = typeof navigator !== 'undefined' && navigator.onLine === false;
   var cls, label, iconName;
-  if (syncInFlight) { cls = 'syncing'; label = 'Syncing…'; iconName = 'refresh-cw'; }
+  if (syncInFlight) { cls = 'syncing'; label = currentSyncProgress ? ('Syncing ' + currentSyncProgress.done + ' of ' + currentSyncProgress.total + '…') : 'Syncing…'; iconName = 'refresh-cw'; }
   else if (offline) { cls = 'offline'; label = 'Offline — saved locally'; iconName = 'wifi-off'; }
   else if (state.hasUnsyncedChanges) { cls = 'unsynced'; label = 'Unsynced — tap to retry'; iconName = 'refresh-cw'; }
   else { cls = 'synced'; label = 'Synced'; iconName = 'check-circle'; }
+  var progressBarHtml = (syncInFlight && currentSyncProgress)
+    ? '<div class="sync-progress-track"><div class="sync-progress-fill" style="width:' + Math.round((currentSyncProgress.done / currentSyncProgress.total) * 100) + '%"></div></div>'
+    : '';
   return '<div id="syncStatusPill" class="sync-status-pill ' + cls + '" data-action="manual-sync" role="button" tabindex="0" title="Click to sync now">' +
-    icon(iconName, 13) + ' ' + label + '</div>';
+    '<div class="sync-pill-row">' + icon(iconName, 13) + ' ' + label + '</div>' + progressBarHtml + '</div>';
 }
 async function manualSync(){
   if (!state.currentUser || !supabaseClient) return;
@@ -1347,21 +1366,54 @@ async function manualSync(){
 /* Upserts the current in-memory library in one batched request (Postgres upsert
    accepts an array, so this is a single round trip regardless of library size).
    Note: this does NOT delete rows that were removed locally — see deleteMcqRows(). */
+// Bulk saves send the whole library in chunks rather than one giant request —
+// with a library this size (thousands of full question objects, each with
+// options/explanation/notes/images/full answer history), a single request
+// covering everything risked hitting Supabase's request-size/statement-
+// timeout limits, which failed the ENTIRE save even if only one question had
+// actually changed, and gave no feedback while it was happening beyond a
+// spinning "Syncing…" pill. Chunking fixes both: smaller requests are far
+// less likely to time out or get rejected, and each chunk's completion is a
+// natural point to report progress. currentSyncProgress is read by
+// renderSyncStatusPill() to show a live bar during a genuinely large save;
+// it's left alone (single chunk) for routine small saves, so nothing changes
+// there.
+var LIBRARY_SAVE_BATCH_SIZE = 300;
+var currentSyncProgress = null; // { done, total } while a multi-batch save is in flight, else null
+
 async function saveLibrary(){
   persistLocalMirror(); /* local-first, unconditional, before any network attempt */
   state.lastSaveHadPermanentConflict = false;
   if (!state.currentUser || !supabaseClient) return;
   if (!state.mcqs.length) return;
+  // Flagged as unsynced BEFORE the network attempt — same reasoning as
+  // saveUserSettings() above: an answer/rating/edit that's still genuinely
+  // in flight needs a concurrent fullSync() (tab focus/visibility) to know
+  // to push it first rather than pull over it. See that function's comment
+  // for the full race-condition explanation.
+  state.hasUnsyncedChanges = true;
+  updateSyncIndicator();
   try {
     var rows = state.mcqs.map(function(m){
       return { id: m.id, user_id: state.currentUser.id, data: m, updated_at: new Date().toISOString() };
     });
-    var res = await supabaseClient.from('mcqs').upsert(rows);
-    if (res.error) throw res.error;
+    var total = rows.length;
+    if (total > LIBRARY_SAVE_BATCH_SIZE) currentSyncProgress = { done: 0, total: total };
+    for (var i = 0; i < total; i += LIBRARY_SAVE_BATCH_SIZE){
+      var chunk = rows.slice(i, i + LIBRARY_SAVE_BATCH_SIZE);
+      var res = await supabaseClient.from('mcqs').upsert(chunk);
+      if (res.error) throw res.error;
+      if (currentSyncProgress){
+        currentSyncProgress.done = Math.min(i + chunk.length, total);
+        updateSyncIndicator();
+      }
+    }
+    currentSyncProgress = null;
     state.hasUnsyncedChanges = false;
     updateSyncIndicator();
   } catch(e) {
     console.error('saveLibrary:', e);
+    currentSyncProgress = null;
     if (e && e.code === '42501') {
       /* Row-level-security rejection — this means one or more of these question IDs
          already exist in the table under a DIFFERENT account (e.g. a JSON export from
@@ -1373,6 +1425,7 @@ async function saveLibrary(){
          also show a misleading "success" message right after this one. */
       state.lastSaveHadPermanentConflict = true;
       showToast('Some questions couldn\'t sync — they already exist under a different Practex account. Sign in as whichever account originally created them.');
+      updateSyncIndicator();
       return;
     }
     state.hasUnsyncedChanges = true;
@@ -4427,7 +4480,10 @@ async function onClick(e){
   if (action === 'leave-practice') { requestLeavePractice(); return; }
   if (action === 'pause-and-leave') {
     state.pausedSession=currentSessionSnapshot();
-    if (state.pausedSession) state.pausedSession.pausedAt = Date.now();
+    if (state.pausedSession) {
+      state.pausedSession.pausedAt = Date.now();
+      state.pausedSession.learningEnabled = state.learningMode.enabled; // see resume-paused for why this matters
+    }
     state.session=null; applyPendingNav(); closeModal(); render();
     showToast('Pausing…');
     /* Awaited — this is exactly the highest-risk spot for a fire-and-forget save:
@@ -4469,6 +4525,16 @@ async function onClick(e){
       showToast('That paused test looks corrupted and can\'t be resumed — sorry about that. Starting fresh is the safest option.');
       state.pausedSession = null; closeModal(); render(); savePausedSession(); return;
     }
+    // Restore the mode the session was actually PAUSED in — not whatever the
+    // global toggle currently happens to be. Without this, resuming (or an
+    // abrupt tab-switch auto-pause/restore) could silently drop you into
+    // FSRS mode when you left in plain practice mode, or vice versa, any
+    // time the global toggle had drifted since — from switching it while
+    // browsing elsewhere in the app, from a settings sync landing between
+    // pause and resume, anything. A paused session saved before this fix
+    // existed won't have learningEnabled at all — falls back to the current
+    // global setting in that case, same as before.
+    if (typeof restored.learningEnabled === 'boolean') state.learningMode.enabled = restored.learningEnabled;
     state.session = restored;
     state.pausedSession = null;
     state.view = 'practice';
@@ -4687,6 +4753,7 @@ async function init(){
     if (document.visibilityState === 'hidden' && isMidSession() && !state.pausedSession) {
       state.pausedSession = currentSessionSnapshot();
       state.pausedSession.pausedAt = Date.now();
+      state.pausedSession.learningEnabled = state.learningMode.enabled; // see resume-paused for why this matters
       persistPausedSessionSync();
     }
   });
@@ -4694,6 +4761,7 @@ async function init(){
     if (isMidSession() && !state.pausedSession) {
       state.pausedSession = currentSessionSnapshot();
       state.pausedSession.pausedAt = Date.now();
+      state.pausedSession.learningEnabled = state.learningMode.enabled; // see resume-paused for why this matters
       persistPausedSessionSync();
     }
   });
