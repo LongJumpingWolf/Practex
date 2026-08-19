@@ -702,6 +702,22 @@ var supabaseClient = (SUPABASE_CONFIGURED && window.supabase) ? window.supabase.
 /* ===================================================== */
 
 
+/* ================= Dev build indicator =================
+   Flip this to true while actively iterating on a change across multiple messages,
+   back to false once that change is complete and tested — lets a person tell, just
+   from glancing at the browser tab, whether what's currently deployed is a
+   work-in-progress build or the finished version, without digging through chat.
+   When true, the tab title blinks/cycles an "updating" indicator instead of the
+   normal title. Left false for a finished, tested delivery. */
+var DEV_BUILD_IN_PROGRESS = false;
+if (DEV_BUILD_IN_PROGRESS) {
+  var devTitleDots = 0;
+  setInterval(function(){
+    devTitleDots = (devTitleDots + 1) % 4;
+    document.title = '🔧 Updating' + '.'.repeat(devTitleDots) + ' — Practex';
+  }, 500);
+}
+
 var state = {
   mcqs: [],
   sources: {},
@@ -995,6 +1011,11 @@ async function getImageRecord(hash){
    device that this browser hasn't seen yet. */
 async function resolveImageRef(hash){
   if (!hash) return null;
+  /* A directly-linked image (from #IMAGE_Q:/#IMAGE_A: in the source text, or an
+     already-resolved export) needs no lookup at all — just use it as-is. This is
+     also what makes exported images portable across accounts: a plain link works
+     anywhere, whereas a hash only ever resolves for the account that uploaded it. */
+  if (/^https?:\/\//i.test(hash)) return hash;
   var record = await getImageRecord(hash);
   if (record) return record.dataUrl;
   var cloud = await downloadImageFromCloud(hash);
@@ -1345,14 +1366,39 @@ function exportLibrary(){
    final list of questions to write out. Sources are trimmed to only the ones actually
    represented in this subset, so a scoped export doesn't drag in irrelevant source
    metadata for content that isn't included. */
+/* Turns whatever's in an images/answerImages array into plain http(s) links only —
+   an internal hash reference only ever resolves for the account that uploaded it
+   (it's a lookup key into that account's own mcq_image_urls rows and local
+   IndexedDB cache), so exporting raw hashes silently breaks images the moment the
+   file is opened anywhere else. A hash with no resolved URL yet (upload still in
+   flight, or never completed) is dropped rather than exported as a dead reference. */
+function resolveImageRefsToLinks(refs){
+  if (!refs || !refs.length) return [];
+  var out = [];
+  refs.forEach(function(ref){
+    if (/^https?:\/\//i.test(ref)) { out.push(ref); return; }
+    var url = state.imageUrlMap[ref];
+    if (url) out.push(url);
+  });
+  return out;
+}
 function exportMcqSubset(mcqs, filenameLabel){
   if (!mcqs.length) { showToast('Nothing to export.'); return; }
   var relevantSources = {};
   mcqs.forEach(function(m){ if (state.sources[m.source]) relevantSources[m.source] = state.sources[m.source]; });
+  var exportMcqs = mcqs.map(function(m){
+    var copy = JSON.parse(JSON.stringify(m));
+    copy.images = resolveImageRefsToLinks(copy.images);
+    copy.answerImages = resolveImageRefsToLinks(copy.answerImages);
+    if (Array.isArray(copy.notes)) {
+      copy.notes.forEach(function(n){ n.images = resolveImageRefsToLinks(n.images); });
+    }
+    return copy;
+  });
   var payload = {
     exportedAt: Date.now(),
     version: 1,
-    mcqs: mcqs,
+    mcqs: exportMcqs,
     sources: relevantSources,
     streak: state.streak
   };
@@ -2174,8 +2220,17 @@ function parseLibraryText(raw, sourceOverride){
       var bankId = bmatch ? bmatch[1] : null;
       i++;
       var qlines = [];
+      var qImageUrls = [];
       while (i < lines.length && lines[i].trim().indexOf('#OPTIONS') !== 0 && lines[i].trim().indexOf('#ANSWER') !== 0) {
-        qlines.push(lines[i]); i++;
+        var qbt = lines[i].trim();
+        if (qbt.indexOf('#IMAGE_Q:') === 0) {
+          var qImgUrl = qbt.slice(9).trim();
+          if (/^https?:\/\//i.test(qImgUrl)) qImageUrls.push(qImgUrl);
+          else errors.push({ line: i + 1, message: '#IMAGE_Q: near line ' + (i+1) + ' doesn\'t look like a real http(s) link — skipped. Use #IMAGE: [description] instead if there\'s no real link for it.' });
+        } else {
+          qlines.push(lines[i]);
+        }
+        i++;
       }
       var questionText = qlines.join('\n').trim();
 
@@ -2215,10 +2270,21 @@ function parseLibraryText(raw, sourceOverride){
       }
 
       var explanation = '';
+      var aImageUrls = [];
       if (i < lines.length && lines[i].trim().indexOf('#EXPLANATION') === 0) {
         i++;
         var ebuf = [];
-        while (i < lines.length && lines[i].trim().indexOf('#TAGS') !== 0 && lines[i].trim().indexOf('#END') !== 0) { ebuf.push(lines[i]); i++; }
+        while (i < lines.length && lines[i].trim().indexOf('#TAGS') !== 0 && lines[i].trim().indexOf('#END') !== 0) {
+          var ebt = lines[i].trim();
+          if (ebt.indexOf('#IMAGE_A:') === 0) {
+            var aImgUrl = ebt.slice(9).trim();
+            if (/^https?:\/\//i.test(aImgUrl)) aImageUrls.push(aImgUrl);
+            else errors.push({ line: i + 1, message: '#IMAGE_A: near line ' + (i+1) + ' doesn\'t look like a real http(s) link — skipped. Use #IMAGE: [description] instead if there\'s no real link for it.' });
+          } else {
+            ebuf.push(lines[i]);
+          }
+          i++;
+        }
         explanation = ebuf.join('\n').trim();
       }
 
@@ -2247,8 +2313,8 @@ function parseLibraryText(raw, sourceOverride){
           explanation: explanation,
           tags: tags,
           flagged: false,
-          images: [],
-          answerImages: [],
+          images: qImageUrls,
+          answerImages: aImageUrls,
           notes: [],
           asleep: false,
           addedAt: Date.now(),
@@ -3055,6 +3121,7 @@ var MASTER_PROMPT = "PRACTEX MCQ STANDARDIZATION PROMPT\n\n" +
 "Then for every question that uses it, add the bank id right after #Q on the same line: \"#Q [BANK:B1]\", and omit that question's own #OPTIONS block entirely - its options come from the bank. #ANSWER is still just the single letter for that question, from the bank's lettering. Give each distinct bank in the document a new sequential id (B1, B2, B3...), same pattern as #PASSAGE ids.\n\n" +
 "9. Negative/EXCEPT questions (\"which of the following is NOT true\", \"all of the following are correct EXCEPT\", \"which is a contraindication\" when everything else in the list is an indication, etc.) - keep the negative framing exactly as worded in the #Q stem, never rephrase it into a positive question. #ANSWER is still whichever single letter correctly answers the question AS ASKED - i.e. the one false/exceptional statement, not the ones that happen to be individually true. Getting this backwards is the single most common conversion error on this question type, so double check the answer key's letter actually matches the exception, not the rule.\n\n" +
 "10. Questions referencing an image/photo/diagram that OCR cannot capture - insert a line inside the #Q body: #IMAGE: [brief description inferred from the surrounding text/caption]. Never invent findings that aren't stated nearby - if you cannot tell what the image shows, write #IMAGE: [image - description unavailable].\n\n" +
+"10b. If the source material actually gives you a REAL, working image URL (e.g. converting from a webpage or a digital document where images are already hosted somewhere, not a scanned/photographed page) - use #IMAGE_Q: <url> instead, on its own line inside the #Q body, for an image that belongs with the question itself. For an image that belongs with the answer/explanation, use #IMAGE_A: <url> on its own line inside the #EXPLANATION body specifically (it will not be recognized anywhere else). Only ever use these two for a URL you can actually see verbatim in the source - NEVER invent, guess, or construct a plausible-looking URL. If you are not looking at a real link, use #IMAGE: [description] from rule 10 instead. A question can have #IMAGE_Q:/#IMAGE_A: and the plain #IMAGE: placeholder together if some images have real links and others don't.\n\n" +
 "11. Questions with no visible answer key anywhere in the source - still create the full block, options included, and set #ANSWER: UNKNOWN.\n\n" +
 "=== TABLE RULES ===\n" +
 "Use standard markdown pipe tables only, inside a #Q or #EXPLANATION body:\n" +
