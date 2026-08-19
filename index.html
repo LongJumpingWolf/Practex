@@ -18,7 +18,7 @@
 <meta name="theme-color" content="#2F5C7A">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;0,700;1,500&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
   --paper:#EEF0E9;
@@ -115,38 +115,15 @@ input,textarea,select{font-family:inherit;color:inherit;}
 .sidebar{
   background:var(--cover);
   color:#EAF0F5;
-  display:flex;
-  flex-direction:column;
-  position:sticky;
-  top:0;
-  height:100vh;
-  overflow:hidden; /* the tree area scrolls on its own below — see .sidebar-scroll — so a long tree can't push the FSRS bar or account row out of view */
-}
-.sidebar-top{
-  flex-shrink:0;
+  padding:22px 18px 24px;
   display:flex;
   flex-direction:column;
   gap:12px;
-  padding:22px 18px 0;
-}
-.sidebar-scroll{
-  flex:1;
-  min-height:0; /* required for a flex child to actually scroll internally instead of just growing the parent */
+  position:sticky;
+  top:0;
+  height:100vh;
   overflow-y:auto;
-  padding:0 18px;
 }
-.sidebar-bottom{
-  flex-shrink:0;
-  padding:12px 18px 20px;
-  border-top:1px solid rgba(255,255,255,0.12);
-}
-.sidebar-account-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
-.sidebar-account-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#5C3D80,#2F5C7A);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12px;flex-shrink:0;letter-spacing:0.5px;object-fit:cover;}
-.sidebar-account-info{flex:1;min-width:0;}
-.sidebar-account-name{font-size:12.5px;font-weight:600;color:#EAF0F5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.sidebar-account-email{font-size:10.5px;color:rgba(234,240,245,0.6);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.sidebar-gear-btn-bottom{background:rgba(255,255,255,0.08);border:none;color:#EAF0F5;width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
-.sidebar-gear-btn-bottom:hover{background:rgba(255,255,255,0.16);}
 .brand{display:flex;align-items:center;gap:10px;}
 .brand-mark{
   width:34px;height:34px;border-radius:50%;
@@ -201,10 +178,6 @@ input,textarea,select{font-family:inherit;color:inherit;}
 .sync-status-pill.syncing svg{animation:sync-spin .8s linear infinite;}
 .sync-status-pill.synced{background:transparent;color:rgba(234,240,245,0.55);} /* nothing to report — quiet on purpose, no colored badge needed for "all fine" */
 .sync-status-pill.unsynced{background:rgba(199,123,46,0.25);color:#EAF0F5;}
-.sync-status-pill{flex-direction:column;align-items:flex-start;gap:4px;} /* stacks the progress bar under the label when a bulk save is in flight */
-.sync-status-pill .sync-pill-row{display:flex;align-items:center;gap:6px;}
-.sync-progress-track{width:100%;height:3px;border-radius:2px;background:rgba(255,255,255,0.18);overflow:hidden;}
-.sync-progress-fill{height:100%;background:#7FB88A;border-radius:2px;transition:width .2s ease;}
 @keyframes sync-spin{to{transform:rotate(360deg);}}
 
 /* Settings modal */
@@ -500,7 +473,6 @@ textarea.ingest-area{
   background:var(--card);color:var(--ink);resize:vertical;
 }
 .field-row{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;}
-.source-manage-name{flex:1;min-width:0;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .field{flex:1;min-width:180px;}
 .field label{font-size:11.5px;color:var(--ink-soft);display:block;margin-bottom:4px;}
 .field input{width:100%;border:1px solid var(--rule-strong);border-radius:6px;padding:8px 10px;font-size:13px;background:var(--card);color:var(--ink);}
@@ -612,32 +584,6 @@ textarea.ingest-area{
 .bookmark-btn.bookmarked{color:#8A6A00;background:#FFF4BF;border-color:#D6A900;}
 .bookmark-btn.bookmarked svg{fill:#F0C33C;stroke:#8A6A00;}
 .paused-card{padding:16px 18px;margin-bottom:18px;border-left:4px solid var(--highlighter);}
-
-/* ---------- Review heatmap (Dashboard) ---------- */
-.heatmap-wrap{overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;}
-.heatmap-inner{display:inline-block;min-width:100%;}
-.heatmap-months{display:grid;grid-template-columns:24px repeat(53,10px);column-gap:3px;font-size:9.5px;color:var(--ink-soft);margin-bottom:6px;font-family:'IBM Plex Mono',monospace;}
-.heatmap-grid{display:grid;grid-template-columns:24px repeat(53,10px);grid-template-rows:repeat(7,10px);grid-auto-flow:column;column-gap:3px;row-gap:3px;}
-.heatmap-daylabel{grid-column:1;font-size:8.5px;color:var(--ink-soft);font-family:'IBM Plex Mono',monospace;display:flex;align-items:center;}
-.heatmap-cell{width:10px;height:10px;border-radius:3px;}
-.heatmap-legend{display:flex;align-items:center;gap:6px;margin-top:12px;font-size:10px;color:var(--ink-soft);font-family:'IBM Plex Mono',monospace;flex-wrap:wrap;}
-.heatmap-legend-sw{width:10px;height:10px;border-radius:3px;display:inline-block;}
-
-/* ---------- Due-this-week forecast (Dashboard) ---------- */
-.forecast-row{display:flex;align-items:flex-end;gap:10px;padding:0 2px;}
-.forecast-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;}
-.forecast-total{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink);font-weight:600;}
-.forecast-bar-stack{display:flex;flex-direction:column-reverse;width:100%;max-width:28px;height:90px;border-radius:5px 5px 3px 3px;overflow:hidden;background:var(--paper);}
-.forecast-bar-review{background:var(--cover);width:100%;min-height:1px;}
-.forecast-bar-new{background:#8FB8D1;width:100%;min-height:1px;}
-.forecast-day{font-size:10.5px;color:var(--ink-soft);white-space:nowrap;}
-.forecast-day.today{color:var(--cover);font-weight:700;}
-.forecast-legend{display:flex;gap:16px;margin-top:14px;font-size:11px;color:var(--ink-soft);flex-wrap:wrap;}
-.forecast-legend span{display:flex;align-items:center;gap:6px;}
-.forecast-legend-sw{width:9px;height:9px;border-radius:3px;display:inline-block;}
-.forecast-legend-sw.review{background:var(--cover);}
-.forecast-legend-sw.new{background:#8FB8D1;}
-
 .modal-backdrop{position:fixed;inset:0;background:rgba(20,28,34,.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:100;}
 .modal-card{width:min(520px,100%);background:var(--card);border:1px solid var(--rule-strong);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.22);padding:clamp(16px,5vw,22px);}
 .modal-card h3{font-family:'Fraunces',Georgia,serif;font-size:20px;margin-bottom:8px;}
@@ -716,7 +662,7 @@ textarea.ingest-area{
 @media (min-width:861px){.mobile-topbar{display:none;}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<!-- JSZip deliberately NOT loaded here — it's ~95KB for a feature (bulk image ZIP import) most page loads never touch. Loaded on demand instead, see ensureJSZipLoaded(). -->
 </head>
 <body>
 
@@ -786,8 +732,7 @@ var state = {
   hasUnsyncedChanges: false, /* true whenever a save to Supabase has failed and hasn't been confirmed since — drives the retry loop and the sync status pill */
   lastSaveHadPermanentConflict: false, /* true right after a save fails specifically due to an ownership conflict (RLS) — a permanent failure, not something the retry loop should keep hammering */
   pendingImportPayload: null, /* a parsed JSON import file, waiting on the user to choose keep-progress vs start-fresh before it actually gets applied */
-  pendingNoteDraft: null, /* {mcqId, images} while the Add Note modal is open, before it's actually saved onto the question */
-  deletedMcqIds: {} /* id -> deletedAt ms — tombstones for questions removed on THIS or any other device, so a stale local mirror on a device that hasn't opened in a while doesn't resurrect something that was deliberately deleted elsewhere. Trimmed periodically — see trimDeletedMcqIds(). */
+  pendingNoteDraft: null /* {mcqId, images} while the Add Note modal is open, before it's actually saved onto the question */
 };
 
 /* ================= Local-first data mirror =================
@@ -843,8 +788,7 @@ async function persistLocalMirror(){
       fsrsCardExpanded: state.fsrsCardExpanded,
       autoSleepEnabled: state.autoSleepEnabled,
       autoSleepStreak: state.autoSleepStreak,
-      pausedSession: state.pausedSession,
-      deletedMcqIds: state.deletedMcqIds
+      pausedSession: state.pausedSession
     };
     var db = await openDataMirrorDb();
     var tx = db.transaction(DATA_MIRROR_STORE_NAME, 'readwrite');
@@ -1119,50 +1063,43 @@ function showToast(msg){
 }
 
 /* ---------------- Storage (Supabase, scoped to the signed-in user) ---------------- */
-// PostgREST (Supabase's REST layer) silently caps any unbounded .select() at
-// a default max-rows-per-request (commonly 1000) — it does NOT error when a
-// query would return more; it just returns that many rows with a normal
-// success response. For a library over that size, the plain single-call
-// select below was ALWAYS missing the tail end of the library, every single
-// load — which loadLibrary()'s reconciliation then (correctly, given what it
-// could see) treated as "unsynced, recover and re-push it", pushed it again,
-// and the next load truncated the exact same way. That's what was showing up
-// as an endless resync loop recovering the same few thousand questions over
-// and over: they were never actually missing from the cloud, just never
-// being fully fetched. This pages through with .range() until a page comes
-// back shorter than a full page, so the full library is always what
-// reconciliation is actually comparing against.
-var MCQ_FETCH_PAGE_SIZE = 1000;
-async function fetchAllMcqRows(){
-  var all = [];
-  var from = 0;
-  while (true) {
-    var res = await supabaseClient.from('mcqs').select('data').eq('user_id', state.currentUser.id).range(from, from + MCQ_FETCH_PAGE_SIZE - 1);
-    if (res.error) throw res.error;
-    var page = res.data || [];
-    all = all.concat(page);
-    if (page.length < MCQ_FETCH_PAGE_SIZE) break; // shorter than a full page — this was the last one
-    from += MCQ_FETCH_PAGE_SIZE;
-  }
-  return all;
+function applyMirrorToState(mirror, skipMcqs){
+  if (!mirror) return;
+  if (!skipMcqs && Array.isArray(mirror.mcqs)) state.mcqs = mirror.mcqs;
+  state.sources = mirror.sources || {};
+  state.pausedSession = mirror.pausedSession || null;
+  state.learningMode.enabled = mirror.fsrsModeEnabled !== false;
+  state.darkMode = !!mirror.darkMode;
+  state.streak = mirror.streak || { count: 0, lastDate: null };
+  state.fsrsCardExpanded = mirror.fsrsCardExpanded !== false;
+  state.sleepingSubjects = mirror.sleepingSubjects || {};
+  state.autoSleepEnabled = mirror.autoSleepEnabled !== false;
+  state.autoSleepStreak = mirror.autoSleepStreak || 4;
 }
-
 async function loadLibrary(){
   if (!state.currentUser || !supabaseClient) { state.mcqs = []; state.sources = {}; return; }
   var usedMirrorFallback = false;
-
-  // Settings (including deletedMcqIds, the tombstone list) load FIRST, before
-  // mcqs — the mcqs reconciliation below needs to know about deletions from
-  // any device before it decides whether a locally-cached question that's
-  // missing from the cloud is "unsynced, recover it" or "deleted elsewhere,
-  // leave it gone".
+  try {
+    var mcqRes = await supabaseClient.from('mcqs').select('data').eq('user_id', state.currentUser.id);
+    if (mcqRes.error) throw mcqRes.error;
+    state.mcqs = (mcqRes.data || []).map(function(row){ return row.data; });
+  } catch(e) {
+    console.error('loadLibrary (mcqs):', e);
+    var mirror = await loadLocalMirror();
+    if (mirror && Array.isArray(mirror.mcqs)) {
+      state.mcqs = mirror.mcqs;
+      usedMirrorFallback = true;
+    } else {
+      state.mcqs = [];
+      showToast('Could not load your library — no local copy available either.');
+    }
+  }
   try {
     var setRes = await supabaseClient.from('user_settings').select('*').eq('user_id', state.currentUser.id).maybeSingle();
     if (setRes.error) throw setRes.error;
     var row = setRes.data;
     state.sources = (row && row.sources) || {};
     state.pausedSession = (row && row.paused_session) || null;
-    state.deletedMcqIds = (row && row.deleted_mcq_ids) || {};
     /* Reconcile against BOTH local pause sources — the tiny synchronous localStorage
        entry (guaranteed to have survived an actual tab close) and the full IndexedDB
        mirror's own pausedSession (kept current on every normal save). Whichever of
@@ -1179,22 +1116,6 @@ async function loadLibrary(){
       state.pausedSession = (syncPausedAt === bestPausedAt) ? syncPaused : mirrorForPause.pausedSession;
       saveUserSettings(); /* best-effort push-up, not awaited — loadLibrary() shouldn't block on this */
     }
-    // Same idea as pausedSession above, but for tombstones: a delete recorded
-    // locally (e.g. offline, or the settings save itself hadn't landed yet)
-    // that the cloud doesn't have yet should still be respected THIS session,
-    // not just re-added to state.deletedMcqIds after the fact — merge it in
-    // now, before it's used below.
-    if (mirrorForPause && mirrorForPause.deletedMcqIds) {
-      var mergedTombstones = false;
-      Object.keys(mirrorForPause.deletedMcqIds).forEach(function(id){
-        if (!state.deletedMcqIds[id] || mirrorForPause.deletedMcqIds[id] > state.deletedMcqIds[id]) {
-          state.deletedMcqIds[id] = mirrorForPause.deletedMcqIds[id];
-          mergedTombstones = true;
-        }
-      });
-      if (mergedTombstones) saveUserSettings(); /* push the merged tombstone list back up, best-effort */
-    }
-    trimDeletedMcqIds();
     state.learningMode.enabled = row ? (row.fsrs_mode_enabled !== false) : false; /* brand-new accounts start in plain practice mode — FSRS is opt-in, not the default */
     state.darkMode = !!(row && row.dark_mode);
     state.streak = (row && row.streak) || { count: 0, lastDate: null };
@@ -1206,73 +1127,10 @@ async function loadLibrary(){
     console.error('loadLibrary (settings):', e);
     var mirror2 = await loadLocalMirror();
     if (mirror2) {
-      state.sources = mirror2.sources || {};
-      state.pausedSession = mirror2.pausedSession || null;
-      state.deletedMcqIds = mirror2.deletedMcqIds || {};
-      state.learningMode.enabled = mirror2.fsrsModeEnabled !== false;
-      state.darkMode = !!mirror2.darkMode;
-      state.streak = mirror2.streak || { count: 0, lastDate: null };
-      state.fsrsCardExpanded = mirror2.fsrsCardExpanded !== false;
-      state.sleepingSubjects = mirror2.sleepingSubjects || {};
-      state.autoSleepEnabled = mirror2.autoSleepEnabled !== false;
-      state.autoSleepStreak = mirror2.autoSleepStreak || 4;
+      applyMirrorToState(mirror2, true); /* skip mcqs — that fetch may have already succeeded above; don't clobber it with a possibly-stale mirror copy */
       usedMirrorFallback = true;
-    } else {
-      state.deletedMcqIds = {};
     }
   }
-
-  try {
-    var cloudMcqs = (await fetchAllMcqRows()).map(function(row){ return row.data; });
-    /* Reconcile against the local mirror instead of trusting a SUCCESSFUL pull
-       blindly. A save that never actually finished reaching the server — tab closed
-       mid-write, a network blip that got flagged but hadn't been retried yet, the OS
-       killing the app before an in-flight request completed — doesn't throw an error
-       here; the query just comes back successful with an incomplete answer. Silently
-       overwriting state.mcqs with that incomplete copy is exactly what discarded a
-       freshly-imported deck that was still sitting safely in the local IndexedDB
-       mirror the whole time. Anything the mirror has that the cloud pull doesn't is
-       treated as not-yet-synced and recovered — UNLESS it's in the tombstone list
-       loaded above, in which case it was deliberately deleted (maybe on another
-       device) and a stale local copy shouldn't bring it back. */
-    var mirrorForReconcile = await loadLocalMirror();
-    var cloudIds = {};
-    cloudMcqs.forEach(function(m){ if (m && m.id) cloudIds[m.id] = true; });
-    var localOnly = (mirrorForReconcile && Array.isArray(mirrorForReconcile.mcqs))
-      ? mirrorForReconcile.mcqs.filter(function(m){ return m && m.id && !cloudIds[m.id] && !state.deletedMcqIds[m.id]; })
-      : [];
-    state.mcqs = cloudMcqs.concat(localOnly);
-    // Seed the dirty-tracking snapshot cache (see saveLibrary()) with
-    // exactly what the cloud just confirmed it has — anything in cloudMcqs
-    // is known-synced right now, so it's excluded from the next save unless
-    // it actually changes. localOnly is deliberately left UNSEEDED: those
-    // rows still need pushing, and leaving them out of the cache is what
-    // correctly marks them dirty for the very next saveLibrary() call.
-    lastSyncedMcqSnapshots = {};
-    cloudMcqs.forEach(function(m){ if (m && m.id) lastSyncedMcqSnapshots[m.id] = JSON.stringify(m); });
-    if (localOnly.length) {
-      state.hasUnsyncedChanges = true; // these never reached the server last time — get them pushed up now
-      showToast(localOnly.length + ' question' + (localOnly.length===1?'':'s') + ' from last time hadn\'t finished syncing — recovered from your local copy and re-saving now.');
-      retryUnsyncedChangesIfAny(); // don't just flag it and wait for the next focus/online event — push it up right away
-    }
-  } catch(e) {
-    console.error('loadLibrary (mcqs):', e);
-    var mirror = await loadLocalMirror();
-    if (mirror && Array.isArray(mirror.mcqs)) {
-      state.mcqs = mirror.mcqs;
-      usedMirrorFallback = true;
-      // Deliberately NOT seeding lastSyncedMcqSnapshots here — this is the
-      // offline/error fallback, so there's no confirmation any of this
-      // actually matches the cloud. Leaving the cache empty means the next
-      // successful saveLibrary() treats everything as dirty and does one
-      // full resync to re-establish a known-good baseline, which is exactly
-      // the safe/correct behavior when we're not sure what the server has.
-    } else {
-      state.mcqs = [];
-      showToast('Could not load your library — no local copy available either.');
-    }
-  }
-
   await loadImageUrlMap();
   if (usedMirrorFallback) {
     state.hasUnsyncedChanges = true; // whatever's cached locally hasn't been confirmed against the server this session
@@ -1285,18 +1143,6 @@ async function saveUserSettings(){
   persistLocalMirror(); /* local-first, unconditional, before any network attempt */
   state.lastSaveHadPermanentConflict = false; /* this table is keyed by user_id only, so it can't hit the cross-account collision saveLibrary() can — reset here anyway so a stale value from an earlier saveLibrary() call can't mislead a caller checking this flag after just calling this function alone */
   if (!state.currentUser || !supabaseClient) return;
-  /* Flagged as unsynced BEFORE the network attempt, not just on failure — this
-     is what actually caused FSRS mode (and other settings) to "revert" on an
-     abrupt tab switch. A toggle calls this fire-and-forget; if a background
-     fullSync() (tab focus/visibility) fired while THIS request was still in
-     flight, it had no way to know a save was pending — hasUnsyncedChanges was
-     still false — so it skipped straight to pulling, sometimes winning the
-     race against this upsert and overwriting state.learningMode.enabled (or
-     whatever else was mid-save) with the stale pre-toggle value from the
-     server. Setting this up front means any concurrent fullSync() correctly
-     pushes first instead of pulling over an in-flight write. */
-  state.hasUnsyncedChanges = true;
-  updateSyncIndicator();
   try {
     var res = await supabaseClient.from('user_settings').upsert({
       user_id: state.currentUser.id,
@@ -1309,7 +1155,6 @@ async function saveUserSettings(){
       sleeping_subjects: state.sleepingSubjects,
       auto_sleep_enabled: state.autoSleepEnabled,
       auto_sleep_streak: state.autoSleepStreak,
-      deleted_mcq_ids: state.deletedMcqIds,
       updated_at: new Date().toISOString()
     });
     if (res.error) throw res.error;
@@ -1354,47 +1199,6 @@ var syncInFlight = false;
 var lastAutoSyncAt = 0;
 var AUTO_SYNC_MIN_INTERVAL_MS = 15000; // throttle — don't hammer retries more than once per 15s
 
-async function fullSync(opts){
-  opts = opts || {};
-  if (!state.currentUser || !supabaseClient) return;
-  if (syncInFlight) return;
-  syncInFlight = true;
-  updateSyncIndicator();
-  try {
-    // Push first if this device already has a pending local edit — otherwise
-    // the pull below would fetch a stale (pre-edit) cloud copy of that same
-    // row and silently overwrite the not-yet-saved change. Mirrors Kardex's
-    // doSync() ordering logic exactly.
-    if (state.hasUnsyncedChanges){
-      await saveLibrary();
-      await saveUserSettings();
-    }
-    // The actual fix for "coming back to the tab doesn't see what changed
-    // elsewhere" — this pulls fresh cloud state and reconciles it against
-    // the local mirror (recovering anything still-unsynced, respecting
-    // deletion tombstones — see loadLibrary()). Previously autoSync() only
-    // ever pushed pending changes and never pulled at all, so a change made
-    // on another device/tab was invisible here until a full page reload.
-    await loadLibrary();
-    // Don't re-render over an active practice session (mid-question state
-    // isn't something a background pull should disturb) or over unsaved
-    // text sitting in the Add Source paste box (a full render rebuilds that
-    // view from scratch, which would silently wipe out whatever's typed/
-    // pasted there and hasn't been parsed yet).
-    var hasUnparsedDraft = state.view === 'addsource' && document.getElementById('ingestArea') && document.getElementById('ingestArea').value.trim();
-    if (!isMidSession() && !hasUnparsedDraft) render();
-    if (!opts.silent){
-      showToast(state.hasUnsyncedChanges ? 'Synced from the cloud (local changes will retry automatically)' : 'Synced.');
-    }
-  } catch(e) {
-    console.error('fullSync:', e);
-    if (!opts.silent) showToast('Could not sync — check your connection and try again.');
-  } finally {
-    syncInFlight = false;
-    updateSyncIndicator();
-  }
-}
-
 async function retryUnsyncedChangesIfAny(){
   if (!state.hasUnsyncedChanges || !state.currentUser || !supabaseClient || syncInFlight) return;
   syncInFlight = true;
@@ -1407,15 +1211,14 @@ async function retryUnsyncedChangesIfAny(){
     updateSyncIndicator();
   }
 }
-setInterval(retryUnsyncedChangesIfAny, 30000); // lightweight push-only safety net — same split as Kardex, which also keeps its 30s timer push-only and reserves the full pull+push for autoSync()'s event-driven triggers below
+setInterval(retryUnsyncedChangesIfAny, 30000);
 
 function autoSync(){
   if (!state.currentUser) return;
-  if (isMidSession()) return; // don't yank a live practice session's data out from under it mid-question
   var now = Date.now();
   if (now - lastAutoSyncAt < AUTO_SYNC_MIN_INTERVAL_MS) return;
   lastAutoSyncAt = now;
-  fullSync({ silent: true });
+  retryUnsyncedChangesIfAny();
 }
 
 /* Re-renders just the small status pill in the sidebar rather than the whole
@@ -1432,15 +1235,12 @@ function renderSyncStatusPill(){
   if (!state.currentUser) return '<div id="syncStatusPill"></div>';
   var offline = typeof navigator !== 'undefined' && navigator.onLine === false;
   var cls, label, iconName;
-  if (syncInFlight) { cls = 'syncing'; label = currentSyncProgress ? ('Syncing ' + currentSyncProgress.done + ' of ' + currentSyncProgress.total + '…') : 'Syncing…'; iconName = 'refresh-cw'; }
+  if (syncInFlight) { cls = 'syncing'; label = 'Syncing…'; iconName = 'refresh-cw'; }
   else if (offline) { cls = 'offline'; label = 'Offline — saved locally'; iconName = 'wifi-off'; }
   else if (state.hasUnsyncedChanges) { cls = 'unsynced'; label = 'Unsynced — tap to retry'; iconName = 'refresh-cw'; }
   else { cls = 'synced'; label = 'Synced'; iconName = 'check-circle'; }
-  var progressBarHtml = (syncInFlight && currentSyncProgress)
-    ? '<div class="sync-progress-track"><div class="sync-progress-fill" style="width:' + Math.round((currentSyncProgress.done / currentSyncProgress.total) * 100) + '%"></div></div>'
-    : '';
   return '<div id="syncStatusPill" class="sync-status-pill ' + cls + '" data-action="manual-sync" role="button" tabindex="0" title="Click to sync now">' +
-    '<div class="sync-pill-row">' + icon(iconName, 13) + ' ' + label + '</div>' + progressBarHtml + '</div>';
+    icon(iconName, 13) + ' ' + label + '</div>';
 }
 async function manualSync(){
   if (!state.currentUser || !supabaseClient) return;
@@ -1448,89 +1248,36 @@ async function manualSync(){
     showToast('You\'re offline — Practex will sync automatically once you\'re back.');
     return;
   }
-  // Full pull+push, not just a push retry — tapping "sync now" should mean
-  // "get me current with the cloud", the same as clicking Kardex's sync
-  // button does, not just "retry saving my own pending changes".
-  await fullSync({ silent: false });
+  if (syncInFlight) return;
+  syncInFlight = true;
+  updateSyncIndicator();
+  try {
+    await saveLibrary();
+    await saveUserSettings();
+    showToast(state.hasUnsyncedChanges ? 'Could not sync — check your connection and try again.' : 'Synced.');
+  } finally {
+    syncInFlight = false;
+    updateSyncIndicator();
+  }
 }
 /* Upserts the current in-memory library in one batched request (Postgres upsert
    accepts an array, so this is a single round trip regardless of library size).
    Note: this does NOT delete rows that were removed locally — see deleteMcqRows(). */
-// Bulk saves send only what actually CHANGED since the last confirmed sync,
-// not the whole library — the earlier batching fix made resending everything
-// more reliable, but it was still resending everything, every single save,
-// even to update one question's answer history. That's the real gap versus
-// Kardex's per-record pushes. Manually marking every mutation site "dirty"
-// was ruled out here — with 30+ scattered places that touch a question
-// (answering, editing, flagging, notes, images, sleep state...), missing
-// even one would silently stop that data from ever syncing, which is worse
-// than the inefficiency being fixed. Instead: a content snapshot of every
-// question is kept from the last confirmed sync (lastSyncedMcqSnapshots,
-// id -> JSON string), and a save simply compares current vs. last-known —
-// anything different (or new) gets pushed, anything unchanged doesn't. This
-// can't miss a mutation, by construction: it doesn't need to know HOW a
-// question changed, only THAT it did.
-var lastSyncedMcqSnapshots = {}; // id -> JSON.stringify(question) as of the last confirmed successful sync
-var LIBRARY_SAVE_BATCH_SIZE = 300;
-var currentSyncProgress = null; // { done, total } while a multi-batch save is in flight, else null
-
 async function saveLibrary(){
   persistLocalMirror(); /* local-first, unconditional, before any network attempt */
   state.lastSaveHadPermanentConflict = false;
   if (!state.currentUser || !supabaseClient) return;
   if (!state.mcqs.length) return;
-
-  var dirty = [];
-  state.mcqs.forEach(function(m){
-    if (!m || !m.id) return;
-    var serialized = JSON.stringify(m);
-    if (lastSyncedMcqSnapshots[m.id] !== serialized) dirty.push({ id: m.id, serialized: serialized });
-  });
-  if (!dirty.length) {
-    // Everything already matches what the server confirmed last time —
-    // genuinely nothing to push. Distinct from "nothing to do because the
-    // library is empty" above; this is the common case for a routine
-    // autoSync that finds no real changes.
-    state.hasUnsyncedChanges = false;
-    updateSyncIndicator();
-    return;
-  }
-
-  // Flagged as unsynced BEFORE the network attempt — same reasoning as
-  // saveUserSettings() above: an answer/rating/edit that's still genuinely
-  // in flight needs a concurrent fullSync() (tab focus/visibility) to know
-  // to push it first rather than pull over it. See that function's comment
-  // for the full race-condition explanation.
-  state.hasUnsyncedChanges = true;
-  updateSyncIndicator();
   try {
-    var mcqById = {};
-    state.mcqs.forEach(function(m){ if (m && m.id) mcqById[m.id] = m; });
-    var total = dirty.length;
-    if (total > LIBRARY_SAVE_BATCH_SIZE) currentSyncProgress = { done: 0, total: total };
-    for (var i = 0; i < total; i += LIBRARY_SAVE_BATCH_SIZE){
-      var chunk = dirty.slice(i, i + LIBRARY_SAVE_BATCH_SIZE);
-      var rows = chunk.map(function(d){
-        return { id: d.id, user_id: state.currentUser.id, data: mcqById[d.id], updated_at: new Date().toISOString() };
-      });
-      var res = await supabaseClient.from('mcqs').upsert(rows);
-      if (res.error) throw res.error;
-      // Only this chunk's rows are confirmed synced now — updating their
-      // snapshots (not all of `dirty`) means a failure on a LATER chunk
-      // correctly leaves only the not-yet-sent rows marked dirty for retry,
-      // rather than incorrectly re-marking already-confirmed ones too.
-      chunk.forEach(function(d){ lastSyncedMcqSnapshots[d.id] = d.serialized; });
-      if (currentSyncProgress){
-        currentSyncProgress.done = Math.min(i + chunk.length, total);
-        updateSyncIndicator();
-      }
-    }
-    currentSyncProgress = null;
+    var rows = state.mcqs.map(function(m){
+      return { id: m.id, user_id: state.currentUser.id, data: m, updated_at: new Date().toISOString() };
+    });
+    var res = await supabaseClient.from('mcqs').upsert(rows);
+    if (res.error) throw res.error;
     state.hasUnsyncedChanges = false;
     updateSyncIndicator();
   } catch(e) {
     console.error('saveLibrary:', e);
-    currentSyncProgress = null;
     if (e && e.code === '42501') {
       /* Row-level-security rejection — this means one or more of these question IDs
          already exist in the table under a DIFFERENT account (e.g. a JSON export from
@@ -1542,7 +1289,6 @@ async function saveLibrary(){
          also show a misleading "success" message right after this one. */
       state.lastSaveHadPermanentConflict = true;
       showToast('Some questions couldn\'t sync — they already exist under a different Practex account. Sign in as whichever account originally created them.');
-      updateSyncIndicator();
       return;
     }
     state.hasUnsyncedChanges = true;
@@ -1551,31 +1297,8 @@ async function saveLibrary(){
 }
 /* Explicit server-side delete for questions removed locally (deck delete is currently
    the only path that removes mcqs — upsert alone never deletes rows). */
-// Tombstones older than this are pruned — generous enough that even a device
-// that hasn't opened Practex in 4 months still correctly respects a deletion
-// made elsewhere, while keeping this list from growing forever.
-var DELETED_MCQ_TOMBSTONE_MAX_AGE_MS = 120 * 24 * 60 * 60 * 1000;
-function trimDeletedMcqIds(){
-  var cutoff = Date.now() - DELETED_MCQ_TOMBSTONE_MAX_AGE_MS;
-  var kept = {};
-  Object.keys(state.deletedMcqIds || {}).forEach(function(id){
-    if (state.deletedMcqIds[id] > cutoff) kept[id] = state.deletedMcqIds[id];
-  });
-  state.deletedMcqIds = kept;
-}
 async function deleteMcqRows(ids){
-  if (!ids || !ids.length) return;
-  // Recorded locally (and pushed to Supabase via saveUserSettings below)
-  // BEFORE the actual delete — a stale mirror on another device that hasn't
-  // synced this deletion yet needs to know these ids were deliberately
-  // removed, not just "missing from the cloud because a save never finished"
-  // (which loadLibrary()'s reconciliation would otherwise treat as
-  // unsynced-and-worth-recovering, resurrecting exactly what you just deleted).
-  var now = Date.now();
-  ids.forEach(function(id){ state.deletedMcqIds[id] = now; delete lastSyncedMcqSnapshots[id]; });
-  trimDeletedMcqIds();
-  saveUserSettings(); // best-effort, not awaited — same reasoning as other background saves here
-  if (!state.currentUser || !supabaseClient) return;
+  if (!state.currentUser || !supabaseClient || !ids || !ids.length) return;
   try {
     var res = await supabaseClient.from('mcqs').delete().eq('user_id', state.currentUser.id).in('id', ids);
     if (res.error) throw res.error;
@@ -1729,9 +1452,30 @@ function renderZipImportStatus(){
   }
   reportEl.innerHTML = summary;
 }
+/* Loads JSZip on demand — only ever needed for bulk image ZIP import, which most
+   sessions never touch, so it doesn't belong in the initial page weight. Cached after
+   the first successful load so a second ZIP import in the same session is instant. */
+var jsZipLoadPromise = null;
+function ensureJSZipLoaded(){
+  if (typeof JSZip !== 'undefined') return Promise.resolve();
+  if (jsZipLoadPromise) return jsZipLoadPromise;
+  jsZipLoadPromise = new Promise(function(resolve, reject){
+    var script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+    script.onload = function(){ resolve(); };
+    script.onerror = function(){ jsZipLoadPromise = null; reject(new Error('Could not load ZIP support')); };
+    document.head.appendChild(script);
+  });
+  return jsZipLoadPromise;
+}
 async function processImageZip(file){
-  if (typeof JSZip === 'undefined') { showToast('ZIP support failed to load — check your connection and reload the page.'); return; }
   if (state.zipImportJob && state.zipImportJob.active) { showToast('An image import is already running — let it finish first.'); return; }
+  try {
+    await ensureJSZipLoaded();
+  } catch(err) {
+    showToast('ZIP support failed to load — check your connection and try again.');
+    return;
+  }
 
   var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
   var job = { active: true, processed: 0, total: 0, attached: 0, notFound: [], skippedNames: [] };
@@ -2073,14 +1817,6 @@ function renderSettingsModalContent(){
     '<div class="settings-row"><span>Questions tracked</span><strong>' + state.mcqs.length + '</strong></div>' +
     '</div>';
 
-  var landingPref = loadDefaultLandingPref();
-  html += '<div class="settings-section"><h4>Default landing page</h4>' +
-    '<div class="view-sub" style="margin-bottom:10px;">What you see when Practex loads — the Dashboard (streak, due today, review heatmap), or straight into your Library.</div>' +
-    '<div class="action-row" style="margin-bottom:0;">' +
-      '<button class="btn btn-sm ' + (landingPref==='dashboard'?'btn-primary':'btn-ghost') + '" data-action="set-default-landing" data-landing="dashboard">Dashboard</button>' +
-      '<button class="btn btn-sm ' + (landingPref==='browse'?'btn-primary':'btn-ghost') + '" data-action="set-default-landing" data-landing="browse">Library</button>' +
-    '</div></div>';
-
   html += '<div class="settings-section" style="margin-bottom:0;"><h4>Appearance &amp; scheduling</h4>' +
     '<div class="settings-row"><span>Dark mode</span>' +
       '<span class="settings-toggle' + (state.darkMode?' on':'') + '" data-action="toggle-dark-mode" role="switch" aria-checked="' + (state.darkMode?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
@@ -2377,6 +2113,7 @@ function parseLibraryText(raw, sourceOverride){
   var mcqs = [];
   var errors = [];
   var passages = {};
+  var optionBanks = {}; /* shared answer-choice lists for extended matching questions — see #OPTIONBANK below */
   var source = sourceOverride || '';
   var subject = '';
   var chapterPath = [];
@@ -2407,10 +2144,34 @@ function parseLibraryText(raw, sourceOverride){
       i++;
       continue;
     }
+    if (t.indexOf('#OPTIONBANK:') === 0) {
+      /* Extended matching questions — one shared lettered option list (commonly A-J)
+         answered by several consecutive questions, e.g. "match each vignette below to
+         the most likely diagnosis". Defined once, referenced by id from any #Q line
+         via [BANK:id], same mechanic as #PASSAGE above. A question using a bank omits
+         its own #OPTIONS block entirely — the bank's options get copied in during
+         parsing, so from here on each question is a fully normal, independent MCQ;
+         nothing downstream (storage, editing, practice, FSRS) needs to know a bank
+         was ever involved. */
+      var bid = t.slice(12).trim();
+      i++;
+      var bopts = [];
+      while (i < lines.length && lines[i].trim() !== '#ENDOPTIONBANK') {
+        var bt = lines[i].trim();
+        var bm = bt.match(/^([A-Z])\)\s*(.*)$/);
+        if (bm) bopts.push({ letter: bm[1], text: bm[2].trim() });
+        i++;
+      }
+      optionBanks[bid] = bopts;
+      i++;
+      continue;
+    }
     if (t.indexOf('#Q') === 0) {
       var startLine = i + 1;
       var pmatch = t.match(/\[PASSAGE:(\S+)\]/);
       var passageId = pmatch ? pmatch[1] : null;
+      var bmatch = t.match(/\[BANK:(\S+)\]/);
+      var bankId = bmatch ? bmatch[1] : null;
       i++;
       var qlines = [];
       while (i < lines.length && lines[i].trim().indexOf('#OPTIONS') !== 0 && lines[i].trim().indexOf('#ANSWER') !== 0) {
@@ -2427,6 +2188,12 @@ function parseLibraryText(raw, sourceOverride){
           var om = ot.match(/^([A-H])\)\s*(.*)$/);
           if (om) options.push({ letter: om[1], text: om[2].trim() });
           i++;
+        }
+      } else if (bankId) {
+        if (optionBanks[bankId] && optionBanks[bankId].length) {
+          options = optionBanks[bankId].map(function(o){ return { letter: o.letter, text: o.text }; }); // copy, never share the array — each question is independent from here on
+        } else {
+          errors.push({ line: startLine, message: '#Q references bank "' + bankId + '" near line ' + startLine + ', but that bank was never defined (or is empty) — check the #OPTIONBANK appears earlier with a matching id.' });
         }
       }
 
@@ -2825,10 +2592,9 @@ function renderSidebar(){
   var tree = buildTree();
   var subjectKeys = Object.keys(tree).sort();
   var html = '<aside class="sidebar' + (state.sidebarOpen ? ' open' : '') + '" id="sidebar">';
-
-  html += '<div class="sidebar-top">';
   html += '<div class="brand"><div class="brand-mark"><img src="icons/icon-128x128.png" alt="Practex logo"></div>' +
-    '<div style="flex:1;"><div class="brand-name serif">Practex</div><div class="brand-tag">MCQ practice</div></div></div>';
+    '<div style="flex:1;"><div class="brand-name serif">Practex</div><div class="brand-tag">MCQ practice</div></div>' +
+    '<button class="sidebar-gear-btn" data-action="open-settings" title="Settings" aria-label="Settings">' + icon('settings',16) + '</button></div>';
 
   html += renderSyncStatusPill();
 
@@ -2858,13 +2624,7 @@ function renderSidebar(){
 
   html += '<div class="side-section-label">Subjects &amp; chapters</div>';
   html += '<button class="toc-root-link' + (state.view==='browse' && !state.selectedPath ? ' active' : '') + '" data-action="clear-selection">' + icon('home',14) + ' Library (all subjects)</button>';
-  html += '</div>'; // .sidebar-top
-
-  // Everything above stays fixed — only this tree scrolls internally, so a
-  // long subject/chapter list can never push the FSRS bar (or anything
-  // else above it) out of view the way it did when the whole sidebar
-  // scrolled as one block.
-  html += '<div class="sidebar-scroll"><div class="toc">';
+  html += '<div class="toc">';
   if (!subjectKeys.length) {
     html += '<div class="toc-empty">Nothing logged yet. Go to <strong>Add source</strong> to import your first set of OCR\'d MCQs.</div>';
   } else {
@@ -2872,21 +2632,9 @@ function renderSidebar(){
       html += renderTocNode(tree[sk], [sk], true);
     });
   }
-  html += '</div></div>';
+  html += '</div>';
 
-  var acct = userDisplayInfo(state.currentUser);
-  html += '<div class="sidebar-bottom">';
-  html += '<div class="sidebar-account-row">' +
-    (acct.avatarUrl
-      ? '<img class="sidebar-account-avatar" src="' + escapeHtml(acct.avatarUrl) + '" alt="">'
-      : '<div class="sidebar-account-avatar">' + escapeHtml(acct.initials) + '</div>') +
-    '<div class="sidebar-account-info"><div class="sidebar-account-name">' + escapeHtml(acct.name) + '</div>' +
-    '<div class="sidebar-account-email">' + escapeHtml(acct.email) + '</div></div>' +
-    '<button class="sidebar-gear-btn-bottom" data-action="open-settings" title="Settings" aria-label="Settings">' + icon('settings',15) + '</button>' +
-    '</div>';
   html += '<div class="side-footer">' + state.mcqs.length + ' MCQs logged from ' + Object.keys(state.sources).length + ' source' + (Object.keys(state.sources).length===1?'':'s') + '.</div>';
-  html += '</div>'; // .sidebar-bottom
-
   html += '</aside>';
   return html;
 }
@@ -2927,128 +2675,6 @@ function renderMain(){
 }
 
 /* ---------------- Learning Dashboard view ---------------- */
-// Aggregates every question's learning.history[].ts into a per-day count —
-// this is Practex's equivalent of a flat review log, just spread across
-// each question's own history array instead of one central list.
-function renderReviewHeatmapCard(){
-  var DAY = 86400000;
-  var byDay = {};
-  var maxCount = 1;
-  state.mcqs.forEach(function(m){
-    (m.learning && m.learning.history || []).forEach(function(h){
-      var k = dateStr(h.ts);
-      byDay[k] = (byDay[k]||0) + 1;
-      if (byDay[k] > maxCount) maxCount = byDay[k];
-    });
-  });
-
-  var end = new Date();
-  var totalDays = 371; // ~53 weeks, matches a classic contribution grid
-  var start = new Date(end.getTime() - (totalDays-1)*DAY);
-  start.setDate(start.getDate() - start.getDay()); // back up to the preceding Sunday so weeks align
-
-  // Practex's own blue ("cover") ramp, not a reused teal — this is the
-  // app's primary brand color, so the heatmap reads as unmistakably Practex.
-  var RAMP = ['var(--rule)', '#C9DCE8', '#8FB8D1', '#4F86AC', 'var(--cover)'];
-  function colorFor(count){
-    if (!count) return RAMP[0];
-    var frac = count / maxCount;
-    if (frac < 0.2) return RAMP[1];
-    if (frac < 0.45) return RAMP[2];
-    if (frac < 0.75) return RAMP[3];
-    return RAMP[4];
-  }
-
-  var days = [];
-  for (var d = new Date(start); d <= end; d.setDate(d.getDate()+1)){
-    var k = dateStr(d.getTime());
-    days.push({ date: new Date(d), key: k, count: byDay[k] || 0 });
-  }
-  var weeks = Math.ceil(days.length/7);
-
-  var monthsHtml = '<span></span>';
-  var lastMonth = -1;
-  for (var w=0; w<weeks; w++){
-    var dInWeek = days[w*7];
-    var label = '';
-    if (dInWeek && dInWeek.date.getMonth() !== lastMonth && dInWeek.date.getDate() <= 7){
-      lastMonth = dInWeek.date.getMonth();
-      label = dInWeek.date.toLocaleDateString('en-US',{month:'short'});
-    }
-    monthsHtml += '<span>' + label + '</span>';
-  }
-
-  var DOWLABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
-  var gridHtml = '';
-  for (var dow=0; dow<7; dow++){ gridHtml += '<div class="heatmap-daylabel">' + DOWLABELS[dow] + '</div>'; }
-  days.forEach(function(dd){
-    if (dd.date > end) {
-      gridHtml += '<div class="heatmap-cell" style="visibility:hidden;"></div>';
-    } else {
-      var title = dd.count + ' answer' + (dd.count===1?'':'s') + ' \u00b7 ' + dd.date.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-      gridHtml += '<div class="heatmap-cell" style="background:' + colorFor(dd.count) + ';" title="' + escapeHtml(title) + '"></div>';
-    }
-  });
-
-  var legendHtml = 'Less ' + RAMP.map(function(c){ return '<span class="heatmap-legend-sw" style="background:' + c + '"></span>'; }).join('') + ' More';
-
-  return '<div class="card section-block">' +
-    '<h3>Review activity</h3>' +
-    '<div class="view-sub" style="margin-bottom:12px;">Every square is a day \u00b7 darker = more questions answered</div>' +
-    '<div class="heatmap-wrap"><div class="heatmap-inner">' +
-      '<div class="heatmap-months">' + monthsHtml + '</div>' +
-      '<div class="heatmap-grid">' + gridHtml + '</div>' +
-    '</div></div>' +
-    '<div class="heatmap-legend">' + legendHtml + '</div>' +
-    '</div>';
-}
-
-// New vs. scheduled-review split for each of the next 7 days, from every
-// question's learning.due timestamp (never-answered questions all count as
-// "new", bucketed into today).
-function renderDueForecastCard(){
-  var DAY = 86400000;
-  var today = new Date(); today.setHours(0,0,0,0);
-  var buckets = [0,0,0,0,0,0,0];
-  var newCount = 0;
-  state.mcqs.forEach(function(m){
-    if (state.sleepingSubjects[m.subject] || m.asleep) return;
-    if (!m.learning || !m.learning.history || !m.learning.history.length) { newCount++; return; }
-    var due = (m.learning && m.learning.due) || 0;
-    var daysOut = Math.floor((due - today.getTime()) / DAY);
-    if (daysOut >= 0 && daysOut < 7) buckets[daysOut]++;
-  });
-  var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  var maxTotal = 1;
-  for (var i=0; i<7; i++){ var t = buckets[i] + (i===0?newCount:0); if (t > maxTotal) maxTotal = t; }
-
-  var barsHtml = '';
-  for (var i=0; i<7; i++){
-    var dcol = new Date(today.getTime() + i*DAY);
-    var reviewCt = buckets[i];
-    var newCt = i===0 ? newCount : 0;
-    var total = reviewCt + newCt;
-    var reviewPct = Math.round((reviewCt/maxTotal)*100);
-    var newPct = Math.round((newCt/maxTotal)*100);
-    var dayLabel = i===0 ? 'Today' : DOW[dcol.getDay()];
-    barsHtml += '<div class="forecast-col">' +
-      '<div class="forecast-total">' + total + '</div>' +
-      '<div class="forecast-bar-stack">' +
-        '<div class="forecast-bar-review" style="height:' + reviewPct + '%;"></div>' +
-        '<div class="forecast-bar-new" style="height:' + newPct + '%;"></div>' +
-      '</div>' +
-      '<div class="forecast-day' + (i===0?' today':'') + '">' + dayLabel + '</div>' +
-      '</div>';
-  }
-
-  return '<div class="card section-block">' +
-    '<h3>Due this week</h3>' +
-    '<div class="view-sub" style="margin-bottom:12px;">New questions vs. scheduled reviews, next 7 days</div>' +
-    '<div class="forecast-row">' + barsHtml + '</div>' +
-    '<div class="forecast-legend"><span><span class="forecast-legend-sw review"></span>Review</span><span><span class="forecast-legend-sw new"></span>New</span></div>' +
-    '</div>';
-}
-
 function renderDashboard(){
   var d = getDashboardData();
   var html = '<div class="view-head"><div class="view-title serif">Learning Dashboard</div>' +
@@ -3070,9 +2696,6 @@ function renderDashboard(){
     '<span><strong>' + d.reviewsToday + '</strong> reviewed today</span>' +
     '</div>';
   html += '</div>';
-
-  html += renderReviewHeatmapCard();
-  html += renderDueForecastCard();
 
   html += '<div class="card section-block">';
   html += '<h3>Question States</h3>';
@@ -3286,12 +2909,7 @@ function renderQuestionList(tree, node, searchAll){
   var title = searchAll ? 'Search results' : (state.selectedPath ? state.selectedPath[state.selectedPath.length-1] : 'All subjects');
   var ids = (searchAll || !node) ? state.mcqs.map(function(m){return m.id;}) : collectIds(node);
   var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
-  // Unfiltered (source/tag/status filters not yet applied) — this is what
-  // defines which source chips even make sense to show, so toggling one
-  // chip on doesn't make sibling chips disappear, and a subject/chapter
-  // never shows chips for sources that have no questions in it at all.
-  var scopedMcqs = ids.map(function(id){ return byId[id]; }).filter(Boolean);
-  var list = scopedMcqs.filter(passesFilters);
+  var list = ids.map(function(id){ return byId[id]; }).filter(Boolean).filter(passesFilters);
   /* Sleeping subjects stay visible for browsing, but drop out of the root-level "Start practice" pool/count. */
   var practiceCount = (searchAll || !node) ? list.filter(function(m){ return !state.sleepingSubjects[m.subject] && !m.asleep; }).length : list.filter(function(m){ return !m.asleep; }).length;
 
@@ -3300,7 +2918,7 @@ function renderQuestionList(tree, node, searchAll){
   html += '<div class="view-title serif">' + escapeHtml(title) + '</div>' +
     '<div class="view-sub">' + list.length + ' question' + (list.length===1?'':'s') + ' match the filters below' + (searchAll || state.selectedPath ? '' : ' · pick a subject or chapter on the left to narrow down') + '</div></div>';
 
-  html += renderFilters(scopedMcqs);
+  html += renderFilters();
 
   html += '<div class="action-row">' +
     '<button class="btn btn-primary" data-action="start-practice"' + (practiceCount ? '' : ' disabled') + '>Start practice (' + practiceCount + ')</button>' +
@@ -3338,20 +2956,9 @@ function renderQuestionList(tree, node, searchAll){
   return html;
 }
 
-function renderFilters(scopedMcqs){
-  // Scoped to the current subject/chapter's own questions (before source/tag/
-  // status filters are applied) rather than the whole library — otherwise
-  // this showed every source and tag that exist ANYWHERE, including ones
-  // with zero questions in the chapter actually being viewed.
-  var pool = scopedMcqs || state.mcqs;
-  var sourcesPresent = {};
-  var tagsPresent = {};
-  pool.forEach(function(m){
-    if (m && m.source) sourcesPresent[m.source] = true;
-    (m && m.tags || []).forEach(function(t){ tagsPresent[t] = true; });
-  });
-  var sources = Object.keys(state.sources).filter(function(s){ return sourcesPresent[s]; });
-  var tags = Object.keys(tagsPresent).sort();
+function renderFilters(){
+  var sources = Object.keys(state.sources);
+  var tags = allTags();
   if (!sources.length) return '';
   var activeTagCount = Object.keys(state.filters.tags).filter(function(t){ return state.filters.tags[t]; }).length;
   var anyFilterActive = activeTagCount > 0 ||
@@ -3429,18 +3036,26 @@ var MASTER_PROMPT = "PRACTEX MCQ STANDARDIZATION PROMPT\n\n" +
 "Always re-letter options A, B, C, D, E in that order regardless of how the original numbered them (i, ii, iii or 1, 2, 3 all become A, B, C...).\n\n" +
 "=== SPECIAL QUESTION TYPES ===\n\n" +
 "1. Standard single-best-answer - use the block above as-is.\n\n" +
-"2. Multiple correct answers (select all that apply) - same block, #ANSWER lists every correct letter comma-separated with no spaces, e.g. #ANSWER: A,C,D\n\n" +
+"2. Multiple correct answers (select all that apply) - watch for these signals in the source, since OCR often loses the actual instruction line: the stem says \"select all that apply\", \"which of the following are true/correct\" (plural \"are\", not singular \"is\"), \"mark all correct statements\", a checkbox-style layout instead of round radio-style bullets, or an answer key that lists more than one letter for a single question. When any of these appear, #ANSWER lists every correct letter comma-separated with no spaces, e.g. #ANSWER: A,C,D - never collapse a genuinely multi-correct question down to just one letter because only one seemed most textbook-important. This is different from type 5 below (combination-style options like \"A) 1 and 2 only\") - a combination question still has exactly ONE correct lettered option and gets a single #ANSWER letter, even though the option text itself describes multiple statements.\n\n" +
 "3. Assertion-Reason questions - put both statements in the #Q body labeled exactly \"Assertion (A):\" and \"Reason (R):\" on their own lines, then the standard Assertion-Reason options go in #OPTIONS as normal lettered options.\n\n" +
 "4. Match-the-following / column matching - put the two columns in the #Q body as a markdown pipe table (table rules below), then the lettered combinations go in #OPTIONS as normal, e.g. \"A) 1-a, 2-b, 3-c, 4-d\".\n\n" +
-"5. Multiple-statement true/false (Roman numeral statements I, II, III, IV) - list the numbered statements as plain lines inside #Q body, then the combinations go in #OPTIONS as normal, e.g. \"A) I and II only\".\n\n" +
+"5. Multiple-statement true/false (Roman numeral statements I, II, III, IV) - list the numbered statements as plain lines inside #Q body, then the combinations go in #OPTIONS as normal, e.g. \"A) I and II only\". Single #ANSWER letter, same reasoning as the note in type 2 above.\n\n" +
 "6. Fill-in-the-blank / one-word-answer questions with no options - omit the #OPTIONS block entirely. Put the answer directly after #ANSWER:\n\n" +
 "7. Passage or case-vignette shared by 2+ consecutive questions - write the shared passage once, immediately before the first question using it:\n" +
 "#PASSAGE: P1\n" +
 "<passage text>\n" +
 "#ENDPASSAGE\n" +
 "Then for every question that uses it, add the passage id right after #Q on the same line: \"#Q [PASSAGE:P1]\". Give each distinct passage in the document a new sequential id (P1, P2, P3...).\n\n" +
-"8. Questions referencing an image/photo/diagram that OCR cannot capture - insert a line inside the #Q body: #IMAGE: [brief description inferred from the surrounding text/caption]. Never invent findings that aren't stated nearby - if you cannot tell what the image shows, write #IMAGE: [image - description unavailable].\n\n" +
-"9. Questions with no visible answer key anywhere in the source - still create the full block, options included, and set #ANSWER: UNKNOWN.\n\n" +
+"8. Extended matching questions (a shared bank of options, e.g. A-J, used to answer several consecutive scenario/clinical-vignette questions in a row) - write the shared bank once, immediately before the first question using it:\n" +
+"#OPTIONBANK: B1\n" +
+"A) <option text>\n" +
+"B) <option text>\n" +
+"... (as many lettered options as the source actually has - not limited to A-D)\n" +
+"#ENDOPTIONBANK\n" +
+"Then for every question that uses it, add the bank id right after #Q on the same line: \"#Q [BANK:B1]\", and omit that question's own #OPTIONS block entirely - its options come from the bank. #ANSWER is still just the single letter for that question, from the bank's lettering. Give each distinct bank in the document a new sequential id (B1, B2, B3...), same pattern as #PASSAGE ids.\n\n" +
+"9. Negative/EXCEPT questions (\"which of the following is NOT true\", \"all of the following are correct EXCEPT\", \"which is a contraindication\" when everything else in the list is an indication, etc.) - keep the negative framing exactly as worded in the #Q stem, never rephrase it into a positive question. #ANSWER is still whichever single letter correctly answers the question AS ASKED - i.e. the one false/exceptional statement, not the ones that happen to be individually true. Getting this backwards is the single most common conversion error on this question type, so double check the answer key's letter actually matches the exception, not the rule.\n\n" +
+"10. Questions referencing an image/photo/diagram that OCR cannot capture - insert a line inside the #Q body: #IMAGE: [brief description inferred from the surrounding text/caption]. Never invent findings that aren't stated nearby - if you cannot tell what the image shows, write #IMAGE: [image - description unavailable].\n\n" +
+"11. Questions with no visible answer key anywhere in the source - still create the full block, options included, and set #ANSWER: UNKNOWN.\n\n" +
 "=== TABLE RULES ===\n" +
 "Use standard markdown pipe tables only, inside a #Q or #EXPLANATION body:\n" +
 "| Header 1 | Header 2 |\n" +
@@ -3508,9 +3123,8 @@ function renderAddSource(){
       var count = state.mcqs.filter(function(m){ return m.source === s; }).length;
       html += '<div class="source-manage-row">' +
         '<span class="chip-dot" style="background:' + colorForSource(s) + '"></span>' +
-        '<span class="source-manage-name">' + escapeHtml(s) + '</span>' +
+        '<span style="flex:1;">' + escapeHtml(s) + '</span>' +
         '<span class="view-sub" style="margin:0;">' + count + ' MCQs</span>' +
-        '<button class="btn btn-ghost btn-sm" data-action="rename-source" data-source="' + escapeHtml(s) + '">' + icon('pencil',12) + ' Rename</button>' +
         '<button class="btn btn-sm btn-danger" data-action="delete-source" data-source="' + escapeHtml(s) + '">Delete</button>' +
         '</div>';
     });
@@ -3524,88 +3138,6 @@ function renderAddSource(){
   }
 
   return html;
-}
-
-function openRenameSourceModal(oldName){
-  if (!oldName || !state.sources[oldName]) return;
-  var html = '<h3>Rename source</h3>' +
-    '<div class="field-row"><div class="field"><label>New name</label>' +
-    '<input type="text" id="renameSourceInput" value="' + escapeHtml(oldName) + '"></div></div>' +
-    '<div class="action-row" style="margin-bottom:0;">' +
-    '<button class="btn btn-primary" data-action="confirm-rename-source" data-old-name="' + escapeHtml(oldName) + '">Save</button>' +
-    '<button class="btn btn-ghost" data-action="close-modal">Cancel</button>' +
-    '</div>';
-  showRichModal(html, 'narrow');
-  setTimeout(function(){
-    var input = document.getElementById('renameSourceInput');
-    if (input) { input.focus(); input.select(); }
-  }, 50);
-}
-
-async function confirmRenameSource(oldName){
-  var input = document.getElementById('renameSourceInput');
-  if (!input || !oldName || !state.sources[oldName]) { closeModal(); return; }
-  var newName = input.value.trim();
-  if (!newName) { showToast('Enter a name first.'); return; }
-  if (newName === oldName) { closeModal(); return; }
-  if (state.sources[newName]) {
-    // A different source already uses this exact name — ask whether to
-    // merge into it rather than silently doing it (or just refusing and
-    // making the person go delete one manually).
-    openMergeSourceConfirm(oldName, newName);
-    return;
-  }
-  closeModal();
-  await applySourceRename(oldName, newName, { mergeIntoExisting: false });
-}
-
-function openMergeSourceConfirm(oldName, newName){
-  var count = state.mcqs.filter(function(m){ return m.source === oldName; }).length;
-  var html = '<h3>Merge sources?</h3>' +
-    '<p>"' + escapeHtml(newName) + '" already exists. Merging will move all ' + count + ' question' + (count===1?'':'s') +
-    ' from "' + escapeHtml(oldName) + '" into it, and "' + escapeHtml(oldName) + '" will stop existing as a separate source. This can\'t be undone.</p>' +
-    '<div class="action-row" style="margin-bottom:0;">' +
-    '<button class="btn btn-danger" data-action="confirm-merge-source" data-old-name="' + escapeHtml(oldName) + '" data-new-name="' + escapeHtml(newName) + '">Merge</button>' +
-    '<button class="btn btn-ghost" data-action="close-modal">Cancel</button>' +
-    '</div>';
-  showRichModal(html, 'narrow');
-}
-
-async function confirmMergeSource(oldName, newName){
-  if (!oldName || !newName || !state.sources[oldName] || !state.sources[newName]) { closeModal(); return; }
-  closeModal();
-  await applySourceRename(oldName, newName, { mergeIntoExisting: true });
-}
-
-// Shared by a plain rename (target name is free) and a merge (target name
-// already belongs to a different source) — the only real difference is
-// which source's color/metadata survives: a plain rename carries the old
-// source's own color forward onto its new name, a merge keeps the
-// EXISTING target source's color rather than overwriting it, since that's
-// the one the person is merging into.
-async function applySourceRename(oldName, newName, opts){
-  opts = opts || {};
-  if (!opts.mergeIntoExisting) {
-    state.sources[newName] = state.sources[oldName];
-  }
-  delete state.sources[oldName];
-  var affected = 0;
-  state.mcqs.forEach(function(m){ if (m.source === oldName) { m.source = newName; affected++; } });
-  // Filter/sleep state and image ID-sheet source dropdowns all key off the
-  // exact source string too — nothing else needs touching since they all
-  // read m.source / state.sources fresh on every render rather than
-  // caching the old name anywhere.
-  showToast((opts.mergeIntoExisting ? 'Merging "' : 'Renaming "') + oldName + '" ' + (opts.mergeIntoExisting ? 'into' : 'to') + ' "' + newName + '"…');
-  render();
-  /* Awaited — same reasoning as delete-source above: a bulk rename/merge
-     touching potentially thousands of questions is exactly the kind of
-     operation worth waiting on rather than leaving fire-and-forget.
-     saveLibrary()'s dirty-tracking only pushes the questions whose source
-     actually changed, not the whole library, so this stays cheap even for
-     a big source. */
-  await saveLibrary();
-  await saveSources();
-  showToast((opts.mergeIntoExisting ? 'Merged into "' : 'Renamed to "') + newName + '" — ' + affected + ' question' + (affected===1?'':'s') + (opts.mergeIntoExisting ? ' moved.' : ' updated.'));
 }
 
 /* ---------------- Practice / session ---------------- */
@@ -4232,20 +3764,7 @@ async function advanceAfterReveal(){
 
   s.index++; s.selected = null; s.revealed = false; s.shortAnswerCorrect = null; s.viewIndex = s.index;
   s.questionShownAt = Date.now(); s.revealedAt = null; s.lastTimeToAnswerMs = null; /* start the clock fresh for whatever's next */
-  if (s.index >= s.ids.length) {
-    state.view = 'summary';
-    // A test that finished normally has nothing left to "resume" — but if
-    // the person had switched tabs even once mid-test (extremely common,
-    // triggers the auto-pause safety-net snapshot below), state.pausedSession
-    // was still sitting there from that moment, untouched, since nothing
-    // used to clear it just because the live session kept going and
-    // eventually finished on its own. That stale snapshot would then
-    // resurface as a "Paused test" banner pointing at a test that's already
-    // done — this is what was showing up as the paused-test card appearing
-    // "randomly". Clearing it here, and pushing that clear so it doesn't
-    // come back from another device's cloud copy either.
-    if (state.pausedSession) { state.pausedSession = null; savePausedSession(); }
-  }
+  if (s.index >= s.ids.length) state.view = 'summary';
   render(); /* update the screen immediately — don't make the person wait on a network round trip just to see the next question */
   saveLibrary(); /* fire-and-forget in the background; it has its own error toast if it fails */
   if (justAutoSlept) showToast('That question is asleep now — ' + (state.autoSleepStreak||4) + ' correct in a row. Wake it anytime from its row in the library.');
@@ -4393,13 +3912,6 @@ async function onClick(e){
     render();
     return;
   }
-  if (action === 'set-default-landing') {
-    var pref = el.getAttribute('data-landing');
-    setDefaultLandingPref(pref);
-    showToast('Practex will now open to ' + (pref === 'browse' ? 'your Library' : 'the Dashboard') + ' next time.');
-    renderSettingsModalContent(); // re-render just the modal so the button highlight updates immediately
-    return;
-  }
   if (action === 'export-library') { exportLibrary(); return; }
   if (action === 'import-library') {
     var fi = document.getElementById('importFileInput');
@@ -4516,18 +4028,6 @@ async function onClick(e){
     return;
   }
 
-  if (action === 'rename-source') {
-    openRenameSourceModal(el.getAttribute('data-source'));
-    return;
-  }
-  if (action === 'confirm-rename-source') {
-    confirmRenameSource(el.getAttribute('data-old-name'));
-    return;
-  }
-  if (action === 'confirm-merge-source') {
-    confirmMergeSource(el.getAttribute('data-old-name'), el.getAttribute('data-new-name'));
-    return;
-  }
   if (action === 'copy-prompt') {
     var copied = false;
     try {
@@ -4880,10 +4380,7 @@ async function onClick(e){
   if (action === 'leave-practice') { requestLeavePractice(); return; }
   if (action === 'pause-and-leave') {
     state.pausedSession=currentSessionSnapshot();
-    if (state.pausedSession) {
-      state.pausedSession.pausedAt = Date.now();
-      state.pausedSession.learningEnabled = state.learningMode.enabled; // see resume-paused for why this matters
-    }
+    if (state.pausedSession) state.pausedSession.pausedAt = Date.now();
     state.session=null; applyPendingNav(); closeModal(); render();
     showToast('Pausing…');
     /* Awaited — this is exactly the highest-risk spot for a fire-and-forget save:
@@ -4903,13 +4400,6 @@ async function onClick(e){
     return;
   }
   if (action === 'leave-without-pausing') {
-    // "Don't save my progress" should also discard any stale auto-pause
-    // snapshot from earlier in THIS same session (e.g. a tab switch mid-test
-    // that silently set state.pausedSession as a safety net) — otherwise
-    // that old snapshot survives this explicit "I'm done with this" choice
-    // and resurfaces later as a paused-test card for a session the person
-    // just said to abandon.
-    if (state.pausedSession) { state.pausedSession = null; savePausedSession(); }
     state.session=null; applyPendingNav(); closeModal(); render(); return;
   }
   if (action === 'resume-paused') {
@@ -4932,16 +4422,6 @@ async function onClick(e){
       showToast('That paused test looks corrupted and can\'t be resumed — sorry about that. Starting fresh is the safest option.');
       state.pausedSession = null; closeModal(); render(); savePausedSession(); return;
     }
-    // Restore the mode the session was actually PAUSED in — not whatever the
-    // global toggle currently happens to be. Without this, resuming (or an
-    // abrupt tab-switch auto-pause/restore) could silently drop you into
-    // FSRS mode when you left in plain practice mode, or vice versa, any
-    // time the global toggle had drifted since — from switching it while
-    // browsing elsewhere in the app, from a settings sync landing between
-    // pause and resume, anything. A paused session saved before this fix
-    // existed won't have learningEnabled at all — falls back to the current
-    // global setting in that case, same as before.
-    if (typeof restored.learningEnabled === 'boolean') state.learningMode.enabled = restored.learningEnabled;
     state.session = restored;
     state.pausedSession = null;
     state.view = 'practice';
@@ -5098,24 +4578,31 @@ function showAuthGate(){
 }
 async function showApp(){
   document.getElementById('authGate').style.display = 'none';
-  document.getElementById('loadingScreen').style.display = 'flex';
-  document.getElementById('loadingScreen').textContent = 'Loading your library…';
-  document.getElementById('appRoot').style.display = 'none';
-  await loadLibrary();
-  state.view = loadDefaultLandingPref() === 'browse' ? 'browse' : 'dashboard';
-  document.getElementById('loadingScreen').style.display = 'none';
-  document.getElementById('appRoot').style.display = 'grid';
-  render();
-}
-// 'dashboard' (streak/due/heatmap overview) or 'browse' (straight into the
-// Library). Read once at boot in showApp() above — changing it in Settings
-// only affects the NEXT load, same as most apps' "start on" preferences.
-function loadDefaultLandingPref(){
-  try { return localStorage.getItem('practex_default_landing') === 'browse' ? 'browse' : 'dashboard'; }
-  catch(e){ return 'dashboard'; }
-}
-function setDefaultLandingPref(pref){
-  try { localStorage.setItem('practex_default_landing', pref === 'browse' ? 'browse' : 'dashboard'); } catch(e){}
+  /* Instant-paint from the local mirror if we have one, instead of always blocking on
+     a full Supabase round trip — this is the single biggest lever on perceived load
+     time, since after the very first sign-in on a device there's almost always a
+     complete local copy already sitting in IndexedDB. Paint with that immediately,
+     then quietly refresh from the cloud in the background and re-render once real
+     data arrives (usually no visible change, just correctness). Only a genuinely
+     first-ever load on this device — no mirror yet — falls back to the old blocking
+     "Loading your library…" screen, since there's nothing to paint instantly with. */
+  var instant = await loadLocalMirror();
+  if (instant && Array.isArray(instant.mcqs)) {
+    applyMirrorToState(instant);
+    await loadImageUrlMap();
+    document.getElementById('loadingScreen').style.display = 'none';
+    document.getElementById('appRoot').style.display = 'grid';
+    render();
+    loadLibrary().then(function(){ if (state.currentUser) render(); }); /* background refresh, not awaited — don't make the person wait for it; guarded in case they signed out before this resolved */
+  } else {
+    document.getElementById('loadingScreen').style.display = 'flex';
+    document.getElementById('loadingScreen').textContent = 'Loading your library…';
+    document.getElementById('appRoot').style.display = 'none';
+    await loadLibrary();
+    document.getElementById('loadingScreen').style.display = 'none';
+    document.getElementById('appRoot').style.display = 'grid';
+    render();
+  }
 }
 
 /* ---------------- Init ---------------- */
@@ -5171,30 +4658,13 @@ async function init(){
     if (document.visibilityState === 'hidden' && isMidSession() && !state.pausedSession) {
       state.pausedSession = currentSessionSnapshot();
       state.pausedSession.pausedAt = Date.now();
-      state.pausedSession.learningEnabled = state.learningMode.enabled; // see resume-paused for why this matters
       persistPausedSessionSync();
-    } else if (document.visibilityState === 'visible' && isMidSession() && state.pausedSession) {
-      // Coming back to a session that never actually closed — if the
-      // pending pausedSession is THIS SAME test's own auto-pause snapshot
-      // (set above when the tab went hidden), it's now redundant: the live
-      // session just picked back up normally, so the stale backup should go
-      // rather than sitting around to surface later as a "Paused test" card
-      // for a test that's still going or has already finished (this was the
-      // actual cause of the card appearing seemingly at random). Left alone
-      // if it's a DIFFERENT test's pause — started a new test while an
-      // earlier, unrelated one was still genuinely waiting to be resumed —
-      // that one shouldn't be touched.
-      var sameTest = state.session.ids && state.pausedSession.ids &&
-        state.session.ids.length === state.pausedSession.ids.length &&
-        state.session.ids.every(function(id, i){ return id === state.pausedSession.ids[i]; });
-      if (sameTest) { state.pausedSession = null; savePausedSession(); }
     }
   });
   window.addEventListener('pagehide', function(){
     if (isMidSession() && !state.pausedSession) {
       state.pausedSession = currentSessionSnapshot();
       state.pausedSession.pausedAt = Date.now();
-      state.pausedSession.learningEnabled = state.learningMode.enabled; // see resume-paused for why this matters
       persistPausedSessionSync();
     }
   });
