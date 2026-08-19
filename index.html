@@ -1097,13 +1097,34 @@ function applyMirrorToState(mirror, skipMcqs){
   state.autoSleepEnabled = mirror.autoSleepEnabled !== false;
   state.autoSleepStreak = mirror.autoSleepStreak || 4;
 }
+async function fetchAllMcqRows(userId){
+  /* Supabase/PostgREST caps rows per request (commonly 1000 by default) — a plain
+     unbounded select() silently truncates past that instead of erroring, so a
+     library bigger than the cap would only ever partially load with no visible sign
+     anything was wrong. This is almost certainly what "a whole subject disappears a
+     few seconds after load" actually was: the truncated result correctly overwriting
+     a correct one, not real deletion. Pages through with .range() until a page comes
+     back shorter than the page size, so this always gets everything regardless of
+     how large the library grows. */
+  var PAGE_SIZE = 1000;
+  var all = [];
+  var from = 0;
+  while (true) {
+    var res = await supabaseClient.from('mcqs').select('data').eq('user_id', userId).range(from, from + PAGE_SIZE - 1);
+    if (res.error) throw res.error;
+    var rows = res.data || [];
+    all = all.concat(rows);
+    if (rows.length < PAGE_SIZE) break; // last page
+    from += PAGE_SIZE;
+  }
+  return all;
+}
 async function loadLibrary(){
   if (!state.currentUser || !supabaseClient) { state.mcqs = []; state.sources = {}; return; }
   var usedMirrorFallback = false;
   try {
-    var mcqRes = await supabaseClient.from('mcqs').select('data').eq('user_id', state.currentUser.id);
-    if (mcqRes.error) throw mcqRes.error;
-    state.mcqs = (mcqRes.data || []).map(function(row){ return row.data; });
+    var mcqRows = await fetchAllMcqRows(state.currentUser.id);
+    state.mcqs = mcqRows.map(function(row){ return row.data; });
   } catch(e) {
     console.error('loadLibrary (mcqs):', e);
     var mirror = await loadLocalMirror();
@@ -1293,8 +1314,19 @@ async function saveLibrary(){
     var rows = state.mcqs.map(function(m){
       return { id: m.id, user_id: state.currentUser.id, data: m, updated_at: new Date().toISOString() };
     });
-    var res = await supabaseClient.from('mcqs').upsert(rows);
-    if (res.error) throw res.error;
+    /* Sent in batches, not one giant request — the whole library gets re-upserted on
+       every save (simplest correct thing when nothing tracks which rows actually
+       changed), and at thousands of rich question objects that single request could
+       approach real request-payload-size limits and start failing silently. Batches
+       keep each request comfortably small regardless of how large the library gets;
+       upsert is idempotent, so re-sending an already-correct batch on a retry is
+       wasteful but harmless, never destructive. */
+    var SAVE_BATCH_SIZE = 300;
+    for (var bi = 0; bi < rows.length; bi += SAVE_BATCH_SIZE) {
+      var batch = rows.slice(bi, bi + SAVE_BATCH_SIZE);
+      var res = await supabaseClient.from('mcqs').upsert(batch);
+      if (res.error) throw res.error;
+    }
     state.hasUnsyncedChanges = false;
     updateSyncIndicator();
   } catch(e) {
@@ -1321,8 +1353,15 @@ async function saveLibrary(){
 async function deleteMcqRows(ids){
   if (!state.currentUser || !supabaseClient || !ids || !ids.length) return;
   try {
-    var res = await supabaseClient.from('mcqs').delete().eq('user_id', state.currentUser.id).in('id', ids);
-    if (res.error) throw res.error;
+    /* Same batching reasoning as saveLibrary — deleting a whole large deck (e.g. an
+       entire subject) at once as one .in('id', ids) filter risks hitting URL-length
+       limits for very large id lists, since that filter goes into the query string. */
+    var DELETE_BATCH_SIZE = 300;
+    for (var di = 0; di < ids.length; di += DELETE_BATCH_SIZE) {
+      var idBatch = ids.slice(di, di + DELETE_BATCH_SIZE);
+      var res = await supabaseClient.from('mcqs').delete().eq('user_id', state.currentUser.id).in('id', idBatch);
+      if (res.error) throw res.error;
+    }
   } catch(e) {
     console.error('deleteMcqRows:', e);
     showToast('Could not delete those questions on the server.');
