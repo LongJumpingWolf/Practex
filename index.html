@@ -576,6 +576,26 @@ textarea.ingest-area{
 .reveal-verdict.correct{color:var(--pen-green);}
 .reveal-verdict.wrong{color:var(--pen-red);}
 .reveal-verdict.pending{color:var(--cover);}
+
+/* New question types — match/sequence/cutoff/mnemonic — reuse the same pen-green/
+   pen-red/cover tokens as the standard bubble-MCQ reveal states above, so a correct
+   or wrong answer reads identically regardless of question type. */
+.match-item,.seq-item{border:1px solid var(--rule);background:var(--card);color:var(--ink);font-size:13.5px;cursor:pointer;transition:border-color .15s,background .15s;}
+.match-item:disabled,.seq-item{cursor:default;}
+.match-item.match-pending{border-color:var(--cover);background:var(--paper);}
+.match-item.match-linked{border-color:var(--ink-soft);}
+.match-item.match-correct{border-color:var(--pen-green);background:var(--pen-green-bg);}
+.match-item.match-wrong{border-color:var(--pen-red);background:var(--pen-red-bg);}
+.seq-item.seq-correct{border-color:var(--pen-green);background:var(--pen-green-bg);}
+.seq-item.seq-wrong{border-color:var(--pen-red);background:var(--pen-red-bg);}
+.mnem-letter{font-family:inherit;}
+#cutoffSlider{accent-color:var(--cover);height:28px;}
+#cutoffSlider::-webkit-slider-thumb{width:26px;height:26px;} /* larger touch target than the browser default — verify on an actual phone, not just resized desktop */
+#cutoffSlider::-moz-range-thumb{width:26px;height:26px;}
+@media (max-width:520px){
+  .match-grid{grid-template-columns:1fr!important;}
+  .seq-item{flex-wrap:wrap;}
+}
 .reveal-explain{font-size:13.5px;line-height:1.65;color:var(--ink-soft);}
 .reveal-explain p{margin-bottom:6px;}
 
@@ -2813,7 +2833,30 @@ function render(){
   bindEvents();
   hydrateImages();
   renderZipImportStatus(); /* no-op unless the zipUploadReport element exists on this screen — safe to call unconditionally */
+  bindPracticeWidgets(); /* no-op unless the current question is a 'cutoff' type — safe to call unconditionally */
   if (state.activeModal === 'settings') renderSettingsModalContent();
+}
+
+/* The cutoff slider needs a live-updating label as the user drags, but calling the
+   normal render() on every 'input' tick would replace the DOM mid-drag and kill the
+   browser's active pointer capture on the slider. So this updates the label directly
+   and only writes to state.session.selected — no render() — until "Check answer" is
+   clicked via the existing generic reveal-mcq action. */
+function bindPracticeWidgets(){
+  if (state.view !== 'practice' || !state.session) return;
+  var s = state.session;
+  if (s.viewIndex < s.index) return; /* reviewing an already-answered question — slider is disabled, nothing to bind */
+  var m = state.mcqs.find(function(x){ return x.id === s.ids[s.viewIndex]; });
+  if (!m || m.type !== 'cutoff') return;
+  var slider = document.getElementById('cutoffSlider');
+  var label = document.getElementById('cutoffVal');
+  if (!slider || slider.dataset.bound) return; /* already bound this render pass */
+  slider.dataset.bound = '1';
+  slider.addEventListener('input', function(){
+    var val = parseFloat(slider.value);
+    if (label) label.textContent = val.toFixed(m.range[2] < 1 ? 1 : 0);
+    if (!s.revealed) s.selected = val;
+  });
 }
 
 
@@ -4030,6 +4073,15 @@ function renderPractice(){
     '<div class="progress-label">' + (s.index+1) + ' / ' + s.ids.length +
     (nextLabel ? '<br>Next: ' + escapeHtml(nextLabel) : '') + '</div></div>';
 
+  /* New question types (match/sequence/cutoff/mnemonic) branch out here, before the
+     bubble-MCQ/short-answer card markup below. Each owns its own answer-sheet body but
+     shares the header/progress bar above and the qmeta/reveal-panel/notes conventions
+     via the shared helpers passed in. */
+  if (m.type === 'match')    { html += renderMatchBody(m, s, isReviewing, result, viewRevealed); html += '</div>'; return html; }
+  if (m.type === 'sequence') { html += renderSequenceBody(m, s, isReviewing, result, viewRevealed); html += '</div>'; return html; }
+  if (m.type === 'cutoff')   { html += renderCutoffBody(m, s, isReviewing, result, viewRevealed); html += '</div>'; return html; }
+  if (m.type === 'mnemonic') { html += renderMnemonicBody(m, s, isReviewing, result, viewRevealed); html += '</div>'; return html; }
+
   html += '<div class="card answer-sheet">';
   html += '<div class="qmeta"><span class="qnum mono">Q.' + (s.viewIndex+1) + '</span><div class="qmeta-tags">' +
     '<span class="source-pill" style="background:' + colorForSource(m.source) + '">' + escapeHtml(m.source) + '</span>' +
@@ -4112,6 +4164,222 @@ function renderPractice(){
 
 /* Multi-answer ("select all that apply") questions toggle each option in/out of the
    selection; single-answer questions replace the whole selection with just this one. */
+/* =============================================================================
+   NEW QUESTION TYPES — match / sequence / cutoff / mnemonic
+   Each renderXBody() returns a complete, self-closing '<div class="card
+   answer-sheet">...</div>' string, reusing the same qmeta/qtext/image markup
+   conventions as the standard bubble-MCQ card above so they read identically
+   in the UI. Grading logic lives in evaluateCorrect() below; advanceAfterReveal()
+   is extended to build a readable pickedStr for LearningEngine.record().
+   ============================================================================= */
+
+function qMetaAndStemHtml(m, s, stemText){
+  var tags = Array.isArray(m.tags) ? m.tags : (m.tags ? String(m.tags).split(/\s+/).filter(Boolean) : []);
+  var html = '<div class="qmeta"><span class="qnum mono">Q.' + (s.viewIndex+1) + '</span><div class="qmeta-tags">' +
+    '<span class="source-pill" style="background:' + colorForSource(m.source) + '">' + escapeHtml(m.source || '') + '</span>' +
+    tags.map(function(t){ return '<span class="tag-pill">' + escapeHtml(t) + '</span>'; }).join('') +
+    '</div></div>';
+  html += '<div class="qtext">' + renderContent(stemText || '') + '</div>';
+  if (m.images && m.images.length) {
+    html += '<div class="qimage-grid">' + m.images.map(function(hash){
+      return '<div class="qimage-thumb"><img data-hash-src="' + escapeHtml(hash) + '" data-action="view-mcq-image" data-hash="' + escapeHtml(hash) + '" alt=""></div>';
+    }).join('') + '</div>';
+  }
+  return html;
+}
+
+function shuffledIndices(n, seedKey){
+  /* Deterministic-per-question shuffle so re-renders (which happen on every click)
+     don't visually reshuffle the right-hand column mid-interaction. Seeded off the
+     question id so the same question always shuffles the same way for a given user. */
+  var arr = []; for (var i=0;i<n;i++) arr.push(i);
+  var seed = 0; for (var c=0;c<seedKey.length;c++) seed = (seed * 31 + seedKey.charCodeAt(c)) >>> 0;
+  function rand(){ seed = (seed * 1103515245 + 12345) >>> 0; return (seed / 4294967296); }
+  for (var j = arr.length - 1; j > 0; j--) {
+    var k = Math.floor(rand() * (j + 1));
+    var tmp = arr[j]; arr[j] = arr[k]; arr[k] = tmp;
+  }
+  return arr;
+}
+
+/* ---------------- MATCH ---------------- */
+function renderMatchBody(m, s, isReviewing, result, viewRevealed){
+  var viewSel = isReviewing ? (result ? result.selected : null) : s.selected;
+  if (!isReviewing && !viewSel) {
+    viewSel = { links: {}, rightOrder: shuffledIndices(m.pairs.length, m.id || 'match'), pendingLeft: null };
+    s.selected = viewSel;
+  }
+  var rightOrder = viewSel && viewSel.rightOrder ? viewSel.rightOrder : shuffledIndices(m.pairs.length, m.id || 'match');
+  var links = (viewSel && viewSel.links) || {};
+
+  var html = '<div class="card answer-sheet">';
+  html += qMetaAndStemHtml(m, s, m.stem);
+  html += '<div class="multi-select-hint">' + icon('check-circle',13) + ' Tap an item on the left, then its match on the right</div>';
+  html += '<div class="match-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px;">';
+
+  html += '<div>';
+  m.pairs.forEach(function(pair, i){
+    var isLinked = links[i] !== undefined;
+    var isPending = viewSel.pendingLeft === i;
+    var cls = 'match-item';
+    if (viewRevealed) cls += (links[i] === i ? ' match-correct' : ' match-wrong');
+    else if (isLinked) cls += ' match-linked';
+    else if (isPending) cls += ' match-pending';
+    html += '<button class="' + cls + '" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:10px 12px;border-radius:8px;" ' +
+      (viewRevealed || isReviewing ? 'disabled' : 'data-action="match-pick-left" data-i="' + i + '"') + '>' +
+      (i+1) + '. ' + escapeHtml(pair.left) + '</button>';
+  });
+  html += '</div>';
+
+  html += '<div>';
+  rightOrder.forEach(function(origIdx){
+    var pair = m.pairs[origIdx];
+    var linkedToLeft = Object.keys(links).find(function(li){ return links[li] === origIdx; });
+    var isLinked = linkedToLeft !== undefined;
+    var cls = 'match-item';
+    if (viewRevealed) cls += (isLinked && Number(linkedToLeft) === origIdx ? ' match-correct' : (isLinked ? ' match-wrong' : ''));
+    else if (isLinked) cls += ' match-linked';
+    html += '<button class="' + cls + '" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:10px 12px;border-radius:8px;" ' +
+      (viewRevealed || isReviewing ? 'disabled' : 'data-action="match-pick-right" data-i="' + origIdx + '"') + '>' +
+      escapeHtml(pair.right) + '</button>';
+  });
+  html += '</div></div>';
+
+  var allLinked = Object.keys(links).length === m.pairs.length;
+  if (!viewRevealed) {
+    html += '<div class="answer-footer" style="justify-content:flex-end;">' +
+      '<button class="btn btn-primary" data-action="reveal-mcq"' + (allLinked ? '' : ' disabled') + '>Check answer</button></div>';
+  } else {
+    html += renderRevealFooter(m, s, isReviewing);
+  }
+  html += '</div>';
+  return html;
+}
+
+/* ---------------- SEQUENCE ---------------- */
+function renderSequenceBody(m, s, isReviewing, result, viewRevealed){
+  var viewSel = isReviewing ? (result ? result.selected : null) : s.selected;
+  if (!isReviewing && !viewSel) {
+    viewSel = shuffledIndices(m.steps_correct_order.length, m.id || 'sequence');
+    s.selected = viewSel;
+  }
+  var order = viewSel || [];
+
+  var html = '<div class="card answer-sheet">';
+  html += qMetaAndStemHtml(m, s, m.stem);
+  html += '<div class="multi-select-hint">' + icon('check-circle',13) + ' Use the arrows to put these in the correct order</div>';
+  html += '<div class="seq-list" style="margin-top:10px;">';
+  order.forEach(function(origIdx, pos){
+    var isCorrectHere = viewRevealed && origIdx === pos;
+    var cls = 'seq-item' + (viewRevealed ? (isCorrectHere ? ' seq-correct' : ' seq-wrong') : '');
+    html += '<div class="' + cls + '" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;margin-bottom:7px;">' +
+      '<span class="mono" style="min-width:18px;">' + (pos+1) + '</span>' +
+      '<span style="flex:1;">' + escapeHtml(m.steps_correct_order[origIdx]) + '</span>';
+    if (!viewRevealed && !isReviewing) {
+      html += '<button class="btn btn-ghost btn-sm" data-action="seq-move-up" data-pos="' + pos + '"' + (pos===0?' disabled':'') + ' title="Move up">' + icon('chevron-left',14) + '</button>' +
+        '<button class="btn btn-ghost btn-sm" data-action="seq-move-down" data-pos="' + pos + '"' + (pos===order.length-1?' disabled':'') + ' title="Move down">' + icon('chevron-right',14) + '</button>';
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+
+  if (!viewRevealed) {
+    html += '<div class="answer-footer" style="justify-content:flex-end;">' +
+      '<button class="btn btn-primary" data-action="reveal-mcq">Check answer</button></div>';
+  } else {
+    html += renderRevealFooter(m, s, isReviewing);
+  }
+  html += '</div>';
+  return html;
+}
+
+/* ---------------- CUTOFF ---------------- */
+function renderCutoffBody(m, s, isReviewing, result, viewRevealed){
+  var viewSel = isReviewing ? (result ? result.selected : null) : s.selected;
+  if (!isReviewing && (viewSel === null || viewSel === undefined)) {
+    viewSel = (m.range[0] + m.range[1]) / 2;
+    s.selected = viewSel;
+  }
+
+  var html = '<div class="card answer-sheet">';
+  html += qMetaAndStemHtml(m, s, m.stem + (m.testValue !== undefined ? '' : ''));
+  if (m.testValue !== undefined) {
+    html += '<div class="passage-box">A value of <b class="mono">' + m.testValue + '</b> is given. Drag the slider to where you\'d classify it, then check.</div>';
+  }
+  html += '<div class="slider-wrap" style="margin-top:14px;">';
+  html += '<div class="mono" id="cutoffVal" style="font-size:26px;font-weight:600;margin-bottom:10px;">' + Number(viewSel).toFixed(m.range[2] < 1 ? 1 : 0) + '</div>';
+  html += '<input type="range" id="cutoffSlider" min="' + m.range[0] + '" max="' + m.range[1] + '" step="' + m.range[2] + '" value="' + viewSel + '"' +
+    (viewRevealed || isReviewing ? ' disabled' : '') + ' style="width:100%;">';
+  html += '</div>';
+
+  if (!viewRevealed) {
+    html += '<div class="answer-footer" style="justify-content:flex-end;">' +
+      '<button class="btn btn-primary" data-action="reveal-mcq">Check answer</button></div>';
+  } else {
+    var userSide = Number(viewSel) < m.threshold ? m.below : m.above;
+    html += '<div class="view-sub" style="margin:10px 0;">Your side of the threshold: <b>' + escapeHtml(userSide) + '</b></div>';
+    html += renderRevealFooter(m, s, isReviewing);
+  }
+  html += '</div>';
+  return html;
+}
+
+/* ---------------- MNEMONIC ---------------- */
+function renderMnemonicBody(m, s, isReviewing, result, viewRevealed){
+  var viewSel = isReviewing ? (result ? result.selected : null) : s.selected;
+  var testLetter = m.letters[m.testIndex];
+
+  var html = '<div class="card answer-sheet">';
+  html += qMetaAndStemHtml(m, s, m.stem);
+  html += '<div class="mnem-grid" style="display:flex;flex-wrap:wrap;gap:9px;margin:14px 0;">';
+  m.letters.forEach(function(l, i){
+    var isTested = i === m.testIndex;
+    html += '<div class="mnem-letter" style="width:42px;height:42px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-weight:600;' +
+      (isTested ? 'background:var(--emerald-700,#1F5C4A);color:#fff;' : 'border:1px solid var(--line,#ccc);') + '">' + escapeHtml(l.letter) + '</div>';
+  });
+  html += '</div>';
+  html += '<div class="view-sub">What does the highlighted letter stand for?</div>';
+
+  if (!viewRevealed) {
+    html += '<div class="short-answer-box"><textarea id="shortAnswerInput" placeholder="Type your answer, then reveal to check yourself">' + escapeHtml(viewSel || '') + '</textarea></div>';
+    html += '<div class="answer-footer" style="justify-content:flex-end;"><button class="btn btn-primary" data-action="reveal-short">Reveal answer</button></div>';
+  } else {
+    html += '<div class="view-sub" style="margin-bottom:8px;">You answered: ' + escapeHtml(viewSel || '(blank)') + '</div>';
+    html += '<div class="reveal-panel"><div class="view-sub"><b>' + escapeHtml(testLetter.letter) + '</b> = ' + escapeHtml(testLetter.meaning) + '</div></div>';
+    html += renderNotesSection(m);
+    if (isReviewing) {
+      /* nothing to submit — movement via Prev/Next/Overview up top, same as other reviewed questions */
+    } else if (s.shortAnswerCorrect === null || s.shortAnswerCorrect === undefined) {
+      html += '<div class="view-sub" style="margin-top:14px;">Compare your answer above with the record — did you get it right?</div>';
+      html += '<div class="answer-footer" style="justify-content:flex-end;gap:10px;">' +
+        '<button class="btn btn-danger" data-action="self-grade" data-correct="false">' + icon('x',15) + ' I was wrong</button>' +
+        '<button class="btn btn-primary" data-action="self-grade" data-correct="true">' + icon('check-circle',15) + ' I was right</button></div>';
+    } else {
+      html += '<div class="answer-footer" style="justify-content:flex-end;">' +
+        '<button class="btn btn-primary" data-action="next-question">' + (s.index + 1 < s.ids.length ? 'Next question' : 'Finish session') + '</button></div>';
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+/* Shared reveal footer for the 3 objectively-graded new types (match/sequence/cutoff) —
+   mirrors the standard bubble-MCQ reveal-panel/next-question pattern exactly. */
+function renderRevealFooter(m, s, isReviewing){
+  var result = isReviewing ? s.results[s.viewIndex] : null;
+  var isCorrect = isReviewing ? (result ? result.correct : null) : evaluateCorrect(m, s.selected);
+  var html = '<div class="reveal-panel">';
+  html += '<div class="reveal-verdict ' + (isCorrect ? 'correct' : 'wrong') + '">' + (isCorrect ? 'Correct' : 'Not quite') + '</div>';
+  html += renderReveal(m);
+  html += renderNotesSection(m);
+  if (!isReviewing) {
+    html += '<div class="answer-footer" style="justify-content:flex-end;">' +
+      '<button class="btn btn-primary" data-action="next-question">' + (s.index + 1 < s.ids.length ? 'Next question' : 'Finish session') + '</button></div>';
+  }
+  html += '</div>';
+  return html;
+}
+
 function toggleOptionSelection(m, s, letter){
   if (m.answer.length > 1) {
     var sel = s.selected ? s.selected.slice() : [];
@@ -4124,10 +4392,34 @@ function toggleOptionSelection(m, s, letter){
 }
 
 function evaluateCorrect(m, selected){
-  if (!selected) return false;
-  if (m.isShortAnswer) {
+  if (selected === null || selected === undefined) return false;
+  /* mnemonic is self-graded, same mechanism as isShortAnswer — there's no reliable
+     objective checker for free-text "what does this letter mean" answers. */
+  if (m.isShortAnswer || m.type === 'mnemonic') {
     var sg = state.session && state.session.shortAnswerCorrect;
     return sg === true ? true : (sg === false ? false : null); /* null = not self-graded yet */
+  }
+  if (m.type === 'match') {
+    if (!selected.links) return false;
+    var n = m.pairs.length;
+    if (Object.keys(selected.links).length !== n) return false;
+    for (var i = 0; i < n; i++) { if (selected.links[i] !== i) return false; }
+    return true;
+  }
+  if (m.type === 'sequence') {
+    if (!Array.isArray(selected) || selected.length !== m.steps_correct_order.length) return false;
+    for (var j = 0; j < selected.length; j++) { if (selected[j] !== j) return false; }
+    return true;
+  }
+  if (m.type === 'cutoff') {
+    /* Graded on classification (which side of the threshold), not proximity to an
+       exact number — guessing a cutoff to the decimal isn't a meaningful skill, but
+       correctly classifying a given value against it is. Requires m.testValue. */
+    if (typeof selected !== 'number' || isNaN(selected)) return false;
+    if (m.testValue === undefined) return null; /* malformed question — can't grade, don't silently mark wrong */
+    var userSide = selected < m.threshold ? 'below' : 'above';
+    var trueSide = m.testValue < m.threshold ? 'below' : 'above';
+    return userSide === trueSide;
   }
   if (m.answer.indexOf('UNKNOWN') !== -1) return null;
   var a = selected.slice().sort().join(',');
@@ -4143,12 +4435,26 @@ function revealCurrent(){
   render();
 }
 
+/* Builds a readable "what did they pick" string for LearningEngine.record()'s history —
+   used by getMostRepeatedWrong() to show recurring-mistake banners. Every question type
+   needs to produce SOMETHING here or that banner silently stops working for that type. */
+function pickedStrFor(m, selected){
+  if (m.isShortAnswer || m.type === 'mnemonic') return selected || '';
+  if (m.type === 'match') {
+    if (!selected || !selected.links) return '';
+    return Object.keys(selected.links).map(function(li){ return li + '→' + selected.links[li]; }).join(',');
+  }
+  if (m.type === 'sequence') return Array.isArray(selected) ? selected.join(',') : '';
+  if (m.type === 'cutoff') return selected !== null && selected !== undefined ? String(selected) : '';
+  return selected ? selected.join(',') : '';
+}
+
 async function advanceAfterReveal(){
   var s = state.session;
   var m = state.mcqs.find(function(x){ return x.id === s.ids[s.index]; });
   if (!m) return;
   var correct = evaluateCorrect(m, s.selected);
-  var pickedStr = m.isShortAnswer ? (s.selected || '') : (s.selected ? s.selected.join(',') : '');
+  var pickedStr = pickedStrFor(m, s.selected);
   var timeToAnswerMs = s.lastTimeToAnswerMs;
   var timeOnExplanationMs = s.revealedAt ? (Date.now() - s.revealedAt) : null;
 
@@ -4929,6 +5235,44 @@ async function onClick(e){
   }
 
   if (action === 'reveal-mcq') { revealCurrent(); return; }
+
+  if (action === 'match-pick-left') {
+    if (state.session.revealed) return;
+    var sel = state.session.selected;
+    if (!sel) return;
+    sel.pendingLeft = parseInt(el.getAttribute('data-i'), 10);
+    render();
+    return;
+  }
+  if (action === 'match-pick-right') {
+    if (state.session.revealed) return;
+    var sel2 = state.session.selected;
+    if (!sel2 || sel2.pendingLeft === null || sel2.pendingLeft === undefined) return;
+    var rightIdx = parseInt(el.getAttribute('data-i'), 10);
+    sel2.links[sel2.pendingLeft] = rightIdx;
+    sel2.pendingLeft = null;
+    render();
+    return;
+  }
+
+  if (action === 'seq-move-up') {
+    if (state.session.revealed) return;
+    var pos = parseInt(el.getAttribute('data-pos'), 10);
+    var arr = state.session.selected;
+    if (!arr || pos <= 0) return;
+    var tmp = arr[pos - 1]; arr[pos - 1] = arr[pos]; arr[pos] = tmp;
+    render();
+    return;
+  }
+  if (action === 'seq-move-down') {
+    if (state.session.revealed) return;
+    var pos2 = parseInt(el.getAttribute('data-pos'), 10);
+    var arr2 = state.session.selected;
+    if (!arr2 || pos2 >= arr2.length - 1) return;
+    var tmp2 = arr2[pos2 + 1]; arr2[pos2 + 1] = arr2[pos2]; arr2[pos2] = tmp2;
+    render();
+    return;
+  }
 
   if (action === 'reveal-short') {
     var val = document.getElementById('shortAnswerInput').value.trim();
