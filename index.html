@@ -19,6 +19,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Loading-screen artwork (pixel bonsai + falling petals). Separate file to keep this
+     already-large single-file app from growing further; if it fails to load, the
+     loading screen simply degrades to text + progress bar. -->
+<link href="loading.css" rel="stylesheet">
 <style>
 :root{
   --paper:#EEF0E9;
@@ -611,14 +615,12 @@ textarea.ingest-area{
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
-.loading-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:14px;padding:20px;}
-.loading-mark{width:56px;height:56px;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(47,92,122,0.25);animation:loading-pulse 1.8s ease-in-out infinite;}
-.loading-mark img{width:100%;height:100%;object-fit:cover;}
-@keyframes loading-pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.08);}}
+.loading-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;padding:20px;}
 .loading-title{font-family:'Fraunces',Georgia,serif;font-weight:700;font-size:20px;color:var(--ink);letter-spacing:0.3px;}
 .loading-track{width:min(240px,70vw);height:6px;border-radius:99px;background:var(--rule);overflow:hidden;}
 .loading-fill{height:100%;border-radius:99px;background:var(--cover);transition:width .35s ease;}
 .loading-msg{font-size:13px;color:var(--ink-soft);min-height:18px;}
+.loading-eta{font-size:11.5px;color:var(--ink-faint);min-height:15px;font-family:'IBM Plex Mono',monospace;}
 
 /* Auth gate */
 .auth-gate{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--paper);background-image:linear-gradient(var(--rule) 1px, transparent 1px);background-size:100% 32px;padding:20px;}
@@ -674,10 +676,19 @@ textarea.ingest-area{
 <body>
 
 <div id="loadingScreen" class="loading-screen">
-  <div class="loading-mark"><img src="icons/icon-128x128.png" alt=""></div>
+  <div class="loading-art" aria-hidden="true">
+    <i class="bonsai-canopy-1"></i>
+    <i class="bonsai-canopy-2"></i>
+    <i class="bonsai-canopy-3"></i>
+    <i class="bonsai-trunk"></i>
+    <i class="bonsai-pot"></i>
+    <div class="petal"></div><div class="petal"></div><div class="petal"></div><div class="petal"></div>
+    <div class="petal"></div><div class="petal"></div><div class="petal"></div><div class="petal"></div>
+  </div>
   <div class="loading-title">Practex</div>
   <div class="loading-track"><div class="loading-fill" id="loadingFill" style="width:0%;"></div></div>
   <div class="loading-msg" id="loadingMsg">Getting things ready…</div>
+  <div class="loading-eta" id="loadingEta"></div>
 </div>
 <div id="authGate" class="auth-gate" style="display:none;">
   <div class="auth-card">
@@ -4745,6 +4756,7 @@ async function showApp(){
 
   var fillEl = document.getElementById('loadingFill');
   var msgEl = document.getElementById('loadingMsg');
+  var etaEl = document.getElementById('loadingEta');
   var messages = ['Getting things ready…', 'Gathering your questions…', 'Almost there…', 'Just a little longer…'];
   var msgIdx = 0;
   var msgTimer = setInterval(function(){
@@ -4752,9 +4764,25 @@ async function showApp(){
     if (msgEl) msgEl.textContent = messages[msgIdx];
   }, 2200);
 
+  var loadStartedAt = Date.now();
   await loadLibrary(function(loaded, total){
     if (fillEl && total) fillEl.style.width = Math.min(100, Math.round((loaded / total) * 100)) + '%';
     if (msgEl && total) msgEl.textContent = 'Loaded ' + loaded.toLocaleString() + ' of ' + total.toLocaleString() + ' questions…';
+    /* A genuine estimate from actual throughput so far, not a fake countdown —
+       extrapolates from how long it took to get this far to how long the rest should
+       take. Skipped for the first ~300ms, since a rate computed from almost no
+       elapsed time swings wildly and would just flash a nonsense number briefly. */
+    if (etaEl && total) {
+      var elapsed = Date.now() - loadStartedAt;
+      if (loaded >= total) {
+        etaEl.textContent = 'Finishing up…';
+      } else if (elapsed > 300 && loaded > 0) {
+        var rate = loaded / elapsed; // rows per ms
+        var remainingMs = (total - loaded) / rate;
+        var remainingSec = Math.max(1, Math.round(remainingMs / 1000));
+        etaEl.textContent = 'About ' + remainingSec + (remainingSec === 1 ? ' second' : ' seconds') + ' left';
+      }
+    }
   });
   clearInterval(msgTimer);
 
