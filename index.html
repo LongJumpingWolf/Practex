@@ -679,7 +679,13 @@ textarea.ingest-area{
     <div class="cat-tail"><i class="cat-tail-shape"></i></div>
   </div>
   <div class="loading-title">Practex</div>
-  <div class="loading-track"><div class="loading-fill" id="loadingFill" style="width:0%;"></div></div>
+  <div class="loading-progress-wrap">
+    <div class="loading-track"><div class="loading-fill" id="loadingFill" style="width:0%;"></div></div>
+    <div class="progress-mouse" id="progressMouse" style="left:0%;">
+      <div class="mouse-tail"></div>
+      <div class="mouse-body"><div class="mouse-ear"></div></div>
+    </div>
+  </div>
   <div class="loading-msg" id="loadingMsg">Getting things ready…</div>
   <div class="loading-eta" id="loadingEta"></div>
 </div>
@@ -4748,6 +4754,7 @@ async function showApp(){
   document.getElementById('appRoot').style.display = 'none';
 
   var fillEl = document.getElementById('loadingFill');
+  var mouseEl = document.getElementById('progressMouse');
   var msgEl = document.getElementById('loadingMsg');
   var etaEl = document.getElementById('loadingEta');
   var messages = ['Getting things ready…', 'Gathering your questions…', 'Almost there…', 'Just a little longer…'];
@@ -4759,7 +4766,9 @@ async function showApp(){
 
   var loadStartedAt = Date.now();
   await loadLibrary(function(loaded, total){
-    if (fillEl && total) fillEl.style.width = Math.min(100, Math.round((loaded / total) * 100)) + '%';
+    var pct = total ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
+    if (fillEl && total) fillEl.style.width = pct + '%';
+    if (mouseEl && total) mouseEl.style.left = pct + '%'; /* runs along the real fill, not a decorative loop */
     if (msgEl && total) msgEl.textContent = 'Loaded ' + loaded.toLocaleString() + ' of ' + total.toLocaleString() + ' questions…';
     /* A genuine estimate from actual throughput so far, not a fake countdown —
        extrapolates from how long it took to get this far to how long the rest should

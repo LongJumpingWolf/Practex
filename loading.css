@@ -1,18 +1,12 @@
 /* ==========================================================================
    Practex — loading screen
-   A simple pixel-art cat sitting above the progress bar — blinking eyes,
-   wiggling tail, looping until loading finishes. Pure CSS on plain divs, no
-   images, no canvas, no libraries.
+   A pixel-art cat (blinking eyes, wiggling tail) above a progress bar that a
+   small mouse runs along as loading actually progresses. Pure CSS on plain
+   divs — no images, no canvas, no libraries.
 
    Separate file so index.html (already a large single-file app) doesn't
    grow further. If this fails to load, the loading screen degrades to
    plain text + progress bar on the normal app background.
-
-   The cat's body is one element — every pixel is a box-shadow entry on a
-   single 1x1 base, which is how CSS pixel art keeps its DOM tiny (a few
-   elements cloning into dozens of blocks) instead of one div per pixel.
-   Eyes and tail are their own elements specifically because they animate
-   independently of the (static) body.
    ========================================================================== */
 
 .loading-screen {
@@ -25,14 +19,27 @@
   padding: 20px;
 }
 
+/* ==========================================================================
+   Cat
+   The body is one element — every pixel is a box-shadow entry on a single
+   1x1 base, which is how CSS pixel art keeps its DOM tiny (a few elements
+   cloning into dozens of blocks). Eyes and tail are separate elements
+   specifically because they animate independently of the static body.
+
+   Coordinate note: every pixel is placed at a NON-NEGATIVE (col, row) offset
+   from the container's own top-left corner, and .loading-cat is given a
+   real, explicit width/height matching the drawing's full extent. That's
+   the fix for the earlier bug — the container previously had no real size,
+   so it contributed nothing to the page's layout and the title/bar below it
+   rendered right on top of the cat instead of below it.
+   ========================================================================== */
 .loading-cat {
   position: relative;
-  width: 1px;
-  height: 1px;
-  /* One pixel unit — the whole cat rescales by changing this alone.
-     "Medium, not very small" per the brief. */
+  /* One pixel unit — the whole cat rescales by changing this alone. */
   --px: 9px;
-  margin-bottom: 6px;
+  width: calc(var(--px) * 11);
+  height: calc(var(--px) * 11);
+  margin-bottom: 2px;
 }
 
 .loading-cat i {
@@ -45,7 +52,6 @@
   display: block;
 }
 
-/* ---------- Body (static — ears, head, face patch, back, paws) ---------- */
 .cat-body {
   --o:  #E8A25E;  /* orange fur */
   --od: #C9813E;  /* orange shading */
@@ -55,96 +61,95 @@
   --w:  #FBF7EE;  /* paw white */
   box-shadow:
     /* ear tips, row 0 */
-    calc(var(--px) * -2) 0 0 var(--o),
-    calc(var(--px) * 2)  0 0 var(--o),
+    calc(var(--px) * 2) 0 0 var(--o),
+    calc(var(--px) * 6) 0 0 var(--o),
     /* ears, row 1 */
-    calc(var(--px) * -3) calc(var(--px) * 1) 0 var(--o),
-    calc(var(--px) * -2) calc(var(--px) * 1) 0 var(--p),
-    calc(var(--px) * 2)  calc(var(--px) * 1) 0 var(--p),
-    calc(var(--px) * 3)  calc(var(--px) * 1) 0 var(--o),
+    calc(var(--px) * 1) calc(var(--px) * 1) 0 var(--o),
+    calc(var(--px) * 2) calc(var(--px) * 1) 0 var(--p),
+    calc(var(--px) * 6) calc(var(--px) * 1) 0 var(--p),
+    calc(var(--px) * 7) calc(var(--px) * 1) 0 var(--o),
     /* ears taper into head, row 2 */
-    calc(var(--px) * -3) calc(var(--px) * 2) 0 var(--o),
-    calc(var(--px) * -2) calc(var(--px) * 2) 0 var(--o),
-    calc(var(--px) * -1) calc(var(--px) * 2) 0 var(--o),
-    0                    calc(var(--px) * 2) 0 var(--o),
-    calc(var(--px) * 1)  calc(var(--px) * 2) 0 var(--o),
-    calc(var(--px) * 2)  calc(var(--px) * 2) 0 var(--o),
-    calc(var(--px) * 3)  calc(var(--px) * 2) 0 var(--o),
+    calc(var(--px) * 1) calc(var(--px) * 2) 0 var(--o),
+    calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--o),
+    calc(var(--px) * 3) calc(var(--px) * 2) 0 var(--o),
+    calc(var(--px) * 4) calc(var(--px) * 2) 0 var(--o),
+    calc(var(--px) * 5) calc(var(--px) * 2) 0 var(--o),
+    calc(var(--px) * 6) calc(var(--px) * 2) 0 var(--o),
+    calc(var(--px) * 7) calc(var(--px) * 2) 0 var(--o),
     /* head top, row 3 */
-    calc(var(--px) * -3) calc(var(--px) * 3) 0 var(--o),
-    calc(var(--px) * -2) calc(var(--px) * 3) 0 var(--o),
-    calc(var(--px) * -1) calc(var(--px) * 3) 0 var(--c),
-    0                    calc(var(--px) * 3) 0 var(--c),
-    calc(var(--px) * 1)  calc(var(--px) * 3) 0 var(--c),
-    calc(var(--px) * 2)  calc(var(--px) * 3) 0 var(--o),
-    calc(var(--px) * 3)  calc(var(--px) * 3) 0 var(--o),
+    calc(var(--px) * 1) calc(var(--px) * 3) 0 var(--o),
+    calc(var(--px) * 2) calc(var(--px) * 3) 0 var(--o),
+    calc(var(--px) * 3) calc(var(--px) * 3) 0 var(--c),
+    calc(var(--px) * 4) calc(var(--px) * 3) 0 var(--c),
+    calc(var(--px) * 5) calc(var(--px) * 3) 0 var(--c),
+    calc(var(--px) * 6) calc(var(--px) * 3) 0 var(--o),
+    calc(var(--px) * 7) calc(var(--px) * 3) 0 var(--o),
     /* eye row (eyes overlaid separately), row 4 */
-    calc(var(--px) * -3) calc(var(--px) * 4) 0 var(--o),
-    calc(var(--px) * -2) calc(var(--px) * 4) 0 var(--c),
-    calc(var(--px) * -1) calc(var(--px) * 4) 0 var(--c),
-    0                    calc(var(--px) * 4) 0 var(--c),
-    calc(var(--px) * 1)  calc(var(--px) * 4) 0 var(--c),
-    calc(var(--px) * 2)  calc(var(--px) * 4) 0 var(--c),
-    calc(var(--px) * 3)  calc(var(--px) * 4) 0 var(--o),
+    calc(var(--px) * 1) calc(var(--px) * 4) 0 var(--o),
+    calc(var(--px) * 2) calc(var(--px) * 4) 0 var(--c),
+    calc(var(--px) * 3) calc(var(--px) * 4) 0 var(--c),
+    calc(var(--px) * 4) calc(var(--px) * 4) 0 var(--c),
+    calc(var(--px) * 5) calc(var(--px) * 4) 0 var(--c),
+    calc(var(--px) * 6) calc(var(--px) * 4) 0 var(--c),
+    calc(var(--px) * 7) calc(var(--px) * 4) 0 var(--o),
     /* nose + cheeks, row 5 */
-    calc(var(--px) * -3) calc(var(--px) * 5) 0 var(--o),
-    calc(var(--px) * -2) calc(var(--px) * 5) 0 var(--c),
-    calc(var(--px) * -1) calc(var(--px) * 5) 0 var(--c),
-    0                    calc(var(--px) * 5) 0 var(--p),
-    calc(var(--px) * 1)  calc(var(--px) * 5) 0 var(--c),
-    calc(var(--px) * 2)  calc(var(--px) * 5) 0 var(--c),
-    calc(var(--px) * 3)  calc(var(--px) * 5) 0 var(--o),
+    calc(var(--px) * 1) calc(var(--px) * 5) 0 var(--o),
+    calc(var(--px) * 2) calc(var(--px) * 5) 0 var(--c),
+    calc(var(--px) * 3) calc(var(--px) * 5) 0 var(--c),
+    calc(var(--px) * 4) calc(var(--px) * 5) 0 var(--p),
+    calc(var(--px) * 5) calc(var(--px) * 5) 0 var(--c),
+    calc(var(--px) * 6) calc(var(--px) * 5) 0 var(--c),
+    calc(var(--px) * 7) calc(var(--px) * 5) 0 var(--o),
     /* jaw / chin, row 6 */
-    calc(var(--px) * -3) calc(var(--px) * 6) 0 var(--o),
-    calc(var(--px) * -2) calc(var(--px) * 6) 0 var(--o),
-    calc(var(--px) * -1) calc(var(--px) * 6) 0 var(--c),
-    0                    calc(var(--px) * 6) 0 var(--c),
-    calc(var(--px) * 1)  calc(var(--px) * 6) 0 var(--c),
-    calc(var(--px) * 2)  calc(var(--px) * 6) 0 var(--o),
-    calc(var(--px) * 3)  calc(var(--px) * 6) 0 var(--o),
+    calc(var(--px) * 1) calc(var(--px) * 6) 0 var(--o),
+    calc(var(--px) * 2) calc(var(--px) * 6) 0 var(--o),
+    calc(var(--px) * 3) calc(var(--px) * 6) 0 var(--c),
+    calc(var(--px) * 4) calc(var(--px) * 6) 0 var(--c),
+    calc(var(--px) * 5) calc(var(--px) * 6) 0 var(--c),
+    calc(var(--px) * 6) calc(var(--px) * 6) 0 var(--o),
+    calc(var(--px) * 7) calc(var(--px) * 6) 0 var(--o),
     /* shoulders, row 7 */
-    calc(var(--px) * -4) calc(var(--px) * 7) 0 var(--o),
-    calc(var(--px) * -3) calc(var(--px) * 7) 0 var(--o),
-    calc(var(--px) * -2) calc(var(--px) * 7) 0 var(--c),
-    calc(var(--px) * -1) calc(var(--px) * 7) 0 var(--c),
-    0                    calc(var(--px) * 7) 0 var(--c),
-    calc(var(--px) * 1)  calc(var(--px) * 7) 0 var(--c),
+    0                    calc(var(--px) * 7) 0 var(--o),
+    calc(var(--px) * 1)  calc(var(--px) * 7) 0 var(--o),
     calc(var(--px) * 2)  calc(var(--px) * 7) 0 var(--c),
-    calc(var(--px) * 3)  calc(var(--px) * 7) 0 var(--o),
-    calc(var(--px) * 4)  calc(var(--px) * 7) 0 var(--o),
+    calc(var(--px) * 3)  calc(var(--px) * 7) 0 var(--c),
+    calc(var(--px) * 4)  calc(var(--px) * 7) 0 var(--c),
+    calc(var(--px) * 5)  calc(var(--px) * 7) 0 var(--c),
+    calc(var(--px) * 6)  calc(var(--px) * 7) 0 var(--c),
+    calc(var(--px) * 7)  calc(var(--px) * 7) 0 var(--o),
+    calc(var(--px) * 8)  calc(var(--px) * 7) 0 var(--o),
     /* body, row 8 */
-    calc(var(--px) * -4) calc(var(--px) * 8) 0 var(--o),
-    calc(var(--px) * -3) calc(var(--px) * 8) 0 var(--o),
-    calc(var(--px) * -2) calc(var(--px) * 8) 0 var(--c),
-    calc(var(--px) * -1) calc(var(--px) * 8) 0 var(--c),
-    0                    calc(var(--px) * 8) 0 var(--c),
-    calc(var(--px) * 1)  calc(var(--px) * 8) 0 var(--c),
+    0                    calc(var(--px) * 8) 0 var(--o),
+    calc(var(--px) * 1)  calc(var(--px) * 8) 0 var(--o),
     calc(var(--px) * 2)  calc(var(--px) * 8) 0 var(--c),
-    calc(var(--px) * 3)  calc(var(--px) * 8) 0 var(--o),
-    calc(var(--px) * 4)  calc(var(--px) * 8) 0 var(--o),
+    calc(var(--px) * 3)  calc(var(--px) * 8) 0 var(--c),
+    calc(var(--px) * 4)  calc(var(--px) * 8) 0 var(--c),
+    calc(var(--px) * 5)  calc(var(--px) * 8) 0 var(--c),
+    calc(var(--px) * 6)  calc(var(--px) * 8) 0 var(--c),
+    calc(var(--px) * 7)  calc(var(--px) * 8) 0 var(--o),
+    calc(var(--px) * 8)  calc(var(--px) * 8) 0 var(--o),
     /* lower body, row 9 — a little shading on the flanks */
-    calc(var(--px) * -4) calc(var(--px) * 9) 0 var(--od),
-    calc(var(--px) * -3) calc(var(--px) * 9) 0 var(--o),
-    calc(var(--px) * -2) calc(var(--px) * 9) 0 var(--c),
-    calc(var(--px) * -1) calc(var(--px) * 9) 0 var(--cd),
-    0                    calc(var(--px) * 9) 0 var(--c),
-    calc(var(--px) * 1)  calc(var(--px) * 9) 0 var(--cd),
+    0                    calc(var(--px) * 9) 0 var(--od),
+    calc(var(--px) * 1)  calc(var(--px) * 9) 0 var(--o),
     calc(var(--px) * 2)  calc(var(--px) * 9) 0 var(--c),
-    calc(var(--px) * 3)  calc(var(--px) * 9) 0 var(--o),
-    calc(var(--px) * 4)  calc(var(--px) * 9) 0 var(--od),
+    calc(var(--px) * 3)  calc(var(--px) * 9) 0 var(--cd),
+    calc(var(--px) * 4)  calc(var(--px) * 9) 0 var(--c),
+    calc(var(--px) * 5)  calc(var(--px) * 9) 0 var(--cd),
+    calc(var(--px) * 6)  calc(var(--px) * 9) 0 var(--c),
+    calc(var(--px) * 7)  calc(var(--px) * 9) 0 var(--o),
+    calc(var(--px) * 8)  calc(var(--px) * 9) 0 var(--od),
     /* paws, row 10 */
-    calc(var(--px) * -3) calc(var(--px) * 10) 0 var(--o),
-    calc(var(--px) * -2) calc(var(--px) * 10) 0 var(--w),
-    calc(var(--px) * -1) calc(var(--px) * 10) 0 var(--w),
-    0                    calc(var(--px) * 10) 0 var(--w),
-    calc(var(--px) * 1)  calc(var(--px) * 10) 0 var(--w),
-    calc(var(--px) * 2)  calc(var(--px) * 10) 0 var(--o);
+    calc(var(--px) * 1)  calc(var(--px) * 10) 0 var(--o),
+    calc(var(--px) * 2)  calc(var(--px) * 10) 0 var(--w),
+    calc(var(--px) * 3)  calc(var(--px) * 10) 0 var(--w),
+    calc(var(--px) * 4)  calc(var(--px) * 10) 0 var(--w),
+    calc(var(--px) * 5)  calc(var(--px) * 10) 0 var(--w),
+    calc(var(--px) * 6)  calc(var(--px) * 10) 0 var(--o);
 }
 
-/* ---------- Whiskers (thin, so kept out of the chunky body grid) ---------- */
 .cat-whiskers {
   position: absolute;
-  left: calc(var(--px) * -3.6);
+  left: calc(var(--px) * 0.4);
   top: calc(var(--px) * 5.35);
   width: calc(var(--px) * 7.2);
   height: 1px;
@@ -160,10 +165,6 @@
 .cat-whiskers::before { left: 0; top: 0; }
 .cat-whiskers::after   { right: 0; top: 0; }
 
-/* ---------- Eyes ----------
-   Separate elements so they can blink independently of the static body.
-   Mostly open; a quick close-and-reopen every few seconds, with an
-   occasional double-blink so it reads as alive rather than mechanical. */
 .cat-eye {
   position: absolute;
   width: calc(var(--px) * 0.85);
@@ -174,25 +175,20 @@
   animation: cat-blink 4.5s ease-in-out infinite;
   transform-origin: center;
 }
-.cat-eye.left  { left: calc(var(--px) * -2.05); animation-delay: 0s; }
-.cat-eye.right { left: calc(var(--px) * 0.95);  animation-delay: 0s; }
+.cat-eye.left  { left: calc(var(--px) * 1.95); }
+.cat-eye.right { left: calc(var(--px) * 4.95); }
 
 @keyframes cat-blink {
   0%, 88%, 94%, 100% { transform: scaleY(1); }
   91%                { transform: scaleY(0.12); }
-  /* a little double-blink flourish near the end of each cycle */
   96%                { transform: scaleY(1); }
   97.5%              { transform: scaleY(0.12); }
   99%                { transform: scaleY(1); }
 }
 
-/* ---------- Tail ----------
-   Its own element, curling up from the body's right side. Pivots from its
-   base (bottom-left of the tail's own box) so the wiggle reads as the tail
-   swaying rather than the whole shape sliding around. */
 .cat-tail {
   position: absolute;
-  left: calc(var(--px) * 3.6);
+  left: calc(var(--px) * 7.6);
   top: calc(var(--px) * 6.6);
   width: 1px;
   height: 1px;
@@ -228,10 +224,76 @@
   75%      { transform: rotate(-4deg); }
 }
 
-/* ---------- Progress bar + text (unchanged in spirit — cat sits above it) ---------- */
+/* ==========================================================================
+   Progress bar + a mouse running along it as loading actually progresses
+   ========================================================================== */
 .loading-title { font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 20px; color: var(--ink); letter-spacing: 0.3px; }
-.loading-track { width: min(240px, 70vw); height: 6px; border-radius: 99px; background: var(--rule); overflow: hidden; }
+
+/* Wrapper, not the track itself, is what the mouse is positioned against —
+   the track needs its own overflow:hidden to clip the fill bar's rounded
+   corners, which would also clip the mouse if it were the mouse's parent
+   (the mouse sits just ABOVE the track, outside the track's own box). */
+.loading-progress-wrap { position: relative; width: min(240px, 70vw); }
+.loading-track { width: 100%; height: 6px; border-radius: 99px; background: var(--rule); overflow: hidden; }
 .loading-fill { height: 100%; border-radius: 99px; background: var(--cover); transition: width .35s ease; }
+
+.progress-mouse {
+  position: absolute;
+  left: 0%;
+  bottom: 100%;
+  margin-bottom: 3px;
+  width: 17px;
+  height: 13px;
+  transform: translateX(-50%);
+  transition: left .3s ease;
+  animation: mouse-run-bob .32s ease-in-out infinite;
+}
+.mouse-body {
+  position: absolute;
+  left: 3px;
+  bottom: 0;
+  width: 13px;
+  height: 8px;
+  background: #A08D78;
+  border-radius: 60% 45% 50% 50%;
+  box-shadow: inset -2px -1.5px 0 rgba(40, 30, 20, 0.14);
+}
+.mouse-ear {
+  position: absolute;
+  left: 2px;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  background: #A08D78;
+  border-radius: 50%;
+}
+.mouse-ear::after {
+  content: '';
+  position: absolute;
+  inset: 1.5px;
+  background: #E9B9C6;
+  border-radius: 50%;
+}
+.mouse-tail {
+  position: absolute;
+  right: -6px;
+  bottom: 3px;
+  width: 8px;
+  height: 2px;
+  background: #A08D78;
+  border-radius: 2px;
+  transform-origin: left center;
+  animation: mouse-tail-wag .32s ease-in-out infinite;
+}
+@keyframes mouse-run-bob {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50%      { transform: translateX(-50%) translateY(-2px); }
+}
+@keyframes mouse-tail-wag {
+  0%, 100% { transform: rotate(10deg); }
+  50%      { transform: rotate(-8deg); }
+}
+
 .loading-msg { font-size: 13px; color: var(--ink-soft); min-height: 18px; }
 .loading-eta { font-size: 11.5px; color: var(--ink-faint); min-height: 15px; font-family: 'IBM Plex Mono', monospace; }
 
@@ -239,9 +301,11 @@
   .loading-cat { --px: 7px; }
 }
 
-/* Respect a reduced-motion preference — the cat still renders in full, it
-   just holds still instead of blinking and wagging. */
+/* Respect a reduced-motion preference — everything still renders in full, it
+   just holds still instead of blinking, wagging and bobbing. */
 @media (prefers-reduced-motion: reduce) {
   .cat-eye,
-  .cat-tail { animation: none; }
+  .cat-tail,
+  .progress-mouse,
+  .mouse-tail { animation: none; }
 }
