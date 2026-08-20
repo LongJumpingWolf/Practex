@@ -892,6 +892,25 @@ function colorForSource(name){
   if (idx < 0) idx = keys.length;
   return PALETTE[idx % PALETTE.length];
 }
+/* Backfills any source a question actually references but that never got registered
+   in state.sources — the two are supposed to always stay in sync, but a JSON import
+   whose own "sources" metadata blob happened to be incomplete could add real
+   questions with a source string that never got a matching registry entry. That's
+   invisible almost everywhere (Manage Sources reads only from state.sources), except
+   the Book Shelf, which deliberately cross-checks against real mcq.source values as a
+   safety net — which is exactly how this class of gap actually got noticed. Called
+   after any load/import so it self-heals regardless of how the gap happened, not just
+   the one import path this was originally found through. */
+function reconcileSources(){
+  var changed = false;
+  state.mcqs.forEach(function(m){
+    if (m.source && !state.sources[m.source]) {
+      state.sources[m.source] = { color: colorForSource(m.source) };
+      changed = true;
+    }
+  });
+  return changed;
+}
 
 function uid(){ return 'm_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
 
@@ -1249,6 +1268,7 @@ async function loadLibrary(onProgress){
      on a table that only matters once you're actually looking at a specific question.
      Fired from showApp() in the background instead, right after the real (core
      question) data is already on screen. */
+  if (reconcileSources()) saveSources(); /* heals any question whose source never got registered — self-correcting on every load, regardless of how the gap happened */
   if (usedMirrorFallback) {
     state.hasUnsyncedChanges = true; // whatever's cached locally hasn't been confirmed against the server this session
     showToast('Loaded from your local copy — looks like you\'re offline. Changes will sync once you\'re back.');
@@ -1781,6 +1801,7 @@ async function confirmImportWithChoice(resetProgress){
       if (!state.sources[k]) state.sources[k] = payload.sources[k];
     });
   }
+  reconcileSources(); /* backfill any source an imported question references that wasn't in the file's own sources metadata — see the comment on reconcileSources for why this gap can happen at all */
   render();
   showToast('Saving ' + added + ' question' + (added===1?'':'s') + '…');
   await saveLibrary(); /* awaited — same reasoning as confirm-import: this is a bulk operation, not a frequent tap, worth the wait for correctness */
@@ -2971,14 +2992,19 @@ function renderMain(){
 function renderBookshelf(){
   if (state.bookshelfActiveSource) return renderBookInterior();
 
+  /* state.sources is the single reference for "what sources exist" — Manage Sources
+     reads it, and this should always show exactly the same list, not independently
+     re-derive its own answer from scanning mcq.source values. That scan used to also
+     happen here as a defensive fallback, which is what let the two views quietly
+     disagree in the first place when the registry fell behind; now that
+     reconcileSources() keeps state.sources itself correct on every load, this view
+     doesn't need its own separate patch for the same problem — trusting the registry
+     is what actually keeps both views in permanent agreement, rather than each one
+     tolerating a different subset of drift. */
   var sourceNames = Object.keys(state.sources).sort();
   var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
   var countBySource = {};
   state.mcqs.forEach(function(m){ countBySource[m.source] = (countBySource[m.source]||0) + 1; });
-  // Include any source that has questions even if it's missing from state.sources for
-  // some reason (shouldn't normally happen, but better to show it than silently drop it)
-  Object.keys(countBySource).forEach(function(s){ if (sourceNames.indexOf(s) === -1) sourceNames.push(s); });
-  sourceNames.sort();
 
   var html = '<div class="view-head"><div class="view-title serif">Book Shelf</div>' +
     '<div class="view-sub">' + sourceNames.length + ' source' + (sourceNames.length===1?'':'s') + ' — click one to see its chapters, or set a cover.</div></div>';
