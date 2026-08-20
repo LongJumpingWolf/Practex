@@ -1183,6 +1183,8 @@ async function loadLibrary(){
   if (usedMirrorFallback) {
     state.hasUnsyncedChanges = true; // whatever's cached locally hasn't been confirmed against the server this session
     showToast('Loaded from your local copy — looks like you\'re offline. Changes will sync once you\'re back.');
+  } else {
+    persistLocalMirror(); /* refresh the offline-fallback cache with this known-correct load — otherwise it could keep holding a stale/incomplete snapshot from before the pagination fix indefinitely, until something else happened to trigger a save */
   }
 }
 /* All the small per-user preferences live in one row so toggling any of them is a
@@ -4690,31 +4692,19 @@ function showAuthGate(){
 }
 async function showApp(){
   document.getElementById('authGate').style.display = 'none';
-  /* Instant-paint from the local mirror if we have one, instead of always blocking on
-     a full Supabase round trip — this is the single biggest lever on perceived load
-     time, since after the very first sign-in on a device there's almost always a
-     complete local copy already sitting in IndexedDB. Paint with that immediately,
-     then quietly refresh from the cloud in the background and re-render once real
-     data arrives (usually no visible change, just correctness). Only a genuinely
-     first-ever load on this device — no mirror yet — falls back to the old blocking
-     "Loading your library…" screen, since there's nothing to paint instantly with. */
-  var instant = await loadLocalMirror();
-  if (instant && Array.isArray(instant.mcqs)) {
-    applyMirrorToState(instant);
-    await loadImageUrlMap();
-    document.getElementById('loadingScreen').style.display = 'none';
-    document.getElementById('appRoot').style.display = 'grid';
-    render();
-    loadLibrary().then(function(){ if (state.currentUser) render(); }); /* background refresh, not awaited — don't make the person wait for it; guarded in case they signed out before this resolved */
-  } else {
-    document.getElementById('loadingScreen').style.display = 'flex';
-    document.getElementById('loadingScreen').textContent = 'Loading your library…';
-    document.getElementById('appRoot').style.display = 'none';
-    await loadLibrary();
-    document.getElementById('loadingScreen').style.display = 'none';
-    document.getElementById('appRoot').style.display = 'grid';
-    render();
-  }
+  /* Always a single, complete load before anything renders — no more painting from
+     the local cache first and swapping in real data a few seconds later. That
+     two-stage flow is exactly what made a truncated fetch look like data
+     disappearing before, and even now that the fetch itself is fixed, showing
+     something and then changing it is the wrong feeling to give someone who just
+     went through that. One full, correct load, then render once. */
+  document.getElementById('loadingScreen').style.display = 'flex';
+  document.getElementById('loadingScreen').textContent = 'Loading your library…';
+  document.getElementById('appRoot').style.display = 'none';
+  await loadLibrary();
+  document.getElementById('loadingScreen').style.display = 'none';
+  document.getElementById('appRoot').style.display = 'grid';
+  render();
 }
 
 /* ---------------- Init ---------------- */
