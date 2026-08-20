@@ -12,8 +12,8 @@
 // stays the source of truth when you have signal, the local mirror is the
 // fallback when you don't.
 
-const CACHE_NAME = 'practex-shell-v2';
-const SHELL_URLS = ['index.html', 'config.js'];
+const CACHE_NAME = 'practex-shell-v3';
+const SHELL_URLS = ['index.html', 'config.js', 'loading.css'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

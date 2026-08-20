@@ -1,0 +1,245 @@
+/* ==========================================================================
+   Practex — loading screen
+   Pixel-art cherry blossom bonsai with an endless falling-petal loop.
+
+   Deliberately a separate file so index.html doesn't grow further — it's
+   already a large single-file app. Loaded normally from <head>; if it fails
+   to load for any reason, the loading screen degrades to plain text and
+   progress bar rather than breaking anything.
+
+   Everything here is pure CSS on plain divs — no images, no canvas, no
+   libraries. The tree is drawn with box-shadow "pixels" (one element paints
+   dozens of blocks), which keeps the DOM tiny: the whole bonsai is 5
+   elements rather than ~200 individual pixel divs.
+   ========================================================================== */
+
+.loading-art {
+  position: relative;
+  width: 240px;
+  height: 210px;
+  margin-bottom: 4px;
+  /* One pixel unit. Everything below is expressed in multiples of this, so
+     the whole scene rescales cleanly by changing this one value. */
+  --px: 6px;
+  --trunk: #6B4A2F;
+  --trunk-dark: #4F3722;
+  --blossom: #F2A7C3;
+  --blossom-light: #F9C9DC;
+  --blossom-deep: #D97BA5;
+  --pot: #7C5A47;
+  --pot-dark: #5E4335;
+}
+
+/* Shared base for every pixel-painted layer: a single 1px-ish block that
+   box-shadow then clones into position dozens of times. */
+.loading-art i {
+  position: absolute;
+  width: var(--px);
+  height: var(--px);
+  background: transparent;
+  display: block;
+}
+
+/* ---------- Trunk & branches ---------- */
+.bonsai-trunk {
+  left: 108px;
+  top: 96px;
+  box-shadow:
+    /* trunk column, base upward */
+    0 54px 0 var(--trunk-dark),
+    calc(var(--px) * 1) 54px 0 var(--trunk-dark),
+    0 48px 0 var(--trunk),
+    calc(var(--px) * 1) 48px 0 var(--trunk),
+    0 42px 0 var(--trunk),
+    calc(var(--px) * 1) 42px 0 var(--trunk-dark),
+    0 36px 0 var(--trunk),
+    calc(var(--px) * 1) 36px 0 var(--trunk),
+    calc(var(--px) * -1) 30px 0 var(--trunk-dark),
+    0 30px 0 var(--trunk),
+    calc(var(--px) * 1) 30px 0 var(--trunk),
+    0 24px 0 var(--trunk),
+    calc(var(--px) * 1) 24px 0 var(--trunk-dark),
+    0 18px 0 var(--trunk),
+    calc(var(--px) * 1) 18px 0 var(--trunk),
+    0 12px 0 var(--trunk),
+    calc(var(--px) * 1) 12px 0 var(--trunk-dark),
+    0 6px 0 var(--trunk),
+    calc(var(--px) * 1) 6px 0 var(--trunk),
+    0 0 0 var(--trunk),
+    calc(var(--px) * 1) 0 0 var(--trunk),
+    /* left branch, angling up-left */
+    calc(var(--px) * -1) 0 0 var(--trunk),
+    calc(var(--px) * -2) calc(var(--px) * -1) 0 var(--trunk),
+    calc(var(--px) * -3) calc(var(--px) * -1) 0 var(--trunk-dark),
+    calc(var(--px) * -4) calc(var(--px) * -2) 0 var(--trunk),
+    calc(var(--px) * -5) calc(var(--px) * -2) 0 var(--trunk),
+    calc(var(--px) * -6) calc(var(--px) * -3) 0 var(--trunk-dark),
+    /* right branch, angling up-right */
+    calc(var(--px) * 2) calc(var(--px) * -1) 0 var(--trunk),
+    calc(var(--px) * 3) calc(var(--px) * -1) 0 var(--trunk-dark),
+    calc(var(--px) * 4) calc(var(--px) * -2) 0 var(--trunk),
+    calc(var(--px) * 5) calc(var(--px) * -2) 0 var(--trunk),
+    calc(var(--px) * 6) calc(var(--px) * -3) 0 var(--trunk-dark),
+    /* small upper fork */
+    calc(var(--px) * 1) calc(var(--px) * -3) 0 var(--trunk),
+    calc(var(--px) * 2) calc(var(--px) * -4) 0 var(--trunk-dark);
+}
+
+/* ---------- Blossom canopy ----------
+   Three overlapping layers (deep / mid / light) give the canopy depth
+   without needing per-pixel elements. Each layer gently "breathes" on its
+   own offset timing so the foliage never looks frozen. */
+.bonsai-canopy-1,
+.bonsai-canopy-2,
+.bonsai-canopy-3 {
+  transform-origin: 50% 100%;
+  animation: canopy-sway 5.5s ease-in-out infinite;
+}
+.bonsai-canopy-2 { animation-delay: -1.8s; }
+.bonsai-canopy-3 { animation-delay: -3.4s; }
+
+.bonsai-canopy-1 {
+  left: 108px;
+  top: 42px;
+  box-shadow:
+    calc(var(--px) * -6) calc(var(--px) * 1) 0 var(--blossom-deep),
+    calc(var(--px) * -5) 0 0 var(--blossom-deep),
+    calc(var(--px) * -4) 0 0 var(--blossom-deep),
+    calc(var(--px) * -3) calc(var(--px) * -1) 0 var(--blossom-deep),
+    calc(var(--px) * -2) calc(var(--px) * -1) 0 var(--blossom-deep),
+    calc(var(--px) * -1) calc(var(--px) * -2) 0 var(--blossom-deep),
+    0 calc(var(--px) * -2) 0 var(--blossom-deep),
+    calc(var(--px) * 1) calc(var(--px) * -2) 0 var(--blossom-deep),
+    calc(var(--px) * 2) calc(var(--px) * -1) 0 var(--blossom-deep),
+    calc(var(--px) * 3) calc(var(--px) * -1) 0 var(--blossom-deep),
+    calc(var(--px) * 4) 0 0 var(--blossom-deep),
+    calc(var(--px) * 5) 0 0 var(--blossom-deep),
+    calc(var(--px) * 6) calc(var(--px) * 1) 0 var(--blossom-deep);
+}
+
+.bonsai-canopy-2 {
+  left: 108px;
+  top: 30px;
+  box-shadow:
+    calc(var(--px) * -7) calc(var(--px) * 2) 0 var(--blossom),
+    calc(var(--px) * -6) calc(var(--px) * 1) 0 var(--blossom),
+    calc(var(--px) * -5) calc(var(--px) * 1) 0 var(--blossom),
+    calc(var(--px) * -5) 0 0 var(--blossom),
+    calc(var(--px) * -4) 0 0 var(--blossom),
+    calc(var(--px) * -4) calc(var(--px) * -1) 0 var(--blossom),
+    calc(var(--px) * -3) calc(var(--px) * -1) 0 var(--blossom),
+    calc(var(--px) * -2) calc(var(--px) * -2) 0 var(--blossom),
+    calc(var(--px) * -1) calc(var(--px) * -2) 0 var(--blossom),
+    0 calc(var(--px) * -3) 0 var(--blossom),
+    calc(var(--px) * 1) calc(var(--px) * -2) 0 var(--blossom),
+    calc(var(--px) * 2) calc(var(--px) * -2) 0 var(--blossom),
+    calc(var(--px) * 3) calc(var(--px) * -1) 0 var(--blossom),
+    calc(var(--px) * 4) calc(var(--px) * -1) 0 var(--blossom),
+    calc(var(--px) * 4) 0 0 var(--blossom),
+    calc(var(--px) * 5) 0 0 var(--blossom),
+    calc(var(--px) * 5) calc(var(--px) * 1) 0 var(--blossom),
+    calc(var(--px) * 6) calc(var(--px) * 1) 0 var(--blossom),
+    calc(var(--px) * 7) calc(var(--px) * 2) 0 var(--blossom);
+}
+
+.bonsai-canopy-3 {
+  left: 108px;
+  top: 18px;
+  box-shadow:
+    calc(var(--px) * -4) calc(var(--px) * 2) 0 var(--blossom-light),
+    calc(var(--px) * -3) calc(var(--px) * 1) 0 var(--blossom-light),
+    calc(var(--px) * -2) calc(var(--px) * 1) 0 var(--blossom-light),
+    calc(var(--px) * -2) 0 0 var(--blossom-light),
+    calc(var(--px) * -1) 0 0 var(--blossom-light),
+    0 calc(var(--px) * -1) 0 var(--blossom-light),
+    calc(var(--px) * 1) 0 0 var(--blossom-light),
+    calc(var(--px) * 2) 0 0 var(--blossom-light),
+    calc(var(--px) * 2) calc(var(--px) * 1) 0 var(--blossom-light),
+    calc(var(--px) * 3) calc(var(--px) * 1) 0 var(--blossom-light),
+    calc(var(--px) * 4) calc(var(--px) * 2) 0 var(--blossom-light);
+}
+
+@keyframes canopy-sway {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  50%      { transform: translateX(2px) rotate(0.8deg); }
+}
+
+/* ---------- Pot ---------- */
+.bonsai-pot {
+  left: 96px;
+  top: 156px;
+  box-shadow:
+    0 0 0 var(--pot),
+    calc(var(--px) * 1) 0 0 var(--pot),
+    calc(var(--px) * 2) 0 0 var(--pot),
+    calc(var(--px) * 3) 0 0 var(--pot),
+    calc(var(--px) * 4) 0 0 var(--pot),
+    calc(var(--px) * 5) 0 0 var(--pot),
+    calc(var(--px) * 6) 0 0 var(--pot),
+    calc(var(--px) * 1) calc(var(--px) * 1) 0 var(--pot-dark),
+    calc(var(--px) * 2) calc(var(--px) * 1) 0 var(--pot),
+    calc(var(--px) * 3) calc(var(--px) * 1) 0 var(--pot),
+    calc(var(--px) * 4) calc(var(--px) * 1) 0 var(--pot),
+    calc(var(--px) * 5) calc(var(--px) * 1) 0 var(--pot-dark),
+    calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--pot-dark),
+    calc(var(--px) * 3) calc(var(--px) * 2) 0 var(--pot-dark),
+    calc(var(--px) * 4) calc(var(--px) * 2) 0 var(--pot-dark);
+}
+
+/* ---------- Falling petals ----------
+   Each petal is one small div drifting from the canopy to the pot line,
+   swaying sideways as it goes. Staggered negative delays mean petals are
+   already mid-fall on the very first frame rather than all starting at the
+   top together. Loops forever — the loading screen simply gets removed when
+   loading finishes, which ends the animation naturally. */
+.petal {
+  position: absolute;
+  width: var(--px);
+  height: var(--px);
+  background: var(--blossom);
+  opacity: 0;
+  animation: petal-fall 4.2s linear infinite;
+}
+.petal:nth-child(even) { background: var(--blossom-light); }
+.petal:nth-child(3n)   { background: var(--blossom-deep); }
+
+.petal:nth-child(1)  { left: 74px;  animation-delay: 0s;     animation-duration: 4.4s; }
+.petal:nth-child(2)  { left: 96px;  animation-delay: -0.7s;  animation-duration: 3.9s; }
+.petal:nth-child(3)  { left: 118px; animation-delay: -1.5s;  animation-duration: 4.8s; }
+.petal:nth-child(4)  { left: 140px; animation-delay: -2.2s;  animation-duration: 4.1s; }
+.petal:nth-child(5)  { left: 160px; animation-delay: -3.0s;  animation-duration: 4.6s; }
+.petal:nth-child(6)  { left: 86px;  animation-delay: -3.6s;  animation-duration: 5.0s; }
+.petal:nth-child(7)  { left: 130px; animation-delay: -1.1s;  animation-duration: 4.3s; }
+.petal:nth-child(8)  { left: 150px; animation-delay: -2.7s;  animation-duration: 3.7s; }
+
+@keyframes petal-fall {
+  0% {
+    top: 60px;
+    opacity: 0;
+    transform: translateX(0) rotate(0deg);
+  }
+  10% { opacity: 1; }
+  25% { transform: translateX(-9px) rotate(90deg); }
+  50% { transform: translateX(7px) rotate(180deg); }
+  75% { transform: translateX(-5px) rotate(270deg); }
+  90% { opacity: 1; }
+  100% {
+    top: 168px;
+    opacity: 0;
+    transform: translateX(3px) rotate(360deg);
+  }
+}
+
+/* Respect a reduced-motion preference — the scene still renders in full,
+   it just holds still instead of swaying and dropping petals. */
+@media (prefers-reduced-motion: reduce) {
+  .bonsai-canopy-1,
+  .bonsai-canopy-2,
+  .bonsai-canopy-3 { animation: none; }
+  .petal { animation: none; opacity: 0.55; top: 110px; }
+}
+
+/* Narrow screens: shrink the whole scene by reducing the pixel unit. */
+@media (max-width: 420px) {
+  .loading-art { --px: 5px; width: 200px; height: 180px; }
+}
