@@ -788,7 +788,8 @@ var state = {
   pendingImportPayload: null, /* a parsed JSON import file, waiting on the user to choose keep-progress vs start-fresh before it actually gets applied */
   pendingNoteDraft: null, /* {mcqId, images} while the Add Note modal is open, before it's actually saved onto the question */
   emptyFolders: [], /* array of path-arrays for folders created on purpose with nothing in them yet — the tree is otherwise entirely implied by which subject/chapterPath actual questions carry, so without this there's no way to represent "a folder that exists but has zero questions" at all */
-  bookCoverDraft: null /* {source} while the "set cover" upload is in progress */
+  bookCoverDraft: null, /* {source} while the "set cover" upload is in progress */
+  bookshelfActiveSource: null /* which book is currently drilled into on the shelf — null means showing the shelf grid itself */
 };
 
 /* ================= Local-first data mirror =================
@@ -2150,18 +2151,40 @@ function openNewFolderModal(parentPathKey){
   if (input) input.focus();
 }
 
+/* Every node in the tree, at every depth, as a flat list of {path, depth} — used to
+   populate the "Move to..." destination picker with real nested folders, not just
+   top-level subjects. Excludes the deck being moved and anything nested inside it
+   (can't move a folder into its own child), matching the same isPathWithinOrEqual
+   check confirm-move-deck itself already uses at the point of actually moving it. */
+function flattenTreePaths(tree, excludePathArr){
+  var out = [];
+  function walk(node, path, depth){
+    if (excludePathArr && isPathWithinOrEqual(path, excludePathArr)) return; // this node (or anything under it) isn't a valid destination
+    out.push({ path: path.slice(), depth: depth });
+    Object.keys(node.children).sort().forEach(function(k){
+      walk(node.children[k], path.concat([k]), depth + 1);
+    });
+  }
+  Object.keys(tree).sort().forEach(function(s){ walk(tree[s], [s], 0); });
+  return out;
+}
 function openMoveDeckModal(pathKey){
   var pathArr = pathKey.split('␟');
   var currentName = pathArr[pathArr.length-1];
   var tree = buildTree();
-  var subjects = Object.keys(tree).sort().filter(function(s){ return !(pathArr.length === 1 && s === pathArr[0]); });
+  var destinations = flattenTreePaths(tree, pathArr);
   var isNested = pathArr.length > 1;
   var html = '<h3>Move "' + escapeHtml(currentName) + '" to…</h3>';
-  html += '<p>It\'ll become a chapter under whichever subject you pick, keeping anything nested inside it.</p>';
+  html += '<p>It\'ll become a chapter under whichever folder you pick, keeping anything nested inside it.</p>';
   html += '<div class="form-field"><label>Destination</label><select id="moveDeckSelect" style="width:100%;padding:8px 10px;border:1px solid var(--rule-strong);border-radius:6px;background:var(--card);color:var(--ink);font-size:13.5px;">' +
     '<option value="">— choose —</option>' +
     (isNested ? '<option value="__LIBRARY_ROOT__">Library (make it a top-level subject)</option>' : '') +
-    subjects.map(function(s){ return '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + '</option>'; }).join('') +
+    destinations.map(function(d){
+      var key = d.path.join('␟');
+      var indent = '\u00A0\u00A0\u00A0\u00A0'.repeat(d.depth); // non-breaking spaces — <option> text collapses regular spaces
+      var label = indent + (d.depth ? '↳ ' : '') + d.path[d.path.length-1];
+      return '<option value="' + escapeHtml(key) + '">' + escapeHtml(label) + '</option>';
+    }).join('') +
     '</select></div>';
   html += '<div class="form-field"><label>Or type a new subject</label><input type="text" id="moveDeckNewInput" placeholder="New subject name"></div>';
   html += '<div class="action-row" style="margin-top:6px;margin-bottom:0;">' +
@@ -2562,8 +2585,17 @@ function renderContent(text){
 
 /* ---------------- Tree building ---------------- */
 function buildTree(){
+  /* While drilled into a specific book on the shelf, every question not from that
+     source is excluded — this is what turns "click a book" into "see that book's own
+     folder structure" rather than a flat filtered list, since it's the SAME tree the
+     normal Library view builds, just scoped down first. Checked against state.view
+     too, not just bookshelfActiveSource alone, so leaving bookshelf mode always and
+     immediately stops filtering regardless of whether that field happened to still be
+     set from an earlier visit. */
+  var sourceFilter = (state.view === 'bookshelf' && state.bookshelfActiveSource) ? state.bookshelfActiveSource : null;
   var root = {};
   state.mcqs.forEach(function(m){
+    if (sourceFilter && m.source !== sourceFilter) return;
     if (!root[m.subject]) root[m.subject] = { name: m.subject, count: 0, children: {}, ids: [] };
     var node = root[m.subject];
     node.count++;
@@ -2578,17 +2610,21 @@ function buildTree(){
   /* Merge in folders that were created on purpose but have no questions yet — these
      never show up from the mcq scan above since nothing there references them.
      Harmless no-op if a path here now DOES have real content (a normal node already
-     exists for it, this just finds it rather than creating a duplicate). */
-  (state.emptyFolders || []).forEach(function(pathArr){
-    if (!pathArr || !pathArr.length) return;
-    if (!root[pathArr[0]]) root[pathArr[0]] = { name: pathArr[0], count: 0, children: {}, ids: [] };
-    var node = root[pathArr[0]];
-    for (var i = 1; i < pathArr.length; i++) {
-      var part = pathArr[i];
-      if (!node.children[part]) node.children[part] = { name: part, count: 0, children: {}, ids: [] };
-      node = node.children[part];
-    }
-  });
+     exists for it, this just finds it rather than creating a duplicate). Skipped
+     entirely while source-filtered — an empty folder isn't associated with any
+     particular book, so it doesn't belong in a book-scoped view. */
+  if (!sourceFilter) {
+    (state.emptyFolders || []).forEach(function(pathArr){
+      if (!pathArr || !pathArr.length) return;
+      if (!root[pathArr[0]]) root[pathArr[0]] = { name: pathArr[0], count: 0, children: {}, ids: [] };
+      var node = root[pathArr[0]];
+      for (var i = 1; i < pathArr.length; i++) {
+        var part = pathArr[i];
+        if (!node.children[part]) node.children[part] = { name: part, count: 0, children: {}, ids: [] };
+        node = node.children[part];
+      }
+    });
+  }
   return root;
 }
 
@@ -2933,6 +2969,8 @@ function renderMain(){
 
 /* ---------------- Book shelf view (by source) ---------------- */
 function renderBookshelf(){
+  if (state.bookshelfActiveSource) return renderBookInterior();
+
   var sourceNames = Object.keys(state.sources).sort();
   var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
   var countBySource = {};
@@ -2943,7 +2981,7 @@ function renderBookshelf(){
   sourceNames.sort();
 
   var html = '<div class="view-head"><div class="view-title serif">Book Shelf</div>' +
-    '<div class="view-sub">' + sourceNames.length + ' source' + (sourceNames.length===1?'':'s') + ' — click one to see its questions, or set a cover.</div></div>';
+    '<div class="view-sub">' + sourceNames.length + ' source' + (sourceNames.length===1?'':'s') + ' — click one to see its chapters, or set a cover.</div></div>';
 
   if (!sourceNames.length) {
     html += '<div class="card empty-state"><span class="serif">Nothing here yet</span>Add some questions first — each source you import from becomes a book here.</div>';
@@ -2968,6 +3006,23 @@ function renderBookshelf(){
   });
   html += '</div>';
   return html;
+}
+
+/* The view once you've clicked into a specific book — reuses the exact same
+   chapter-grid/question-list machinery the normal Library uses, just fed a tree
+   that's already been scoped down to this one source by buildTree() itself (see the
+   sourceFilter check there). This is what makes "click a book" show its actual
+   folder structure instead of a flat filtered list. */
+function renderBookInterior(){
+  var searchBarHtml = renderSearchBar();
+  if ((state.filters.search || '').trim()) {
+    return searchBarHtml + renderQuestionList(buildTree(), null, true);
+  }
+  var tree = buildTree();
+  var node = state.selectedPath ? getNodeByPath(tree, state.selectedPath) : null;
+  var hasChildren = node && Object.keys(node.children).length > 0;
+  var showGrid = !node || (hasChildren && !state.forceList);
+  return searchBarHtml + (showGrid ? renderChapterGrid(tree, node) : renderQuestionList(tree, node));
 }
 
 /* ---------------- Learning Dashboard view ---------------- */
@@ -3113,6 +3168,29 @@ function renderBrowse(){
 }
 
 function renderBreadcrumb(){
+  if (state.view === 'bookshelf' && state.bookshelfActiveSource) {
+    var html = '<div class="breadcrumb">';
+    html += '<button class="breadcrumb-link" data-action="back-to-shelf">' + icon('book',12) + ' Book Shelf</button>';
+    html += '<span class="breadcrumb-sep">/</span>';
+    if (!state.selectedPath) {
+      html += '<span class="breadcrumb-current">' + escapeHtml(state.bookshelfActiveSource) + '</span>';
+    } else {
+      html += '<button class="breadcrumb-link" data-action="clear-book-path">' + escapeHtml(state.bookshelfActiveSource) + '</button>';
+      var bookAcc = [];
+      state.selectedPath.forEach(function(seg, i){
+        bookAcc.push(seg);
+        var isLastB = i === state.selectedPath.length - 1;
+        html += '<span class="breadcrumb-sep">/</span>';
+        if (isLastB) {
+          html += '<span class="breadcrumb-current">' + escapeHtml(seg) + '</span>';
+        } else {
+          html += '<button class="breadcrumb-link" data-action="select-node" data-path="' + escapeHtml(bookAcc.join('␟')) + '">' + escapeHtml(seg) + '</button>';
+        }
+      });
+    }
+    html += '</div>';
+    return html;
+  }
   if (!state.selectedPath) return '';
   var html = '<div class="breadcrumb">';
   html += '<button class="breadcrumb-link" data-action="clear-selection">Library</button>';
@@ -3144,9 +3222,12 @@ function renderChapterGrid(tree, node){
     '<div class="view-sub">' + keys.length + ' ' + kind + (keys.length===1?'':'s') +
     (node ? ' in this subject' : ' — pick one to see its chapters and questions') + '</div></div>';
 
-  html += '<div class="action-row" style="margin-top:0;">' +
-    '<button class="btn btn-ghost" data-action="open-new-folder" data-path="' + (node ? escapeHtml(state.selectedPath.join('␟')) : '') + '">' + icon('folder-plus',14) + ' New ' + (node ? 'sub-folder' : 'subject') + '</button>' +
-    '</div>';
+  var inBookInterior = state.view === 'bookshelf' && state.bookshelfActiveSource;
+  if (!inBookInterior) {
+    html += '<div class="action-row" style="margin-top:0;">' +
+      '<button class="btn btn-ghost" data-action="open-new-folder" data-path="' + (node ? escapeHtml(state.selectedPath.join('␟')) : '') + '">' + icon('folder-plus',14) + ' New ' + (node ? 'sub-folder' : 'subject') + '</button>' +
+      '</div>';
+  }
 
   if (state.clipboardNode) {
     var herePathKey = (node ? state.selectedPath : []).join('␟');
@@ -4227,19 +4308,35 @@ async function onClick(e){
   }
   if (action === 'open-settings') { openSettingsModal(); return; }
   if (action === 'toggle-bookshelf') {
-    state.view = state.view === 'bookshelf' ? 'browse' : 'bookshelf';
+    var enteringShelf = state.view !== 'bookshelf';
+    state.view = enteringShelf ? 'bookshelf' : 'browse';
+    state.bookshelfActiveSource = null; /* always start fresh at the shelf grid, whichever direction this switch just went */
+    state.selectedPath = null;
     state.sidebarOpen = false;
     render();
     return;
   }
   if (action === 'open-book') {
     var bookSource = el.getAttribute('data-source');
-    state.view = 'browse';
+    state.bookshelfActiveSource = bookSource;
     state.selectedPath = null;
-    state.forceList = true;
+    state.forceList = false;
     resetFolderFilters();
-    state.filters.sources = {}; state.filters.sources[bookSource] = true;
     state.sidebarOpen = false;
+    render();
+    return;
+  }
+  if (action === 'back-to-shelf') {
+    state.bookshelfActiveSource = null;
+    state.selectedPath = null;
+    resetFolderFilters();
+    render();
+    return;
+  }
+  if (action === 'clear-book-path') {
+    state.selectedPath = null;
+    state.forceList = false;
+    resetFolderFilters();
     render();
     return;
   }
@@ -4274,7 +4371,7 @@ async function onClick(e){
     if (guardNavigation(action, el)) return;
     var key2 = el.getAttribute('data-path');
     state.selectedPath = key2.split('␟');
-    state.view = 'browse';
+    if (!(state.view === 'bookshelf' && state.bookshelfActiveSource)) state.view = 'browse'; /* preserve book-drill-in context — don't kick back to the normal Library just for navigating a chapter inside a book */
     state.expanded[key2] = true;
     state.forceList = false;
     state.sidebarOpen = false;
@@ -4284,7 +4381,7 @@ async function onClick(e){
   if (action === 'view-node-questions') {
     var key4 = el.getAttribute('data-path');
     state.selectedPath = key4.split('␟');
-    state.view = 'browse';
+    if (!(state.view === 'bookshelf' && state.bookshelfActiveSource)) state.view = 'browse';
     state.expanded[key4] = true;
     state.forceList = true;
     state.sidebarOpen = false;
@@ -4627,21 +4724,34 @@ async function onClick(e){
     var mvArr = mvPath.split('␟');
     var mvSelect = document.getElementById('moveDeckSelect');
     var mvNewInput = document.getElementById('moveDeckNewInput');
-    var mvDest = (mvNewInput && mvNewInput.value.trim()) ? mvNewInput.value.trim() : (mvSelect ? mvSelect.value : '');
-    if (!mvDest) { showToast('Pick or type a destination subject first.'); return; }
+    var mvNewName = mvNewInput ? mvNewInput.value.trim() : '';
+    var mvDestArr, mvDestLabel;
+    if (mvNewName) {
+      mvDestArr = [mvNewName];
+      mvDestLabel = mvNewName;
+    } else if (mvSelect && mvSelect.value === '__LIBRARY_ROOT__') {
+      mvDestArr = [];
+      mvDestLabel = 'Library';
+    } else if (mvSelect && mvSelect.value) {
+      mvDestArr = mvSelect.value.split('␟'); // a select option's value now carries a full nested path, not just a single subject name
+      mvDestLabel = mvDestArr.join(' / ');
+    } else {
+      showToast('Pick or type a destination first.');
+      return;
+    }
     var movedName = mvArr[mvArr.length-1];
-    if (mvDest === '__LIBRARY_ROOT__') {
+    if (!mvDestArr.length) {
       moveDeckUnder(mvArr, []);
       closeModal(); render();
       await saveLibrary();
       showToast('"' + movedName + '" is now a top-level subject in the Library.');
       return;
     }
-    if (isPathWithinOrEqual([mvDest], mvArr)) { showToast('Can\'t move a deck into itself.'); return; }
-    moveDeckUnder(mvArr, [mvDest]);
+    if (isPathWithinOrEqual(mvDestArr, mvArr)) { showToast('Can\'t move a deck into itself.'); return; }
+    moveDeckUnder(mvArr, mvDestArr);
     closeModal(); render();
     await saveLibrary();
-    showToast('Moved "' + movedName + '" under "' + mvDest + '".');
+    showToast('Moved "' + movedName + '" under "' + mvDestLabel + '".');
     return;
   }
 
