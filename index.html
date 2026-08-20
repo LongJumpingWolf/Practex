@@ -1101,21 +1101,27 @@ async function fetchAllMcqRows(userId){
   /* Supabase/PostgREST caps rows per request (commonly 1000 by default) — a plain
      unbounded select() silently truncates past that instead of erroring, so a
      library bigger than the cap would only ever partially load with no visible sign
-     anything was wrong. This is almost certainly what "a whole subject disappears a
-     few seconds after load" actually was: the truncated result correctly overwriting
-     a correct one, not real deletion. Pages through with .range() until a page comes
-     back shorter than the page size, so this always gets everything regardless of
-     how large the library grows. */
+     anything was wrong. Fixed by paging through everything with .range() instead.
+     Fired in PARALLEL rather than one page after another — the first request asks
+     Supabase for the exact total count up front, so every remaining page can be
+     requested at once instead of waiting on each one in sequence. For a library in
+     the thousands this is the difference between ~8 round trips added together and
+     ~8 round trips happening at the same time. */
   var PAGE_SIZE = 1000;
-  var all = [];
-  var from = 0;
-  while (true) {
-    var res = await supabaseClient.from('mcqs').select('data').eq('user_id', userId).range(from, from + PAGE_SIZE - 1);
-    if (res.error) throw res.error;
-    var rows = res.data || [];
-    all = all.concat(rows);
-    if (rows.length < PAGE_SIZE) break; // last page
-    from += PAGE_SIZE;
+  var first = await supabaseClient.from('mcqs').select('data', { count: 'exact' }).eq('user_id', userId).range(0, PAGE_SIZE - 1);
+  if (first.error) throw first.error;
+  var all = (first.data || []).slice();
+  var total = typeof first.count === 'number' ? first.count : all.length;
+  if (all.length >= total) return all;
+
+  var pagePromises = [];
+  for (var from = PAGE_SIZE; from < total; from += PAGE_SIZE) {
+    pagePromises.push(supabaseClient.from('mcqs').select('data').eq('user_id', userId).range(from, from + PAGE_SIZE - 1));
+  }
+  var results = await Promise.all(pagePromises);
+  for (var i = 0; i < results.length; i++) {
+    if (results[i].error) throw results[i].error;
+    all = all.concat(results[i].data || []);
   }
   return all;
 }
