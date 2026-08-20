@@ -1,318 +1,247 @@
 /* ==========================================================================
    Practex — loading screen
-   Full-bleed animated moonlit cliffside with a cherry blossom tree.
+   A simple pixel-art cat sitting above the progress bar — blinking eyes,
+   wiggling tail, looping until loading finishes. Pure CSS on plain divs, no
+   images, no canvas, no libraries.
 
-   Separate file so index.html (already a large single-file app) doesn't grow
-   further. If it fails to load, the loading screen degrades to plain text on
-   the default background rather than breaking.
+   Separate file so index.html (already a large single-file app) doesn't
+   grow further. If this fails to load, the loading screen degrades to
+   plain text + progress bar on the normal app background.
 
-   Three things drive the look, all lifted from how illustrated versions of
-   this scene are actually built rather than hand-placing shapes:
-     1. FULL-BLEED — the scene is the whole viewport, not a card floating in
-        empty space. Text sits on top of it.
-     2. CLOUDS are soft blurred layers, not hard-edged blobs. A large
-        blur radius on a few overlapping ellipses is what reads as "cloud";
-        crisp edges always read as "grey lozenge".
-     3. FOLIAGE is built from many overlapping soft radial blobs, so the
-        canopy reads as one dense mass. Sparse individual shapes never look
-        like a full tree no matter how many you add.
+   The cat's body is one element — every pixel is a box-shadow entry on a
+   single 1x1 base, which is how CSS pixel art keeps its DOM tiny (a few
+   elements cloning into dozens of blocks) instead of one div per pixel.
+   Eyes and tail are their own elements specifically because they animate
+   independently of the (static) body.
    ========================================================================== */
 
 .loading-screen {
-  position: fixed;
-  inset: 0;
-  z-index: 300;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  height: 100vh;
+  gap: 16px;
   padding: 20px;
-  overflow: hidden;
-  /* Night sky: deep navy overhead easing into a pale horizon haze. */
-  background: linear-gradient(#151D33 0%, #1E2A47 30%, #2E3E63 58%, #4C5C82 80%, #6E7CA0 100%);
-  --blossom-deep: #C95E92;
-  --blossom: #EE8FB8;
-  --blossom-light: #FBC2D9;
-  --blossom-pale: #FFE0EC;
-  --trunk: #4A2B36;
-  --trunk-dark: #331D26;
-  --cliff: #232F49;
-  --cliff-dark: #16202F;
 }
 
-/* Text sits above the scenery. */
-.loading-title,
-.loading-track,
-.loading-msg,
-.loading-eta {
+.loading-cat {
   position: relative;
-  z-index: 6;
-}
-.loading-title { color: #F2F5FB !important; text-shadow: 0 2px 12px rgba(10, 14, 24, 0.6); }
-.loading-msg   { color: #C3CEE4 !important; }
-.loading-eta   { color: #93A2C0 !important; }
-.loading-track { background: rgba(255, 255, 255, 0.16) !important; }
-.loading-fill  { background: linear-gradient(90deg, var(--blossom), var(--blossom-light)) !important; }
-
-/* ---------- Stars ---------- */
-.scene-stars {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  /* Scattered points of light, painted as tiny radial gradients — no nodes. */
-  background-image:
-    radial-gradient(1.5px 1.5px at 12% 14%, #fff, transparent),
-    radial-gradient(1px 1px at 26% 8%, rgba(255,255,255,0.8), transparent),
-    radial-gradient(1.5px 1.5px at 41% 20%, rgba(255,255,255,0.9), transparent),
-    radial-gradient(1px 1px at 58% 6%, rgba(255,255,255,0.7), transparent),
-    radial-gradient(1.5px 1.5px at 71% 17%, #fff, transparent),
-    radial-gradient(1px 1px at 84% 10%, rgba(255,255,255,0.75), transparent),
-    radial-gradient(1px 1px at 93% 24%, rgba(255,255,255,0.85), transparent),
-    radial-gradient(1.5px 1.5px at 6% 30%, rgba(255,255,255,0.7), transparent),
-    radial-gradient(1px 1px at 34% 33%, rgba(255,255,255,0.6), transparent),
-    radial-gradient(1px 1px at 66% 29%, rgba(255,255,255,0.7), transparent);
-  animation: star-twinkle 5s ease-in-out infinite;
-}
-@keyframes star-twinkle {
-  0%, 100% { opacity: 0.75; }
-  50%      { opacity: 1; }
+  width: 1px;
+  height: 1px;
+  /* One pixel unit — the whole cat rescales by changing this alone.
+     "Medium, not very small" per the brief. */
+  --px: 9px;
+  margin-bottom: 6px;
 }
 
-/* ---------- Moon ---------- */
-.scene-moon {
-  position: absolute;
-  left: 18%;
-  top: 16%;
-  z-index: 1;
-  width: 130px;
-  height: 130px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 36% 32%, #FFFFFF 0%, #F0F4FC 52%, #CFDAEE 100%);
-  box-shadow: 0 0 60px 22px rgba(214, 230, 255, 0.3);
-  animation: moon-glow 7s ease-in-out infinite;
-}
-.scene-moon::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 63% 29%, rgba(178, 194, 220, 0.5) 0 10px, transparent 11px),
-    radial-gradient(circle at 39% 61%, rgba(178, 194, 220, 0.42) 0 14px, transparent 15px),
-    radial-gradient(circle at 72% 70%, rgba(178, 194, 220, 0.38) 0 8px, transparent 9px),
-    radial-gradient(circle at 52% 44%, rgba(178, 194, 220, 0.28) 0 6px, transparent 7px);
-}
-@keyframes moon-glow {
-  0%, 100% { box-shadow: 0 0 60px 22px rgba(214, 230, 255, 0.3); }
-  50%      { box-shadow: 0 0 78px 30px rgba(214, 230, 255, 0.42); }
-}
-
-/* ---------- Clouds ----------
-   The realism trick: several overlapping soft ellipses inside one element,
-   then a heavy blur over the whole thing. Hard edges are what made the
-   earlier attempt read as grey lozenges rather than cloud. */
-.scene-cloud {
-  position: absolute;
-  z-index: 2;
-  width: 320px;
-  height: 90px;
-  filter: blur(14px);
-  animation: cloud-drift linear infinite;
-  background:
-    radial-gradient(ellipse 90px 42px at 26% 62%, rgba(206, 219, 240, 0.9), transparent 70%),
-    radial-gradient(ellipse 110px 54px at 48% 48%, rgba(216, 228, 246, 0.92), transparent 70%),
-    radial-gradient(ellipse 80px 38px at 70% 64%, rgba(200, 214, 238, 0.85), transparent 70%),
-    radial-gradient(ellipse 130px 30px at 50% 78%, rgba(190, 205, 232, 0.75), transparent 72%);
-}
-.scene-cloud.c1 { top: 30%; animation-duration: 52s; animation-delay: -6s;  opacity: 0.78; transform: scale(1.15); }
-.scene-cloud.c2 { top: 52%; animation-duration: 70s; animation-delay: -28s; opacity: 0.6;  transform: scale(1.6); }
-.scene-cloud.c3 { top: 18%; animation-duration: 88s; animation-delay: -48s; opacity: 0.42; transform: scale(0.85); }
-.scene-cloud.c4 { top: 64%; animation-duration: 62s; animation-delay: -16s; opacity: 0.5;  transform: scale(2); }
-
-@keyframes cloud-drift {
-  0%   { left: -340px; }
-  100% { left: 100%; }
-}
-
-/* ---------- Cliff ---------- */
-.scene-cliff {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  z-index: 3;
-  width: 46%;
-  min-width: 380px;
-  height: 34%;
-  background: linear-gradient(160deg, #2C3A57 0%, var(--cliff) 40%, var(--cliff-dark) 100%);
-  clip-path: polygon(
-    14% 16%, 26% 7%, 44% 11%, 60% 4%, 78% 9%, 100% 6%,
-    100% 100%, 0 100%, 0 62%, 4% 40%, 8% 26%
-  );
-}
-/* Moonlit rim along the cliff top. */
-.scene-cliff::before {
-  content: '';
+.loading-cat i {
   position: absolute;
   left: 0;
-  right: 0;
   top: 0;
-  height: 26px;
-  background: linear-gradient(180deg, rgba(150, 172, 210, 0.45), transparent);
+  width: var(--px);
+  height: var(--px);
+  background: transparent;
+  display: block;
 }
 
-/* ---------- Cherry blossom tree ----------
-   Canopy = many overlapping soft blobs, which is what makes it read as a
-   single dense mass rather than separate clumps. */
-.scene-tree {
-  position: absolute;
-  right: 12%;
-  bottom: 30%;
-  z-index: 4;
-  width: 300px;
-  height: 230px;
-  animation: tree-sway 7s ease-in-out infinite;
-  transform-origin: 50% 100%;
+/* ---------- Body (static — ears, head, face patch, back, paws) ---------- */
+.cat-body {
+  --o:  #E8A25E;  /* orange fur */
+  --od: #C9813E;  /* orange shading */
+  --c:  #F5E9D6;  /* cream face/belly */
+  --cd: #E2CDA7;  /* cream shading */
+  --p:  #F2AAB0;  /* nose/ear-inner pink */
+  --w:  #FBF7EE;  /* paw white */
+  box-shadow:
+    /* ear tips, row 0 */
+    calc(var(--px) * -2) 0 0 var(--o),
+    calc(var(--px) * 2)  0 0 var(--o),
+    /* ears, row 1 */
+    calc(var(--px) * -3) calc(var(--px) * 1) 0 var(--o),
+    calc(var(--px) * -2) calc(var(--px) * 1) 0 var(--p),
+    calc(var(--px) * 2)  calc(var(--px) * 1) 0 var(--p),
+    calc(var(--px) * 3)  calc(var(--px) * 1) 0 var(--o),
+    /* ears taper into head, row 2 */
+    calc(var(--px) * -3) calc(var(--px) * 2) 0 var(--o),
+    calc(var(--px) * -2) calc(var(--px) * 2) 0 var(--o),
+    calc(var(--px) * -1) calc(var(--px) * 2) 0 var(--o),
+    0                    calc(var(--px) * 2) 0 var(--o),
+    calc(var(--px) * 1)  calc(var(--px) * 2) 0 var(--o),
+    calc(var(--px) * 2)  calc(var(--px) * 2) 0 var(--o),
+    calc(var(--px) * 3)  calc(var(--px) * 2) 0 var(--o),
+    /* head top, row 3 */
+    calc(var(--px) * -3) calc(var(--px) * 3) 0 var(--o),
+    calc(var(--px) * -2) calc(var(--px) * 3) 0 var(--o),
+    calc(var(--px) * -1) calc(var(--px) * 3) 0 var(--c),
+    0                    calc(var(--px) * 3) 0 var(--c),
+    calc(var(--px) * 1)  calc(var(--px) * 3) 0 var(--c),
+    calc(var(--px) * 2)  calc(var(--px) * 3) 0 var(--o),
+    calc(var(--px) * 3)  calc(var(--px) * 3) 0 var(--o),
+    /* eye row (eyes overlaid separately), row 4 */
+    calc(var(--px) * -3) calc(var(--px) * 4) 0 var(--o),
+    calc(var(--px) * -2) calc(var(--px) * 4) 0 var(--c),
+    calc(var(--px) * -1) calc(var(--px) * 4) 0 var(--c),
+    0                    calc(var(--px) * 4) 0 var(--c),
+    calc(var(--px) * 1)  calc(var(--px) * 4) 0 var(--c),
+    calc(var(--px) * 2)  calc(var(--px) * 4) 0 var(--c),
+    calc(var(--px) * 3)  calc(var(--px) * 4) 0 var(--o),
+    /* nose + cheeks, row 5 */
+    calc(var(--px) * -3) calc(var(--px) * 5) 0 var(--o),
+    calc(var(--px) * -2) calc(var(--px) * 5) 0 var(--c),
+    calc(var(--px) * -1) calc(var(--px) * 5) 0 var(--c),
+    0                    calc(var(--px) * 5) 0 var(--p),
+    calc(var(--px) * 1)  calc(var(--px) * 5) 0 var(--c),
+    calc(var(--px) * 2)  calc(var(--px) * 5) 0 var(--c),
+    calc(var(--px) * 3)  calc(var(--px) * 5) 0 var(--o),
+    /* jaw / chin, row 6 */
+    calc(var(--px) * -3) calc(var(--px) * 6) 0 var(--o),
+    calc(var(--px) * -2) calc(var(--px) * 6) 0 var(--o),
+    calc(var(--px) * -1) calc(var(--px) * 6) 0 var(--c),
+    0                    calc(var(--px) * 6) 0 var(--c),
+    calc(var(--px) * 1)  calc(var(--px) * 6) 0 var(--c),
+    calc(var(--px) * 2)  calc(var(--px) * 6) 0 var(--o),
+    calc(var(--px) * 3)  calc(var(--px) * 6) 0 var(--o),
+    /* shoulders, row 7 */
+    calc(var(--px) * -4) calc(var(--px) * 7) 0 var(--o),
+    calc(var(--px) * -3) calc(var(--px) * 7) 0 var(--o),
+    calc(var(--px) * -2) calc(var(--px) * 7) 0 var(--c),
+    calc(var(--px) * -1) calc(var(--px) * 7) 0 var(--c),
+    0                    calc(var(--px) * 7) 0 var(--c),
+    calc(var(--px) * 1)  calc(var(--px) * 7) 0 var(--c),
+    calc(var(--px) * 2)  calc(var(--px) * 7) 0 var(--c),
+    calc(var(--px) * 3)  calc(var(--px) * 7) 0 var(--o),
+    calc(var(--px) * 4)  calc(var(--px) * 7) 0 var(--o),
+    /* body, row 8 */
+    calc(var(--px) * -4) calc(var(--px) * 8) 0 var(--o),
+    calc(var(--px) * -3) calc(var(--px) * 8) 0 var(--o),
+    calc(var(--px) * -2) calc(var(--px) * 8) 0 var(--c),
+    calc(var(--px) * -1) calc(var(--px) * 8) 0 var(--c),
+    0                    calc(var(--px) * 8) 0 var(--c),
+    calc(var(--px) * 1)  calc(var(--px) * 8) 0 var(--c),
+    calc(var(--px) * 2)  calc(var(--px) * 8) 0 var(--c),
+    calc(var(--px) * 3)  calc(var(--px) * 8) 0 var(--o),
+    calc(var(--px) * 4)  calc(var(--px) * 8) 0 var(--o),
+    /* lower body, row 9 — a little shading on the flanks */
+    calc(var(--px) * -4) calc(var(--px) * 9) 0 var(--od),
+    calc(var(--px) * -3) calc(var(--px) * 9) 0 var(--o),
+    calc(var(--px) * -2) calc(var(--px) * 9) 0 var(--c),
+    calc(var(--px) * -1) calc(var(--px) * 9) 0 var(--cd),
+    0                    calc(var(--px) * 9) 0 var(--c),
+    calc(var(--px) * 1)  calc(var(--px) * 9) 0 var(--cd),
+    calc(var(--px) * 2)  calc(var(--px) * 9) 0 var(--c),
+    calc(var(--px) * 3)  calc(var(--px) * 9) 0 var(--o),
+    calc(var(--px) * 4)  calc(var(--px) * 9) 0 var(--od),
+    /* paws, row 10 */
+    calc(var(--px) * -3) calc(var(--px) * 10) 0 var(--o),
+    calc(var(--px) * -2) calc(var(--px) * 10) 0 var(--w),
+    calc(var(--px) * -1) calc(var(--px) * 10) 0 var(--w),
+    0                    calc(var(--px) * 10) 0 var(--w),
+    calc(var(--px) * 1)  calc(var(--px) * 10) 0 var(--w),
+    calc(var(--px) * 2)  calc(var(--px) * 10) 0 var(--o);
 }
 
-/* Trunk and main limbs, drawn as tapered rotated bars. */
-.tree-trunk,
-.tree-limb {
+/* ---------- Whiskers (thin, so kept out of the chunky body grid) ---------- */
+.cat-whiskers {
   position: absolute;
-  background: linear-gradient(90deg, var(--trunk-dark), var(--trunk) 45%, var(--trunk-dark));
-  border-radius: 40% 40% 12% 12%;
+  left: calc(var(--px) * -3.6);
+  top: calc(var(--px) * 5.35);
+  width: calc(var(--px) * 7.2);
+  height: 1px;
 }
-.tree-trunk { left: 48%; bottom: 0; width: 22px; height: 108px; transform: rotate(-4deg); }
-.tree-limb.l1 { left: 34%; bottom: 82px;  width: 13px; height: 74px; transform: rotate(46deg);  transform-origin: bottom center; }
-.tree-limb.l2 { left: 58%; bottom: 84px;  width: 13px; height: 78px; transform: rotate(-42deg); transform-origin: bottom center; }
-.tree-limb.l3 { left: 44%; bottom: 96px;  width: 10px; height: 62px; transform: rotate(12deg);  transform-origin: bottom center; }
-.tree-limb.l4 { left: 24%; bottom: 116px; width: 8px;  height: 48px; transform: rotate(62deg);  transform-origin: bottom center; }
-.tree-limb.l5 { left: 70%; bottom: 118px; width: 8px;  height: 46px; transform: rotate(-58deg); transform-origin: bottom center; }
-
-/* The canopy itself: one element, many stacked radial blobs. */
-.tree-canopy {
+.cat-whiskers::before,
+.cat-whiskers::after {
+  content: '';
   position: absolute;
-  left: -6%;
+  height: 1.5px;
+  width: calc(var(--px) * 2);
+  background: rgba(60, 44, 30, 0.55);
+}
+.cat-whiskers::before { left: 0; top: 0; }
+.cat-whiskers::after   { right: 0; top: 0; }
+
+/* ---------- Eyes ----------
+   Separate elements so they can blink independently of the static body.
+   Mostly open; a quick close-and-reopen every few seconds, with an
+   occasional double-blink so it reads as alive rather than mechanical. */
+.cat-eye {
+  position: absolute;
+  width: calc(var(--px) * 0.85);
+  height: calc(var(--px) * 1.05);
+  background: #2B2018;
+  border-radius: 2px;
+  top: calc(var(--px) * 3.95);
+  animation: cat-blink 4.5s ease-in-out infinite;
+  transform-origin: center;
+}
+.cat-eye.left  { left: calc(var(--px) * -2.05); animation-delay: 0s; }
+.cat-eye.right { left: calc(var(--px) * 0.95);  animation-delay: 0s; }
+
+@keyframes cat-blink {
+  0%, 88%, 94%, 100% { transform: scaleY(1); }
+  91%                { transform: scaleY(0.12); }
+  /* a little double-blink flourish near the end of each cycle */
+  96%                { transform: scaleY(1); }
+  97.5%              { transform: scaleY(0.12); }
+  99%                { transform: scaleY(1); }
+}
+
+/* ---------- Tail ----------
+   Its own element, curling up from the body's right side. Pivots from its
+   base (bottom-left of the tail's own box) so the wiggle reads as the tail
+   swaying rather than the whole shape sliding around. */
+.cat-tail {
+  position: absolute;
+  left: calc(var(--px) * 3.6);
+  top: calc(var(--px) * 6.6);
+  width: 1px;
+  height: 1px;
+  transform-origin: 10% 95%;
+  animation: cat-tail-wag 2.6s ease-in-out infinite;
+}
+.cat-tail i {
+  position: absolute;
+  left: 0;
   top: 0;
-  width: 112%;
-  height: 165px;
-  background:
-    radial-gradient(ellipse 66px 44px at 22% 56%, var(--blossom-deep), transparent 72%),
-    radial-gradient(ellipse 74px 50px at 40% 40%, var(--blossom), transparent 72%),
-    radial-gradient(ellipse 80px 52px at 58% 36%, var(--blossom), transparent 72%),
-    radial-gradient(ellipse 68px 46px at 76% 50%, var(--blossom-deep), transparent 72%),
-    radial-gradient(ellipse 58px 40px at 12% 68%, var(--blossom-deep), transparent 72%),
-    radial-gradient(ellipse 60px 42px at 88% 64%, var(--blossom-deep), transparent 72%),
-    radial-gradient(ellipse 62px 40px at 32% 26%, var(--blossom-light), transparent 70%),
-    radial-gradient(ellipse 58px 36px at 52% 20%, var(--blossom-light), transparent 70%),
-    radial-gradient(ellipse 54px 34px at 70% 26%, var(--blossom-light), transparent 70%),
-    radial-gradient(ellipse 40px 24px at 44% 14%, var(--blossom-pale), transparent 68%),
-    radial-gradient(ellipse 34px 22px at 62% 16%, var(--blossom-pale), transparent 68%),
-    radial-gradient(ellipse 90px 46px at 50% 62%, var(--blossom), transparent 74%);
+  width: var(--px);
+  height: var(--px);
+  background: transparent;
+  display: block;
 }
-/* A second, slightly offset canopy pass adds depth and hides any seams. */
-.tree-canopy.back {
-  left: -2%;
-  top: 12px;
-  width: 104%;
-  filter: brightness(0.82) saturate(0.9);
-  z-index: -1;
-  animation: canopy-breathe 8s ease-in-out infinite;
+.cat-tail-shape {
+  --o:  #E8A25E;
+  --od: #C9813E;
+  --w:  #FBF7EE;
+  box-shadow:
+    0 0 0 var(--o),
+    0 calc(var(--px) * -1) 0 var(--o),
+    calc(var(--px) * 1) calc(var(--px) * -1) 0 var(--od),
+    calc(var(--px) * 1) calc(var(--px) * -2) 0 var(--o),
+    calc(var(--px) * 2) calc(var(--px) * -2) 0 var(--o),
+    calc(var(--px) * 2) calc(var(--px) * -3) 0 var(--w),
+    calc(var(--px) * 1) calc(var(--px) * -3) 0 var(--w);
 }
-@keyframes canopy-breathe {
-  0%, 100% { transform: scale(1) translateX(0); }
-  50%      { transform: scale(1.02) translateX(-3px); }
-}
-@keyframes tree-sway {
+@keyframes cat-tail-wag {
   0%, 100% { transform: rotate(0deg); }
-  50%      { transform: rotate(-1.1deg); }
+  25%      { transform: rotate(-9deg); }
+  50%      { transform: rotate(2deg); }
+  75%      { transform: rotate(-4deg); }
 }
 
-/* ---------- Drifting petals ----------
-   Blown off the tree, drifting LEFT across the sky. Negative delays mean
-   petals are already mid-flight on the first frame rather than all starting
-   together. Loops forever; the loading screen is simply removed when the
-   library finishes loading.
-
-   Wrapped in .petal-field so :nth-child counts only petals — as direct
-   children of the scene they'd be offset by the moon/clouds/cliff/tree and
-   every rule below would silently miss. */
-.petal-field { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
-.petal {
-  position: absolute;
-  width: 9px;
-  height: 9px;
-  right: 22%;
-  border-radius: 68% 8% 68% 8%;
-  background: var(--blossom-light);
-  opacity: 0;
-  animation: petal-drift linear infinite;
-}
-.petal:nth-child(even) { background: var(--blossom-pale); width: 7px; height: 7px; }
-.petal:nth-child(3n)   { background: var(--blossom); }
-
-.petal:nth-child(1)  { top: 26%; animation-duration: 11s;   animation-delay: 0s;    }
-.petal:nth-child(2)  { top: 33%; animation-duration: 14s;   animation-delay: -2s;   }
-.petal:nth-child(3)  { top: 21%; animation-duration: 10s;   animation-delay: -4s;   }
-.petal:nth-child(4)  { top: 40%; animation-duration: 15s;   animation-delay: -6s;   }
-.petal:nth-child(5)  { top: 29%; animation-duration: 12.5s; animation-delay: -8s;   }
-.petal:nth-child(6)  { top: 46%; animation-duration: 11.5s; animation-delay: -3s;   }
-.petal:nth-child(7)  { top: 18%; animation-duration: 16s;   animation-delay: -10s;  }
-.petal:nth-child(8)  { top: 37%; animation-duration: 13s;   animation-delay: -7s;   }
-.petal:nth-child(9)  { top: 24%; animation-duration: 14.5s; animation-delay: -11.5s;}
-.petal:nth-child(10) { top: 43%; animation-duration: 10.5s; animation-delay: -1s;   }
-.petal:nth-child(11) { top: 31%; animation-duration: 15.5s; animation-delay: -13s;  }
-.petal:nth-child(12) { top: 50%; animation-duration: 12s;   animation-delay: -5s;   }
-
-@keyframes petal-drift {
-  0%   { transform: translate(0, 0) rotate(0deg);            opacity: 0; }
-  6%   { opacity: 0.95; }
-  25%  { transform: translate(-22vw, 4vh) rotate(150deg); }
-  50%  { transform: translate(-44vw, 2vh) rotate(290deg); }
-  75%  { transform: translate(-66vw, 9vh) rotate(430deg);    opacity: 0.85; }
-  100% { transform: translate(-92vw, 6vh) rotate(560deg);    opacity: 0; }
-}
-
-/* ==========================================================================
-   Small screens: no room for the cliff and tree without it feeling cramped,
-   so those hide and the scene keeps the moon, stars, clouds and petals —
-   still the same night sky, just simpler.
-   ========================================================================== */
-@media (max-width: 700px) {
-  .scene-cliff,
-  .scene-tree { display: none; }
-  .scene-moon { left: 50%; margin-left: -46px; top: 12%; width: 92px; height: 92px; }
-  .petal { right: -4%; } /* blow in from off-screen right, since there's no tree to leave */
-}
+/* ---------- Progress bar + text (unchanged in spirit — cat sits above it) ---------- */
+.loading-title { font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 20px; color: var(--ink); letter-spacing: 0.3px; }
+.loading-track { width: min(240px, 70vw); height: 6px; border-radius: 99px; background: var(--rule); overflow: hidden; }
+.loading-fill { height: 100%; border-radius: 99px; background: var(--cover); transition: width .35s ease; }
+.loading-msg { font-size: 13px; color: var(--ink-soft); min-height: 18px; }
+.loading-eta { font-size: 11.5px; color: var(--ink-faint); min-height: 15px; font-family: 'IBM Plex Mono', monospace; }
 
 @media (max-width: 420px) {
-  .scene-moon { width: 74px; height: 74px; margin-left: -37px; }
-  .scene-cloud { filter: blur(10px); }
+  .loading-cat { --px: 7px; }
 }
 
-/* Respect a reduced-motion preference — the scene still renders in full, it
-   just holds still instead of drifting, swaying and twinkling. */
+/* Respect a reduced-motion preference — the cat still renders in full, it
+   just holds still instead of blinking and wagging. */
 @media (prefers-reduced-motion: reduce) {
-  .scene-stars,
-  .scene-moon,
-  .scene-cloud,
-  .scene-tree,
-  .tree-canopy.back { animation: none; }
-  .scene-cloud.c1 { left: 8%; }
-  .scene-cloud.c2 { left: 46%; }
-  .scene-cloud.c3 { left: 24%; }
-  .scene-cloud.c4 { left: 62%; }
-  .petal { animation: none; opacity: 0.75; }
-  .petal:nth-child(1)  { transform: translate(-14vw, 3vh); }
-  .petal:nth-child(2)  { transform: translate(-28vw, 6vh); }
-  .petal:nth-child(3)  { transform: translate(-42vw, 2vh); }
-  .petal:nth-child(4)  { transform: translate(-56vw, 8vh); }
-  .petal:nth-child(5)  { transform: translate(-20vw, 9vh); }
-  .petal:nth-child(6)  { transform: translate(-64vw, 4vh); }
-  .petal:nth-child(7)  { transform: translate(-36vw, 7vh); }
-  .petal:nth-child(8)  { transform: translate(-10vw, 5vh); }
-  .petal:nth-child(9)  { transform: translate(-72vw, 3vh); }
-  .petal:nth-child(10) { transform: translate(-48vw, 10vh); }
-  .petal:nth-child(11) { transform: translate(-58vw, 6vh); }
-  .petal:nth-child(12) { transform: translate(-26vw, 11vh); }
+  .cat-eye,
+  .cat-tail { animation: none; }
 }

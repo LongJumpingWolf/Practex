@@ -615,12 +615,7 @@ textarea.ingest-area{
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
-/* .loading-screen itself is styled in loading.css (full-bleed animated scene). */
-.loading-title{font-family:'Fraunces',Georgia,serif;font-weight:700;font-size:20px;color:var(--ink);letter-spacing:0.3px;}
-.loading-track{width:min(240px,70vw);height:6px;border-radius:99px;background:var(--rule);overflow:hidden;}
-.loading-fill{height:100%;border-radius:99px;background:var(--cover);transition:width .35s ease;}
-.loading-msg{font-size:13px;color:var(--ink-soft);min-height:18px;}
-.loading-eta{font-size:11.5px;color:var(--ink-faint);min-height:15px;font-family:'IBM Plex Mono',monospace;}
+/* .loading-screen and its contents (cat art, title, progress bar) are fully styled in loading.css — kept out of this file on purpose. */
 
 /* Auth gate */
 .auth-gate{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--paper);background-image:linear-gradient(var(--rule) 1px, transparent 1px);background-size:100% 32px;padding:20px;}
@@ -676,27 +671,12 @@ textarea.ingest-area{
 <body>
 
 <div id="loadingScreen" class="loading-screen">
-  <div class="scene-stars" aria-hidden="true"></div>
-  <div class="scene-moon" aria-hidden="true"></div>
-  <div class="scene-cloud c1" aria-hidden="true"></div>
-  <div class="scene-cloud c2" aria-hidden="true"></div>
-  <div class="scene-cloud c3" aria-hidden="true"></div>
-  <div class="scene-cloud c4" aria-hidden="true"></div>
-  <div class="scene-cliff" aria-hidden="true"></div>
-  <div class="scene-tree" aria-hidden="true">
-    <div class="tree-canopy back"></div>
-    <div class="tree-limb l1"></div>
-    <div class="tree-limb l2"></div>
-    <div class="tree-limb l3"></div>
-    <div class="tree-limb l4"></div>
-    <div class="tree-limb l5"></div>
-    <div class="tree-trunk"></div>
-    <div class="tree-canopy"></div>
-  </div>
-  <div class="petal-field" aria-hidden="true">
-    <div class="petal"></div><div class="petal"></div><div class="petal"></div><div class="petal"></div>
-    <div class="petal"></div><div class="petal"></div><div class="petal"></div><div class="petal"></div>
-    <div class="petal"></div><div class="petal"></div><div class="petal"></div><div class="petal"></div>
+  <div class="loading-cat" aria-hidden="true">
+    <i class="cat-body"></i>
+    <div class="cat-whiskers"></div>
+    <div class="cat-eye left"></div>
+    <div class="cat-eye right"></div>
+    <div class="cat-tail"><i class="cat-tail-shape"></i></div>
   </div>
   <div class="loading-title">Practex</div>
   <div class="loading-track"><div class="loading-fill" id="loadingFill" style="width:0%;"></div></div>
