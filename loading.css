@@ -1,338 +1,318 @@
 /* ==========================================================================
    Practex — loading screen
-   Animated moonlit cliffside scene with a cherry blossom tree and drifting
-   petals. Pure CSS on plain divs: no images, no canvas, no libraries.
+   Full-bleed animated moonlit cliffside with a cherry blossom tree.
 
-   Deliberately a separate file so index.html (already a large single-file
-   app) doesn't grow further. If this stylesheet fails to load for any
-   reason, the loading screen degrades to plain text + progress bar rather
-   than breaking.
+   Separate file so index.html (already a large single-file app) doesn't grow
+   further. If it fails to load, the loading screen degrades to plain text on
+   the default background rather than breaking.
 
-   Layout note: the tree and cliff sit on the RIGHT and are hidden below
-   700px wide, where there simply isn't room for them — small screens keep
-   the moon, clouds and drifting petals, which still read as the same scene
-   without being cramped.
-
-   The tree itself is painted with box-shadow "pixels" (one element clones
-   itself into dozens of blocks), so the whole canopy is a handful of DOM
-   nodes rather than hundreds of divs.
+   Three things drive the look, all lifted from how illustrated versions of
+   this scene are actually built rather than hand-placing shapes:
+     1. FULL-BLEED — the scene is the whole viewport, not a card floating in
+        empty space. Text sits on top of it.
+     2. CLOUDS are soft blurred layers, not hard-edged blobs. A large
+        blur radius on a few overlapping ellipses is what reads as "cloud";
+        crisp edges always read as "grey lozenge".
+     3. FOLIAGE is built from many overlapping soft radial blobs, so the
+        canopy reads as one dense mass. Sparse individual shapes never look
+        like a full tree no matter how many you add.
    ========================================================================== */
 
-.loading-art {
-  position: relative;
-  width: min(560px, 92vw);
-  height: 260px;
-  margin-bottom: 8px;
-  border-radius: 14px;
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 20px;
   overflow: hidden;
-  /* Night sky: deep navy at the top easing to a lighter horizon haze. */
-  background: linear-gradient(#1B2438 0%, #263352 45%, #3C4A6B 75%, #55648A 100%);
-  box-shadow: 0 10px 30px rgba(20, 26, 42, 0.35);
-  /* One pixel unit — the tree scales cleanly by changing this alone. */
-  --px: 5px;
-  --trunk: #4A2F3D;
-  --trunk-dark: #35212B;
-  --blossom: #F2A0C4;
-  --blossom-light: #FAC8DD;
-  --blossom-deep: #D9709F;
-  --cliff: #2C3A55;
-  --cliff-dark: #1F2A3E;
-  --cliff-edge: #3E5175;
+  /* Night sky: deep navy overhead easing into a pale horizon haze. */
+  background: linear-gradient(#151D33 0%, #1E2A47 30%, #2E3E63 58%, #4C5C82 80%, #6E7CA0 100%);
+  --blossom-deep: #C95E92;
+  --blossom: #EE8FB8;
+  --blossom-light: #FBC2D9;
+  --blossom-pale: #FFE0EC;
+  --trunk: #4A2B36;
+  --trunk-dark: #331D26;
+  --cliff: #232F49;
+  --cliff-dark: #16202F;
+}
+
+/* Text sits above the scenery. */
+.loading-title,
+.loading-track,
+.loading-msg,
+.loading-eta {
+  position: relative;
+  z-index: 6;
+}
+.loading-title { color: #F2F5FB !important; text-shadow: 0 2px 12px rgba(10, 14, 24, 0.6); }
+.loading-msg   { color: #C3CEE4 !important; }
+.loading-eta   { color: #93A2C0 !important; }
+.loading-track { background: rgba(255, 255, 255, 0.16) !important; }
+.loading-fill  { background: linear-gradient(90deg, var(--blossom), var(--blossom-light)) !important; }
+
+/* ---------- Stars ---------- */
+.scene-stars {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  /* Scattered points of light, painted as tiny radial gradients — no nodes. */
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 14%, #fff, transparent),
+    radial-gradient(1px 1px at 26% 8%, rgba(255,255,255,0.8), transparent),
+    radial-gradient(1.5px 1.5px at 41% 20%, rgba(255,255,255,0.9), transparent),
+    radial-gradient(1px 1px at 58% 6%, rgba(255,255,255,0.7), transparent),
+    radial-gradient(1.5px 1.5px at 71% 17%, #fff, transparent),
+    radial-gradient(1px 1px at 84% 10%, rgba(255,255,255,0.75), transparent),
+    radial-gradient(1px 1px at 93% 24%, rgba(255,255,255,0.85), transparent),
+    radial-gradient(1.5px 1.5px at 6% 30%, rgba(255,255,255,0.7), transparent),
+    radial-gradient(1px 1px at 34% 33%, rgba(255,255,255,0.6), transparent),
+    radial-gradient(1px 1px at 66% 29%, rgba(255,255,255,0.7), transparent);
+  animation: star-twinkle 5s ease-in-out infinite;
+}
+@keyframes star-twinkle {
+  0%, 100% { opacity: 0.75; }
+  50%      { opacity: 1; }
 }
 
 /* ---------- Moon ---------- */
 .scene-moon {
   position: absolute;
-  left: 15%;
-  top: 34px;
-  width: 92px;
-  height: 92px;
+  left: 18%;
+  top: 16%;
+  z-index: 1;
+  width: 130px;
+  height: 130px;
   border-radius: 50%;
-  background: radial-gradient(circle at 38% 34%, #FFFFFF 0%, #EAF0FA 55%, #C9D6EC 100%);
-  box-shadow: 0 0 40px 14px rgba(220, 232, 255, 0.28);
-  animation: moon-glow 6s ease-in-out infinite;
+  background: radial-gradient(circle at 36% 32%, #FFFFFF 0%, #F0F4FC 52%, #CFDAEE 100%);
+  box-shadow: 0 0 60px 22px rgba(214, 230, 255, 0.3);
+  animation: moon-glow 7s ease-in-out infinite;
 }
-/* A couple of soft craters, drawn as layered shading rather than extra nodes. */
 .scene-moon::after {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 62% 30%, rgba(176, 192, 216, 0.55) 0 7px, transparent 8px),
-    radial-gradient(circle at 40% 62%, rgba(176, 192, 216, 0.45) 0 10px, transparent 11px),
-    radial-gradient(circle at 70% 68%, rgba(176, 192, 216, 0.4) 0 5px, transparent 6px);
+    radial-gradient(circle at 63% 29%, rgba(178, 194, 220, 0.5) 0 10px, transparent 11px),
+    radial-gradient(circle at 39% 61%, rgba(178, 194, 220, 0.42) 0 14px, transparent 15px),
+    radial-gradient(circle at 72% 70%, rgba(178, 194, 220, 0.38) 0 8px, transparent 9px),
+    radial-gradient(circle at 52% 44%, rgba(178, 194, 220, 0.28) 0 6px, transparent 7px);
 }
 @keyframes moon-glow {
-  0%, 100% { box-shadow: 0 0 40px 14px rgba(220, 232, 255, 0.28); }
-  50%      { box-shadow: 0 0 52px 20px rgba(220, 232, 255, 0.4); }
+  0%, 100% { box-shadow: 0 0 60px 22px rgba(214, 230, 255, 0.3); }
+  50%      { box-shadow: 0 0 78px 30px rgba(214, 230, 255, 0.42); }
 }
 
 /* ---------- Clouds ----------
-   Each cloud is one div plus box-shadow puffs, drifting slowly sideways and
-   wrapping around forever. */
+   The realism trick: several overlapping soft ellipses inside one element,
+   then a heavy blur over the whole thing. Hard edges are what made the
+   earlier attempt read as grey lozenges rather than cloud. */
 .scene-cloud {
   position: absolute;
-  width: 54px;
-  height: 18px;
-  border-radius: 99px;
-  background: rgba(207, 220, 240, 0.5);
-  box-shadow:
-    26px 4px 0 -3px rgba(207, 220, 240, 0.5),
-    -24px 5px 0 -4px rgba(207, 220, 240, 0.45),
-    12px -6px 0 -5px rgba(207, 220, 240, 0.5);
+  z-index: 2;
+  width: 320px;
+  height: 90px;
+  filter: blur(14px);
   animation: cloud-drift linear infinite;
+  background:
+    radial-gradient(ellipse 90px 42px at 26% 62%, rgba(206, 219, 240, 0.9), transparent 70%),
+    radial-gradient(ellipse 110px 54px at 48% 48%, rgba(216, 228, 246, 0.92), transparent 70%),
+    radial-gradient(ellipse 80px 38px at 70% 64%, rgba(200, 214, 238, 0.85), transparent 70%),
+    radial-gradient(ellipse 130px 30px at 50% 78%, rgba(190, 205, 232, 0.75), transparent 72%);
 }
-.scene-cloud.c1 { top: 96px;  left: -80px; animation-duration: 34s; animation-delay: -4s;  opacity: 0.85; }
-.scene-cloud.c2 { top: 140px; left: -80px; animation-duration: 46s; animation-delay: -18s; opacity: 0.6; }
-.scene-cloud.c3 { top: 64px;  left: -80px; animation-duration: 58s; animation-delay: -30s; opacity: 0.4; }
-.scene-cloud.c4 { top: 176px; left: -80px; animation-duration: 40s; animation-delay: -10s; opacity: 0.5; }
+.scene-cloud.c1 { top: 30%; animation-duration: 52s; animation-delay: -6s;  opacity: 0.78; transform: scale(1.15); }
+.scene-cloud.c2 { top: 52%; animation-duration: 70s; animation-delay: -28s; opacity: 0.6;  transform: scale(1.6); }
+.scene-cloud.c3 { top: 18%; animation-duration: 88s; animation-delay: -48s; opacity: 0.42; transform: scale(0.85); }
+.scene-cloud.c4 { top: 64%; animation-duration: 62s; animation-delay: -16s; opacity: 0.5;  transform: scale(2); }
 
 @keyframes cloud-drift {
-  0%   { transform: translateX(0); }
-  100% { transform: translateX(calc(min(560px, 92vw) + 160px)); }
+  0%   { left: -340px; }
+  100% { left: 100%; }
 }
 
-/* ---------- Cliff (right side) ---------- */
+/* ---------- Cliff ---------- */
 .scene-cliff {
   position: absolute;
   right: 0;
   bottom: 0;
-  width: 210px;
-  height: 108px;
-  background: var(--cliff);
-  /* Irregular rocky silhouette — jagged underside, sloped left face. */
+  z-index: 3;
+  width: 46%;
+  min-width: 380px;
+  height: 34%;
+  background: linear-gradient(160deg, #2C3A57 0%, var(--cliff) 40%, var(--cliff-dark) 100%);
   clip-path: polygon(
-    18% 22%, 30% 12%, 46% 16%, 62% 8%, 100% 12%,
-    100% 100%, 88% 88%, 76% 100%, 62% 86%, 48% 98%,
-    36% 82%, 24% 92%, 12% 70%, 6% 44%
+    14% 16%, 26% 7%, 44% 11%, 60% 4%, 78% 9%, 100% 6%,
+    100% 100%, 0 100%, 0 62%, 4% 40%, 8% 26%
   );
 }
+/* Moonlit rim along the cliff top. */
 .scene-cliff::before {
   content: '';
   position: absolute;
-  inset: 0;
-  background: linear-gradient(105deg, var(--cliff-dark) 0%, var(--cliff-dark) 34%, transparent 35%);
-}
-/* Grass/moss lip along the top edge of the cliff. */
-.scene-cliff-top {
-  position: absolute;
+  left: 0;
   right: 0;
-  bottom: 96px;
-  width: 196px;
-  height: 10px;
-  background: linear-gradient(90deg, transparent 0%, var(--cliff-edge) 14%, var(--cliff-edge) 100%);
-  border-radius: 40% 0 0 0;
+  top: 0;
+  height: 26px;
+  background: linear-gradient(180deg, rgba(150, 172, 210, 0.45), transparent);
 }
 
-/* ---------- Cherry blossom tree ---------- */
+/* ---------- Cherry blossom tree ----------
+   Canopy = many overlapping soft blobs, which is what makes it read as a
+   single dense mass rather than separate clumps. */
 .scene-tree {
   position: absolute;
-  right: 46px;
-  bottom: 96px;
-  width: 0;
-  height: 0;
-}
-.scene-tree i {
-  position: absolute;
-  width: var(--px);
-  height: var(--px);
-  background: transparent;
-  display: block;
-}
-
-/* Trunk: leans left out of the cliff, forking into branches. */
-.tree-trunk {
-  box-shadow:
-    0 0 0 var(--trunk),
-    calc(var(--px) * 1) 0 0 var(--trunk-dark),
-    0 calc(var(--px) * -1) 0 var(--trunk),
-    calc(var(--px) * 1) calc(var(--px) * -1) 0 var(--trunk),
-    calc(var(--px) * -1) calc(var(--px) * -2) 0 var(--trunk),
-    0 calc(var(--px) * -2) 0 var(--trunk),
-    calc(var(--px) * 1) calc(var(--px) * -2) 0 var(--trunk-dark),
-    calc(var(--px) * -1) calc(var(--px) * -3) 0 var(--trunk),
-    0 calc(var(--px) * -3) 0 var(--trunk),
-    calc(var(--px) * -1) calc(var(--px) * -4) 0 var(--trunk),
-    0 calc(var(--px) * -4) 0 var(--trunk-dark),
-    calc(var(--px) * -2) calc(var(--px) * -5) 0 var(--trunk),
-    calc(var(--px) * -1) calc(var(--px) * -5) 0 var(--trunk),
-    calc(var(--px) * -2) calc(var(--px) * -6) 0 var(--trunk),
-    calc(var(--px) * -1) calc(var(--px) * -6) 0 var(--trunk-dark),
-    calc(var(--px) * -2) calc(var(--px) * -7) 0 var(--trunk),
-    calc(var(--px) * -3) calc(var(--px) * -8) 0 var(--trunk),
-    calc(var(--px) * -2) calc(var(--px) * -8) 0 var(--trunk),
-    calc(var(--px) * -4) calc(var(--px) * -9) 0 var(--trunk),
-    calc(var(--px) * -5) calc(var(--px) * -9) 0 var(--trunk-dark),
-    calc(var(--px) * -6) calc(var(--px) * -10) 0 var(--trunk),
-    calc(var(--px) * -7) calc(var(--px) * -10) 0 var(--trunk),
-    calc(var(--px) * -1) calc(var(--px) * -9) 0 var(--trunk),
-    0 calc(var(--px) * -10) 0 var(--trunk),
-    calc(var(--px) * 1) calc(var(--px) * -10) 0 var(--trunk-dark),
-    calc(var(--px) * 2) calc(var(--px) * -11) 0 var(--trunk),
-    calc(var(--px) * -3) calc(var(--px) * -9) 0 var(--trunk),
-    calc(var(--px) * -3) calc(var(--px) * -10) 0 var(--trunk-dark),
-    calc(var(--px) * -3) calc(var(--px) * -11) 0 var(--trunk);
-}
-
-/* Canopy: three overlapping tinted layers, each swaying on its own timing so
-   the foliage never looks frozen. */
-.tree-canopy-1, .tree-canopy-2, .tree-canopy-3 {
+  right: 12%;
+  bottom: 30%;
+  z-index: 4;
+  width: 300px;
+  height: 230px;
+  animation: tree-sway 7s ease-in-out infinite;
   transform-origin: 50% 100%;
-  animation: canopy-sway 6s ease-in-out infinite;
-}
-.tree-canopy-2 { animation-delay: -2s; }
-.tree-canopy-3 { animation-delay: -4s; }
-
-/* Deep/back layer — widest, sets the silhouette. */
-.tree-canopy-1 {
-  box-shadow:
-    calc(var(--px) * -10) calc(var(--px) * -13) 0 var(--blossom-deep),
-    calc(var(--px) * -9)  calc(var(--px) * -14) 0 var(--blossom-deep),
-    calc(var(--px) * -8)  calc(var(--px) * -14) 0 var(--blossom-deep),
-    calc(var(--px) * -7)  calc(var(--px) * -15) 0 var(--blossom-deep),
-    calc(var(--px) * -6)  calc(var(--px) * -15) 0 var(--blossom-deep),
-    calc(var(--px) * -5)  calc(var(--px) * -16) 0 var(--blossom-deep),
-    calc(var(--px) * -4)  calc(var(--px) * -16) 0 var(--blossom-deep),
-    calc(var(--px) * -3)  calc(var(--px) * -16) 0 var(--blossom-deep),
-    calc(var(--px) * -2)  calc(var(--px) * -16) 0 var(--blossom-deep),
-    calc(var(--px) * -1)  calc(var(--px) * -15) 0 var(--blossom-deep),
-    0                     calc(var(--px) * -15) 0 var(--blossom-deep),
-    calc(var(--px) * 1)   calc(var(--px) * -15) 0 var(--blossom-deep),
-    calc(var(--px) * 2)   calc(var(--px) * -14) 0 var(--blossom-deep),
-    calc(var(--px) * 3)   calc(var(--px) * -14) 0 var(--blossom-deep),
-    calc(var(--px) * 4)   calc(var(--px) * -13) 0 var(--blossom-deep),
-    calc(var(--px) * -11) calc(var(--px) * -12) 0 var(--blossom-deep),
-    calc(var(--px) * 5)   calc(var(--px) * -12) 0 var(--blossom-deep);
 }
 
-/* Mid layer — the main pink mass. */
-.tree-canopy-2 {
-  box-shadow:
-    calc(var(--px) * -9)  calc(var(--px) * -12) 0 var(--blossom),
-    calc(var(--px) * -8)  calc(var(--px) * -12) 0 var(--blossom),
-    calc(var(--px) * -8)  calc(var(--px) * -13) 0 var(--blossom),
-    calc(var(--px) * -7)  calc(var(--px) * -13) 0 var(--blossom),
-    calc(var(--px) * -6)  calc(var(--px) * -13) 0 var(--blossom),
-    calc(var(--px) * -6)  calc(var(--px) * -14) 0 var(--blossom),
-    calc(var(--px) * -5)  calc(var(--px) * -14) 0 var(--blossom),
-    calc(var(--px) * -4)  calc(var(--px) * -14) 0 var(--blossom),
-    calc(var(--px) * -4)  calc(var(--px) * -15) 0 var(--blossom),
-    calc(var(--px) * -3)  calc(var(--px) * -15) 0 var(--blossom),
-    calc(var(--px) * -2)  calc(var(--px) * -15) 0 var(--blossom),
-    calc(var(--px) * -2)  calc(var(--px) * -14) 0 var(--blossom),
-    calc(var(--px) * -1)  calc(var(--px) * -14) 0 var(--blossom),
-    0                     calc(var(--px) * -14) 0 var(--blossom),
-    calc(var(--px) * 1)   calc(var(--px) * -14) 0 var(--blossom),
-    calc(var(--px) * 2)   calc(var(--px) * -13) 0 var(--blossom),
-    calc(var(--px) * 3)   calc(var(--px) * -13) 0 var(--blossom),
-    calc(var(--px) * -10) calc(var(--px) * -11) 0 var(--blossom),
-    calc(var(--px) * -9)  calc(var(--px) * -11) 0 var(--blossom),
-    calc(var(--px) * 4)   calc(var(--px) * -12) 0 var(--blossom),
-    calc(var(--px) * -5)  calc(var(--px) * -12) 0 var(--blossom),
-    calc(var(--px) * -3)  calc(var(--px) * -13) 0 var(--blossom);
+/* Trunk and main limbs, drawn as tapered rotated bars. */
+.tree-trunk,
+.tree-limb {
+  position: absolute;
+  background: linear-gradient(90deg, var(--trunk-dark), var(--trunk) 45%, var(--trunk-dark));
+  border-radius: 40% 40% 12% 12%;
 }
+.tree-trunk { left: 48%; bottom: 0; width: 22px; height: 108px; transform: rotate(-4deg); }
+.tree-limb.l1 { left: 34%; bottom: 82px;  width: 13px; height: 74px; transform: rotate(46deg);  transform-origin: bottom center; }
+.tree-limb.l2 { left: 58%; bottom: 84px;  width: 13px; height: 78px; transform: rotate(-42deg); transform-origin: bottom center; }
+.tree-limb.l3 { left: 44%; bottom: 96px;  width: 10px; height: 62px; transform: rotate(12deg);  transform-origin: bottom center; }
+.tree-limb.l4 { left: 24%; bottom: 116px; width: 8px;  height: 48px; transform: rotate(62deg);  transform-origin: bottom center; }
+.tree-limb.l5 { left: 70%; bottom: 118px; width: 8px;  height: 46px; transform: rotate(-58deg); transform-origin: bottom center; }
 
-/* Highlight layer — catches the moonlight on top. */
-.tree-canopy-3 {
-  box-shadow:
-    calc(var(--px) * -7)  calc(var(--px) * -14) 0 var(--blossom-light),
-    calc(var(--px) * -6)  calc(var(--px) * -15) 0 var(--blossom-light),
-    calc(var(--px) * -5)  calc(var(--px) * -15) 0 var(--blossom-light),
-    calc(var(--px) * -3)  calc(var(--px) * -16) 0 var(--blossom-light),
-    calc(var(--px) * -2)  calc(var(--px) * -17) 0 var(--blossom-light),
-    calc(var(--px) * -1)  calc(var(--px) * -16) 0 var(--blossom-light),
-    calc(var(--px) * 1)   calc(var(--px) * -16) 0 var(--blossom-light),
-    calc(var(--px) * -8)  calc(var(--px) * -13) 0 var(--blossom-light),
-    calc(var(--px) * 3)   calc(var(--px) * -15) 0 var(--blossom-light);
+/* The canopy itself: one element, many stacked radial blobs. */
+.tree-canopy {
+  position: absolute;
+  left: -6%;
+  top: 0;
+  width: 112%;
+  height: 165px;
+  background:
+    radial-gradient(ellipse 66px 44px at 22% 56%, var(--blossom-deep), transparent 72%),
+    radial-gradient(ellipse 74px 50px at 40% 40%, var(--blossom), transparent 72%),
+    radial-gradient(ellipse 80px 52px at 58% 36%, var(--blossom), transparent 72%),
+    radial-gradient(ellipse 68px 46px at 76% 50%, var(--blossom-deep), transparent 72%),
+    radial-gradient(ellipse 58px 40px at 12% 68%, var(--blossom-deep), transparent 72%),
+    radial-gradient(ellipse 60px 42px at 88% 64%, var(--blossom-deep), transparent 72%),
+    radial-gradient(ellipse 62px 40px at 32% 26%, var(--blossom-light), transparent 70%),
+    radial-gradient(ellipse 58px 36px at 52% 20%, var(--blossom-light), transparent 70%),
+    radial-gradient(ellipse 54px 34px at 70% 26%, var(--blossom-light), transparent 70%),
+    radial-gradient(ellipse 40px 24px at 44% 14%, var(--blossom-pale), transparent 68%),
+    radial-gradient(ellipse 34px 22px at 62% 16%, var(--blossom-pale), transparent 68%),
+    radial-gradient(ellipse 90px 46px at 50% 62%, var(--blossom), transparent 74%);
 }
-
-@keyframes canopy-sway {
-  0%, 100% { transform: translateX(0) rotate(0deg); }
-  50%      { transform: translateX(-2px) rotate(-0.9deg); }
+/* A second, slightly offset canopy pass adds depth and hides any seams. */
+.tree-canopy.back {
+  left: -2%;
+  top: 12px;
+  width: 104%;
+  filter: brightness(0.82) saturate(0.9);
+  z-index: -1;
+  animation: canopy-breathe 8s ease-in-out infinite;
+}
+@keyframes canopy-breathe {
+  0%, 100% { transform: scale(1) translateX(0); }
+  50%      { transform: scale(1.02) translateX(-3px); }
+}
+@keyframes tree-sway {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(-1.1deg); }
 }
 
 /* ---------- Drifting petals ----------
-   Blown from the tree on the right, drifting LEFT across the sky and
-   settling downward, matching the reference. Staggered negative delays mean
-   petals are already mid-flight on the very first frame. Loops forever; the
-   loading screen is simply removed when loading finishes.
+   Blown off the tree, drifting LEFT across the sky. Negative delays mean
+   petals are already mid-flight on the first frame rather than all starting
+   together. Loops forever; the loading screen is simply removed when the
+   library finishes loading.
 
-   Wrapped in .petal-field so the :nth-child rules below count only petals —
-   as direct children of .loading-art they'd be offset by the moon, clouds,
-   cliff and tree elements sitting before them, and every rule would silently
-   miss. */
-.petal-field { position: absolute; inset: 0; }
+   Wrapped in .petal-field so :nth-child counts only petals — as direct
+   children of the scene they'd be offset by the moon/clouds/cliff/tree and
+   every rule below would silently miss. */
+.petal-field { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
 .petal {
   position: absolute;
-  width: 5px;
-  height: 5px;
-  border-radius: 60% 10% 60% 10%;
-  background: var(--blossom);
+  width: 9px;
+  height: 9px;
+  right: 22%;
+  border-radius: 68% 8% 68% 8%;
+  background: var(--blossom-light);
   opacity: 0;
-  right: 90px;
   animation: petal-drift linear infinite;
 }
-.petal:nth-child(even) { background: var(--blossom-light); }
-.petal:nth-child(3n)   { background: var(--blossom-deep); }
+.petal:nth-child(even) { background: var(--blossom-pale); width: 7px; height: 7px; }
+.petal:nth-child(3n)   { background: var(--blossom); }
 
-.petal:nth-child(1)  { top: 60px;  animation-duration: 9s;    animation-delay: 0s;    }
-.petal:nth-child(2)  { top: 74px;  animation-duration: 11s;   animation-delay: -1.5s; }
-.petal:nth-child(3)  { top: 52px;  animation-duration: 8s;    animation-delay: -3s;   }
-.petal:nth-child(4)  { top: 88px;  animation-duration: 12s;   animation-delay: -4.5s; }
-.petal:nth-child(5)  { top: 66px;  animation-duration: 10s;   animation-delay: -6s;   }
-.petal:nth-child(6)  { top: 100px; animation-duration: 9.5s;  animation-delay: -2.2s; }
-.petal:nth-child(7)  { top: 46px;  animation-duration: 13s;   animation-delay: -7.5s; }
-.petal:nth-child(8)  { top: 82px;  animation-duration: 10.5s; animation-delay: -5.2s; }
-.petal:nth-child(9)  { top: 58px;  animation-duration: 11.5s; animation-delay: -8.4s; }
-.petal:nth-child(10) { top: 94px;  animation-duration: 8.5s;  animation-delay: -0.8s; }
+.petal:nth-child(1)  { top: 26%; animation-duration: 11s;   animation-delay: 0s;    }
+.petal:nth-child(2)  { top: 33%; animation-duration: 14s;   animation-delay: -2s;   }
+.petal:nth-child(3)  { top: 21%; animation-duration: 10s;   animation-delay: -4s;   }
+.petal:nth-child(4)  { top: 40%; animation-duration: 15s;   animation-delay: -6s;   }
+.petal:nth-child(5)  { top: 29%; animation-duration: 12.5s; animation-delay: -8s;   }
+.petal:nth-child(6)  { top: 46%; animation-duration: 11.5s; animation-delay: -3s;   }
+.petal:nth-child(7)  { top: 18%; animation-duration: 16s;   animation-delay: -10s;  }
+.petal:nth-child(8)  { top: 37%; animation-duration: 13s;   animation-delay: -7s;   }
+.petal:nth-child(9)  { top: 24%; animation-duration: 14.5s; animation-delay: -11.5s;}
+.petal:nth-child(10) { top: 43%; animation-duration: 10.5s; animation-delay: -1s;   }
+.petal:nth-child(11) { top: 31%; animation-duration: 15.5s; animation-delay: -13s;  }
+.petal:nth-child(12) { top: 50%; animation-duration: 12s;   animation-delay: -5s;   }
 
 @keyframes petal-drift {
-  0%   { transform: translate(0, 0) rotate(0deg);           opacity: 0; }
-  8%   { opacity: 0.95; }
-  25%  { transform: translate(-110px, 22px) rotate(120deg); }
-  50%  { transform: translate(-220px, 14px) rotate(240deg); }
-  75%  { transform: translate(-330px, 44px) rotate(340deg); opacity: 0.9; }
-  100% { transform: translate(-460px, 34px) rotate(440deg); opacity: 0; }
+  0%   { transform: translate(0, 0) rotate(0deg);            opacity: 0; }
+  6%   { opacity: 0.95; }
+  25%  { transform: translate(-22vw, 4vh) rotate(150deg); }
+  50%  { transform: translate(-44vw, 2vh) rotate(290deg); }
+  75%  { transform: translate(-66vw, 9vh) rotate(430deg);    opacity: 0.85; }
+  100% { transform: translate(-92vw, 6vh) rotate(560deg);    opacity: 0; }
 }
 
 /* ==========================================================================
-   Small screens: no room for the tree and cliff without it feeling cramped,
-   so those are hidden and the scene keeps the moon, clouds and drifting
-   petals — still recognisably the same night sky, just simpler.
+   Small screens: no room for the cliff and tree without it feeling cramped,
+   so those hide and the scene keeps the moon, stars, clouds and petals —
+   still the same night sky, just simpler.
    ========================================================================== */
 @media (max-width: 700px) {
-  .loading-art { height: 180px; }
   .scene-cliff,
-  .scene-cliff-top,
   .scene-tree { display: none; }
-  .scene-moon { left: 50%; margin-left: -37px; top: 30px; width: 74px; height: 74px; }
-  /* Petals now start from the right edge itself rather than from a tree. */
-  .petal { right: 10px; }
+  .scene-moon { left: 50%; margin-left: -46px; top: 12%; width: 92px; height: 92px; }
+  .petal { right: -4%; } /* blow in from off-screen right, since there's no tree to leave */
 }
 
 @media (max-width: 420px) {
-  .loading-art { height: 150px; }
-  .scene-moon { width: 60px; height: 60px; top: 24px; margin-left: -30px; }
+  .scene-moon { width: 74px; height: 74px; margin-left: -37px; }
+  .scene-cloud { filter: blur(10px); }
 }
 
 /* Respect a reduced-motion preference — the scene still renders in full, it
-   just holds still instead of swaying, drifting and glowing. */
+   just holds still instead of drifting, swaying and twinkling. */
 @media (prefers-reduced-motion: reduce) {
+  .scene-stars,
   .scene-moon,
   .scene-cloud,
-  .tree-canopy-1,
-  .tree-canopy-2,
-  .tree-canopy-3 { animation: none; }
-  .petal { animation: none; opacity: 0.7; }
-  .petal:nth-child(1)  { transform: translate(-90px, 20px); }
-  .petal:nth-child(2)  { transform: translate(-180px, 34px); }
-  .petal:nth-child(3)  { transform: translate(-260px, 12px); }
-  .petal:nth-child(4)  { transform: translate(-340px, 40px); }
-  .petal:nth-child(5)  { transform: translate(-140px, 50px); }
-  .petal:nth-child(6)  { transform: translate(-300px, 26px); }
-  .petal:nth-child(7)  { transform: translate(-220px, 46px); }
-  .petal:nth-child(8)  { transform: translate(-60px, 30px); }
-  .petal:nth-child(9)  { transform: translate(-390px, 18px); }
-  .petal:nth-child(10) { transform: translate(-250px, 56px); }
+  .scene-tree,
+  .tree-canopy.back { animation: none; }
+  .scene-cloud.c1 { left: 8%; }
+  .scene-cloud.c2 { left: 46%; }
+  .scene-cloud.c3 { left: 24%; }
+  .scene-cloud.c4 { left: 62%; }
+  .petal { animation: none; opacity: 0.75; }
+  .petal:nth-child(1)  { transform: translate(-14vw, 3vh); }
+  .petal:nth-child(2)  { transform: translate(-28vw, 6vh); }
+  .petal:nth-child(3)  { transform: translate(-42vw, 2vh); }
+  .petal:nth-child(4)  { transform: translate(-56vw, 8vh); }
+  .petal:nth-child(5)  { transform: translate(-20vw, 9vh); }
+  .petal:nth-child(6)  { transform: translate(-64vw, 4vh); }
+  .petal:nth-child(7)  { transform: translate(-36vw, 7vh); }
+  .petal:nth-child(8)  { transform: translate(-10vw, 5vh); }
+  .petal:nth-child(9)  { transform: translate(-72vw, 3vh); }
+  .petal:nth-child(10) { transform: translate(-48vw, 10vh); }
+  .petal:nth-child(11) { transform: translate(-58vw, 6vh); }
+  .petal:nth-child(12) { transform: translate(-26vw, 11vh); }
 }

@@ -615,7 +615,7 @@ textarea.ingest-area{
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
-.loading-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;padding:20px;}
+/* .loading-screen itself is styled in loading.css (full-bleed animated scene). */
 .loading-title{font-family:'Fraunces',Georgia,serif;font-weight:700;font-size:20px;color:var(--ink);letter-spacing:0.3px;}
 .loading-track{width:min(240px,70vw);height:6px;border-radius:99px;background:var(--rule);overflow:hidden;}
 .loading-fill{height:100%;border-radius:99px;background:var(--cover);transition:width .35s ease;}
@@ -676,24 +676,27 @@ textarea.ingest-area{
 <body>
 
 <div id="loadingScreen" class="loading-screen">
-  <div class="loading-art" aria-hidden="true">
-    <div class="scene-moon"></div>
-    <div class="scene-cloud c1"></div>
-    <div class="scene-cloud c2"></div>
-    <div class="scene-cloud c3"></div>
-    <div class="scene-cloud c4"></div>
-    <div class="scene-cliff"></div>
-    <div class="scene-cliff-top"></div>
-    <div class="scene-tree">
-      <i class="tree-canopy-1"></i>
-      <i class="tree-canopy-2"></i>
-      <i class="tree-canopy-3"></i>
-      <i class="tree-trunk"></i>
-    </div>
-    <div class="petal-field">
-      <div class="petal"></div><div class="petal"></div><div class="petal"></div><div class="petal"></div><div class="petal"></div>
-      <div class="petal"></div><div class="petal"></div><div class="petal"></div><div class="petal"></div><div class="petal"></div>
-    </div>
+  <div class="scene-stars" aria-hidden="true"></div>
+  <div class="scene-moon" aria-hidden="true"></div>
+  <div class="scene-cloud c1" aria-hidden="true"></div>
+  <div class="scene-cloud c2" aria-hidden="true"></div>
+  <div class="scene-cloud c3" aria-hidden="true"></div>
+  <div class="scene-cloud c4" aria-hidden="true"></div>
+  <div class="scene-cliff" aria-hidden="true"></div>
+  <div class="scene-tree" aria-hidden="true">
+    <div class="tree-canopy back"></div>
+    <div class="tree-limb l1"></div>
+    <div class="tree-limb l2"></div>
+    <div class="tree-limb l3"></div>
+    <div class="tree-limb l4"></div>
+    <div class="tree-limb l5"></div>
+    <div class="tree-trunk"></div>
+    <div class="tree-canopy"></div>
+  </div>
+  <div class="petal-field" aria-hidden="true">
+    <div class="petal"></div><div class="petal"></div><div class="petal"></div><div class="petal"></div>
+    <div class="petal"></div><div class="petal"></div><div class="petal"></div><div class="petal"></div>
+    <div class="petal"></div><div class="petal"></div><div class="petal"></div><div class="petal"></div>
   </div>
   <div class="loading-title">Practex</div>
   <div class="loading-track"><div class="loading-fill" id="loadingFill" style="width:0%;"></div></div>
