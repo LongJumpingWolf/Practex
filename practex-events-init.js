@@ -620,6 +620,7 @@ async function onClick(e){
     state.pausedSession=currentSessionSnapshot();
     if (state.pausedSession) state.pausedSession.pausedAt = Date.now();
     state.session=null; applyPendingNav(); closeModal(); render();
+    clearLiveSessionSync(); /* deliberate pause takes precedence over any earlier ungraceful-exit leftover from earlier in this same session */
     showToast('Pausing…');
     /* Awaited — this is exactly the highest-risk spot for a fire-and-forget save:
        pausing a test is almost always immediately followed by closing the tab or
@@ -638,7 +639,9 @@ async function onClick(e){
     return;
   }
   if (action === 'leave-without-pausing') {
-    state.session=null; applyPendingNav(); closeModal(); render(); return;
+    state.session=null; applyPendingNav(); closeModal(); render();
+    clearLiveSessionSync(); /* explicit "don't save this" — an ungraceful-exit leftover from earlier in this session shouldn't override that choice next load */
+    return;
   }
   if (action === 'resume-paused') {
     if(!state.pausedSession){ closeModal(); return; }
@@ -658,7 +661,7 @@ async function onClick(e){
     if (restored.shortAnswerCorrect === undefined) restored.shortAnswerCorrect = null;
     if (!restored.ids.length) {
       showToast('That paused test looks corrupted and can\'t be resumed — sorry about that. Starting fresh is the safest option.');
-      state.pausedSession = null; closeModal(); render(); savePausedSession(); return;
+      state.pausedSession = null; closeModal(); render(); savePausedSession(); clearLiveSessionSync(); return;
     }
     state.session = restored;
     state.pausedSession = null;
@@ -942,31 +945,29 @@ async function init(){
   window.addEventListener('online', function(){ updateSyncIndicator(); autoSync(); });
   window.addEventListener('offline', updateSyncIndicator);
 
-  /* Auto-pause on tab close/hide — "Pause & leave" only captures a session if the
-     person explicitly clicks it first. Just closing the tab mid-test (the far more
-     common way people actually leave) previously lost the session entirely, since
-     nothing was listening for that at all. 'pagehide' fires reliably even when the
-     tab is genuinely closing, unlike most async work at that point — but a real
-     network request still can't be trusted to complete once the page is actually
-     unloading, so this deliberately only does the SYNCHRONOUS part (persistPausedSessionSync,
-     a small dedicated localStorage entry that can't get interrupted) rather than
-     awaiting the full IndexedDB mirror write or a Supabase save, neither of which
-     are guaranteed to finish once the page is actually closing. loadLibrary()
-     reconciles this local-only pause against whatever the cloud has next time the
-     app opens — see the comment there. */
+  /* Auto-persist on tab hide/close — Chapter 3. Previously this set state.pausedSession
+     directly, live, the moment the tab was hidden — which had two real bugs, found by
+     tracing this against the new question types: (1) the `!state.pausedSession` guard
+     meant only the FIRST hide during a session ever snapshotted anything, so hide →
+     come back → keep answering → close for real would silently resume from the STALE
+     first snapshot, losing everything answered in between; and (2) setting
+     state.pausedSession live meant just alt-tabbing and coming right back made the
+     sidebar show a "Paused test — Resume" card for a session the person never actually
+     left, since that card's visibility is driven directly by state.pausedSession being
+     truthy in memory, not by whether they're still on screen.
+
+     persistLiveSessionSync() fixes both: it writes fresh on every call (no one-shot
+     guard), and it writes to a SEPARATE key that never touches state.pausedSession
+     in-memory — so nothing changes on screen until the NEXT app load, and only if the
+     browser closed ungracefully rather than reaching a normal exit. See the big
+     comment above persistLiveSessionSync() in practex-data-core.js, and the
+     reconciliation logic in loadLibrary() that adopts a leftover entry as a real
+     pausedSession only when it's actually the freshest thing available. */
   document.addEventListener('visibilitychange', function(){
-    if (document.visibilityState === 'hidden' && isMidSession() && !state.pausedSession) {
-      state.pausedSession = currentSessionSnapshot();
-      state.pausedSession.pausedAt = Date.now();
-      persistPausedSessionSync();
-    }
+    if (document.visibilityState === 'hidden') persistLiveSessionSync();
   });
   window.addEventListener('pagehide', function(){
-    if (isMidSession() && !state.pausedSession) {
-      state.pausedSession = currentSessionSnapshot();
-      state.pausedSession.pausedAt = Date.now();
-      persistPausedSessionSync();
-    }
+    persistLiveSessionSync();
   });
 
   if ('serviceWorker' in navigator) {

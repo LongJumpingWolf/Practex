@@ -890,7 +890,7 @@ async function advanceAfterReveal(){
 
   s.index++; s.selected = null; s.revealed = false; s.shortAnswerCorrect = null; s.viewIndex = s.index;
   s.questionShownAt = Date.now(); s.revealedAt = null; s.lastTimeToAnswerMs = null; /* start the clock fresh for whatever's next */
-  if (s.index >= s.ids.length) state.view = 'summary';
+  if (s.index >= s.ids.length) { state.view = 'summary'; clearLiveSessionSync(); /* finished normally — this isn't an ungraceful exit, don't let it be adopted as a crash-recovery resume next load */ }
   render(); /* update the screen immediately — don't make the person wait on a network round trip just to see the next question */
   saveLibrary(); /* fire-and-forget in the background; it has its own error toast if it fails */
   if (justAutoSlept) showToast('That question is asleep now — ' + (state.autoSleepStreak||4) + ' correct in a row. Wake it anytime from its row in the library.');

@@ -161,6 +161,48 @@ function loadPausedSessionSync(){
   } catch(err) { return null; }
 }
 
+/* ================= Chapter 3: continuous live-session persistence =================
+   The functions above only ever wrote a snapshot at the MOMENT of an explicit pause,
+   or the first time the tab was hidden mid-session — proven (by tracing the actual
+   guard condition) to go stale if the tab is hidden once, then the person keeps
+   answering more questions, then the tab is closed for good: the second close never
+   re-snapshots, so "Resume" would silently roll back to the earlier point.
+
+   This adds a SEPARATE key that's rewritten after every single practice-screen
+   render while a session is live (cheap — one small synchronous localStorage write),
+   completely independent of pause/hide events. It's deliberately kept separate from
+   PAUSED_SESSION_SYNC_KEY rather than reusing it, because state.pausedSession's
+   presence directly drives the "Paused test — Resume" card in the library view —
+   writing to it continuously would make that card appear while someone is still
+   actively mid-session, which is wrong. This key is only ever promoted into an
+   actual pausedSession on the NEXT app load, and only if it wasn't cleanly cleared
+   by a normal exit (session finished, explicitly paused, or explicitly left) —
+   i.e. only in the case that actually indicates an ungraceful close.
+   ===================================================================================== */
+var LIVE_SESSION_SYNC_KEY = 'practex_live_session_sync_v1';
+function persistLiveSessionSync(){
+  if (!state.currentUser || !isMidSession()) return;
+  try {
+    localStorage.setItem(LIVE_SESSION_SYNC_KEY, JSON.stringify({
+      userId: state.currentUser.id,
+      session: state.session,
+      savedAt: Date.now()
+    }));
+  } catch(err) { console.warn('Live-session quick-save failed:', err); }
+}
+function clearLiveSessionSync(){
+  try { localStorage.removeItem(LIVE_SESSION_SYNC_KEY); } catch(err) {}
+}
+function loadLiveSessionSync(){
+  try {
+    var raw = localStorage.getItem(LIVE_SESSION_SYNC_KEY);
+    if (!raw) return null;
+    var payload = JSON.parse(raw);
+    if (!state.currentUser || payload.userId !== state.currentUser.id) return null;
+    return payload;
+  } catch(err) { return null; }
+}
+
 var PALETTE = ['#2F5C7A','#B23A2E','#2F6E45','#8B5E9C','#C77B2E','#3D7D8C','#9C4F6E','#5C6B2F'];
 
 function colorForSource(name){
@@ -517,14 +559,26 @@ async function loadLibrary(onProgress){
        have time to actually save it properly. */
     var mirrorForPause = await loadLocalMirror();
     var syncPaused = loadPausedSessionSync();
+    var liveSync = loadLiveSessionSync(); /* leftover only if the last exit wasn't graceful — see the big comment above persistLiveSessionSync() */
     var cloudPausedAt = state.pausedSession ? (state.pausedSession.pausedAt || 0) : 0;
     var mirrorPausedAt = mirrorForPause && mirrorForPause.pausedSession ? (mirrorForPause.pausedSession.pausedAt || 0) : 0;
     var syncPausedAt = syncPaused ? (syncPaused.pausedAt || 0) : 0;
-    var bestPausedAt = Math.max(cloudPausedAt, mirrorPausedAt, syncPausedAt);
+    var liveSyncAt = liveSync ? (liveSync.savedAt || 0) : 0;
+    var bestPausedAt = Math.max(cloudPausedAt, mirrorPausedAt, syncPausedAt, liveSyncAt);
     if (bestPausedAt > cloudPausedAt) {
-      state.pausedSession = (syncPausedAt === bestPausedAt) ? syncPaused : mirrorForPause.pausedSession;
+      if (liveSyncAt === bestPausedAt) {
+        /* Adopting an ungraceful-exit snapshot — reuses the exact same "Paused test /
+           Resume" UI and resume-paused action as a deliberate pause, just tagged so the
+           card can say something more accurate than "Paused" for a crash it didn't ask for. */
+        state.pausedSession = liveSync.session;
+        state.pausedSession.pausedAt = liveSync.savedAt;
+        state.pausedSession.recoveredFromCrash = true;
+      } else {
+        state.pausedSession = (syncPausedAt === bestPausedAt) ? syncPaused : mirrorForPause.pausedSession;
+      }
       saveUserSettings(); /* best-effort push-up, not awaited — loadLibrary() shouldn't block on this */
     }
+    clearLiveSessionSync(); /* whatever happened, it's been reconciled into pausedSession (or discarded as stale) — either way it shouldn't linger to be re-adopted again next load */
     state.learningMode.enabled = row ? (row.fsrs_mode_enabled !== false) : false; /* brand-new accounts start in plain practice mode — FSRS is opt-in, not the default */
     state.darkMode = !!(row && row.dark_mode);
     state.streak = (row && row.streak) || { count: 0, lastDate: null };

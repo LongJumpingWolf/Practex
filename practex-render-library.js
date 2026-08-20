@@ -445,6 +445,7 @@ function render(){
   hydrateImages();
   renderZipImportStatus(); /* no-op unless the zipUploadReport element exists on this screen — safe to call unconditionally */
   bindPracticeWidgets(); /* no-op unless the current question is a 'cutoff' type — safe to call unconditionally */
+  persistLiveSessionSync(); /* no-op unless mid-session — Chapter 3 continuous persistence, see practex-data-core.js */
   if (state.activeModal === 'settings') renderSettingsModalContent();
 }
 
@@ -829,7 +830,16 @@ function renderSearchBar(){
 
 function renderBrowse(){
   var pausedHtml='';
-  if(state.pausedSession){ var ps=state.pausedSession; pausedHtml='<div class="card paused-card"><div style="font-weight:600;margin-bottom:4px;">Paused test</div><div class="view-sub" style="margin-bottom:10px;">Question '+Math.min(ps.index+1,ps.ids.length)+' of '+ps.ids.length+' · '+ps.results.length+' answered</div><button class="btn btn-primary btn-sm" data-action="resume-paused">Resume test</button></div>'; }
+  if(state.pausedSession){
+    var ps=state.pausedSession;
+    /* recoveredFromCrash (Chapter 3) means this wasn't an explicit "Pause & leave" —
+       it's a continuous-persistence snapshot adopted because the last exit wasn't
+       graceful (tab crashed, closed without warning, etc). Worth saying so plainly
+       rather than implying the person did something they didn't. */
+    var cardTitle = ps.recoveredFromCrash ? 'Recovered session' : 'Paused test';
+    var cardNote = ps.recoveredFromCrash ? ' — looks like the app closed unexpectedly' : '';
+    pausedHtml='<div class="card paused-card"><div style="font-weight:600;margin-bottom:4px;">'+cardTitle+cardNote+'</div><div class="view-sub" style="margin-bottom:10px;">Question '+Math.min(ps.index+1,ps.ids.length)+' of '+ps.ids.length+' · '+ps.results.length+' answered</div><button class="btn btn-primary btn-sm" data-action="resume-paused">Resume test</button></div>';
+  }
   var searchBarHtml = renderSearchBar();
   if ((state.filters.search || '').trim() || (!state.selectedPath && state.forceList)) {
     /* The second condition is what makes clicking a book on the shelf show a flat,
