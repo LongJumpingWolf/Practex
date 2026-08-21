@@ -174,8 +174,21 @@ function parseLibraryText(raw, sourceOverride){
           testIndex = letters.length ? Math.floor(Math.random() * letters.length) : 0;
         }
         newQ = { type: 'mnemonic', stem: qStem, letters: letters, testIndex: testIndex, images: qImages };
+      } else if (newType === 'card') {
+        /* Pure-reading flashcard — front is qStem (from #Q), back is a multiline
+           block under #BACK. No #OPTIONS/#ANSWER/#EXPLANATION at all — there's
+           nothing to grade, see evaluateCorrect()/advanceAfterReveal() in
+           practex-learning-practice.js for how "no answering" is enforced beyond
+           just this screen. */
+        var back = '';
+        if (i < lines.length && lines[i].trim().indexOf('#BACK') === 0) {
+          i++;
+          var backBuf = readMultilineUntil(['#TAGS:', '#END']);
+          back = backBuf.join('\n').trim();
+        }
+        newQ = { type: 'card', front: qStem, back: back, images: qImages };
       } else {
-        errors.push({ line: typeStartLine, message: 'Unknown #TYPE: "' + newType + '" near line ' + typeStartLine + ' (expected match, sequence, cutoff, or mnemonic)' });
+        errors.push({ line: typeStartLine, message: 'Unknown #TYPE: "' + newType + '" near line ' + typeStartLine + ' (expected match, sequence, cutoff, mnemonic, or card)' });
       }
 
       var newTags = [];
@@ -710,14 +723,14 @@ function renderSidebar(){
   var html = '<aside class="sidebar' + (state.sidebarOpen ? ' open' : '') + '" id="sidebar">';
   html += '<div class="brand"><div class="brand-mark"><img src="icons/icon-128x128.png" alt="Practex logo"></div>' +
     '<div style="flex:1;"><div class="brand-name serif">Practex</div><div class="brand-tag">MCQ practice</div></div>' +
-    '<button class="sidebar-gear-btn' + (state.view === 'bookshelf' ? ' active' : '') + '" data-action="toggle-bookshelf" title="' + (state.view === 'bookshelf' ? 'Back to folder view' : 'View by source (book shelf)') + '" aria-label="Toggle book shelf view">' + icon('book',16) + '</button>' +
+    '<button class="sidebar-gear-btn' + (state.view === 'addsource' ? ' active' : '') + '" data-action="set-view" data-view="addsource" title="Add source" aria-label="Add source">' + icon('folder-plus',16) + '</button>' +
     '<button class="sidebar-gear-btn" data-action="open-settings" title="Settings" aria-label="Settings">' + icon('settings',16) + '</button></div>';
 
   html += renderSyncStatusPill();
 
   html += '<div class="nav-tabs">' +
     '<button class="nav-tab' + (state.view==='browse'?' active':'') + '" data-action="set-view" data-view="browse">Library</button>' +
-    '<button class="nav-tab' + (state.view==='addsource'?' active':'') + '" data-action="set-view" data-view="addsource">Add source</button>' +
+    '<button class="nav-tab' + (state.view==='bookshelf'?' active':'') + '" data-action="toggle-bookshelf">Book Shelf</button>' +
     '</div>';
 
   var ls = getLearningStats();
@@ -1326,6 +1339,14 @@ var MASTER_PROMPT = "PRACTEX MCQ STANDARDIZATION PROMPT\n\n" +
 "#END\n" +
 "If converting a whole chapter with several mnemonics, and time/space allows, create multiple #TYPE: mnemonic blocks for the SAME mnemonic with different #TESTLETTER: values (one block per letter worth testing) rather than just one block per mnemonic - this is what lets the letter being quizzed rotate across review sessions instead of always testing the same one.\n\n" +
 "Types 12-15 do NOT use #OPTIONS, #ANSWER, or #EXPLANATION at all - grading is built into the shape of the data itself (pairs must all link correctly, steps must be in the stated order, the slider must land on the correct side of the threshold, the self-graded mnemonic answer is checked against #LETTERS). They still support #IMAGE_Q: exactly like rule 10b, on its own line right after #Q, but never #IMAGE_A: (there's no #EXPLANATION block for these types to put an answer-side image in).\n\n" +
+"16. Content with NO natural distractor at all - a pure definition, a single fact, a step in a flowchart with nothing to confuse it with - is usually better as a Kardex flashcard than a Practex question. But when the source material itself frames something as a standalone fact worth reading rather than quizzing (a named syndrome's full definition, a classic clinical picture worth just seeing once), use a read-only card instead of forcing a fake distractor into existence:\n" +
+"#TYPE: card\n" +
+"#Q <the front - what's being shown first>\n" +
+"#BACK\n" +
+"<the back - shown together with the front, since there's no quiz step to gate it behind>\n" +
+"#TAGS: <comma-separated>\n" +
+"#END\n" +
+"A card has no #OPTIONS, #ANSWER, or #EXPLANATION, and is never graded right or wrong - it's excluded from FSRS scheduling and correct/wrong stats entirely, the same way a Kardex flashcard is. Use this sparingly and only when 12-15 and the standard MCQ format genuinely don't fit - most content that could be a card is better served staying in Kardex, where it's already meant to live. Like 12-15, a card also supports #IMAGE_Q: on its own line right after #Q, but never #IMAGE_A:.\n\n" +
 "=== TABLE RULES ===\n" +
 "Use standard markdown pipe tables only, inside a #Q or #EXPLANATION body:\n" +
 "| Header 1 | Header 2 |\n" +

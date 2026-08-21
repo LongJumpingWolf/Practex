@@ -92,9 +92,13 @@ async function onClick(e){
   }
   if (action === 'open-settings') { openSettingsModal(); return; }
   if (action === 'toggle-bookshelf') {
-    var enteringShelf = state.view !== 'bookshelf';
-    state.view = enteringShelf ? 'bookshelf' : 'browse';
-    state.bookshelfActiveSource = null; /* always start fresh at the shelf grid, whichever direction this switch just went */
+    /* Was a genuine toggle (go to shelf / leave shelf, same button either direction) —
+       correct for the old small icon-button spot, but Book Shelf now sits as a plain
+       peer tab next to "Library", so it should behave like one: always navigate TO
+       bookshelf, the same way clicking "Library" always navigates to browse rather
+       than toggling away if you're already there. */
+    state.view = 'bookshelf';
+    state.bookshelfActiveSource = null; /* always start fresh at the shelf grid */
     state.selectedPath = null;
     state.sidebarOpen = false;
     render();

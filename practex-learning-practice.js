@@ -552,6 +552,7 @@ function renderPractice(){
   if (m.type === 'sequence') { html += renderSequenceBody(m, s, isReviewing, result, viewRevealed); html += '</div>'; return html; }
   if (m.type === 'cutoff')   { html += renderCutoffBody(m, s, isReviewing, result, viewRevealed); html += '</div>'; return html; }
   if (m.type === 'mnemonic') { html += renderMnemonicBody(m, s, isReviewing, result, viewRevealed); html += '</div>'; return html; }
+  if (m.type === 'card')     { html += renderCardBody(m, s, isReviewing, result, viewRevealed); html += '</div>'; return html; }
 
   html += '<div class="card answer-sheet">';
   html += '<div class="qmeta"><span class="qnum mono">Q.' + (s.viewIndex+1) + '</span><div class="qmeta-tags">' +
@@ -834,6 +835,26 @@ function renderMnemonicBody(m, s, isReviewing, result, viewRevealed){
   return html;
 }
 
+/* ---------------- CARD (pure-reading, no grading) ----------------
+   "It's like card decks only" — a straight read: front, back, tap Next. No check-
+   answer step, no right/wrong, deliberately excluded from FSRS scheduling and the
+   correct/wrong session stats entirely (see the skip in advanceAfterReveal() and
+   evaluateCorrect() below) — the whole point is exposure, not grading. */
+function renderCardBody(m, s, isReviewing, result, viewRevealed){
+  var html = '<div class="card answer-sheet">';
+  html += qMetaAndStemHtml(m, s, m.front);
+  if (m.back) {
+    html += '<div class="reveal-panel" style="margin-top:10px;"><div class="reveal-explain">' + renderContent(m.back) + '</div></div>';
+  }
+  html += renderNotesSection(m);
+  if (!isReviewing) {
+    html += '<div class="answer-footer" style="justify-content:flex-end;">' +
+      '<button class="btn btn-primary" data-action="next-question">' + (s.index + 1 < s.ids.length ? 'Next' : 'Finish session') + '</button></div>';
+  }
+  html += '</div>';
+  return html;
+}
+
 /* Shared reveal footer for the 3 objectively-graded new types (match/sequence/cutoff) —
    mirrors the standard bubble-MCQ reveal-panel/next-question pattern exactly. */
 function renderRevealFooter(m, s, isReviewing){
@@ -863,6 +884,10 @@ function toggleOptionSelection(m, s, letter){
 }
 
 function evaluateCorrect(m, selected){
+  /* Card is pure reading — no selection ever exists for it, so it must be checked
+     before the "selected === null -> false" line below, or every card would
+     incorrectly evaluate as "wrong" the instant it's touched. */
+  if (m.type === 'card') return null;
   if (selected === null || selected === undefined) return false;
   /* mnemonic is self-graded, same mechanism as isShortAnswer — there's no reliable
      objective checker for free-text "what does this letter mean" answers. */
@@ -910,6 +935,7 @@ function revealCurrent(){
    used by getMostRepeatedWrong() to show recurring-mistake banners. Every question type
    needs to produce SOMETHING here or that banner silently stops working for that type. */
 function pickedStrFor(m, selected){
+  if (m.type === 'card') return ''; /* nothing was picked — pure reading, no selection ever exists */
   if (m.isShortAnswer || m.type === 'mnemonic') return selected || '';
   if (m.type === 'match') {
     if (!selected || !selected.links) return '';
@@ -930,6 +956,7 @@ function pickedStrFor(m, selected){
    Mirrors pickedStrFor() above — same per-type shape, but describing the CORRECT
    answer for the review-history "expected:" field, not what the person picked. */
 function expectedAnswerStrFor(m){
+  if (m.type === 'card') return ''; /* nothing to grade against — see the skip in advanceAfterReveal() below, this shouldn't even be called for cards, but returning cleanly here rather than falling into a type this function doesn't recognize */
   if (m.isShortAnswer || m.type === 'mnemonic') {
     if (m.type === 'mnemonic' && m.letters && m.letters[m.testIndex]) return m.letters[m.testIndex].meaning;
     return (m.answer && m.answer[0]) || '';
@@ -969,10 +996,18 @@ async function advanceAfterReveal(){
     selected: s.selected
   });
 
-  LearningEngine.record(m, pickedStr, correct, timeToAnswerMs, timeOnExplanationMs); /* rating is auto-derived inside, from this question's own history and how long it took */
+  if (m.type !== 'card') {
+    LearningEngine.record(m, pickedStr, correct, timeToAnswerMs, timeOnExplanationMs); /* rating is auto-derived inside, from this question's own history and how long it took */
+  }
+  /* Card is deliberately excluded from LearningEngine.record() entirely — not "always
+     pass," genuinely skipped. It was never answered, so it shouldn't get an attempt
+     history entry, an FSRS-derived rating, or a scheduling nudge at all. m.learning.history
+     stays empty forever for a card, same as a question that's simply never been seen —
+     classify() already handles empty history gracefully ("new"), no special-case needed
+     there. This is what "no answering, just read" means end to end, not just on screen. */
 
   var cls = LearningEngine.classify(m);
-  if (s.stats && s.stats[cls] !== undefined) s.stats[cls]++;
+  if (s.stats && s.stats[cls] !== undefined && m.type !== 'card') s.stats[cls]++;
   if (correct === true) s.stats.correct++;
   if (correct === false) s.stats.wrong++;
 

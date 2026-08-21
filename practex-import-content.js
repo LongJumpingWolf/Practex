@@ -25,6 +25,7 @@ function recomputeAllDueDates(){
    One shared helper, used everywhere a short preview of "what does this question
    say" is needed, so this can't drift out of sync across the 5 places it's used. */
 function questionDisplayText(m){
+  if (m.type === 'card') return m.front || '';
   return (m.type && m.stem !== undefined) ? m.stem : (m.question || '');
 }
 
