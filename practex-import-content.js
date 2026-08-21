@@ -598,6 +598,8 @@ function renderSettingsModalContent(){
       '<span class="settings-toggle' + (state.darkMode?' on':'') + '" data-action="toggle-dark-mode" role="switch" aria-checked="' + (state.darkMode?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
     '<div class="settings-row"><span>FSRS mode</span>' +
       '<span class="settings-toggle' + (state.learningMode.enabled?' on':'') + '" data-action="toggle-fsrs-mode" role="switch" aria-checked="' + (state.learningMode.enabled?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
+    '<div class="settings-row"><span>' + icon('flame',13) + ' Perseverance mode</span>' +
+      '<span class="settings-toggle' + (document.body.classList.contains('perseverance-mode')?' on':'') + '" data-action="toggle-perseverance-mode" role="switch" aria-checked="' + (document.body.classList.contains('perseverance-mode')?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
     '<div class="settings-row"><span>Auto-sleep a question after it\'s right N times in a row</span>' +
       '<span class="settings-toggle' + (state.autoSleepEnabled?' on':'') + '" data-action="toggle-auto-sleep" role="switch" aria-checked="' + (state.autoSleepEnabled?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
     (state.autoSleepEnabled ? '<div class="settings-row"><span>Streak needed (N)</span>' +
