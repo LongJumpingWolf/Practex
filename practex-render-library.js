@@ -386,18 +386,22 @@ function parseLibraryText(raw, sourceOverride){
         }
         explanation = ebuf.join('\n').trim();
         if (pendingLetterRemap) {
-          /* Remap each "- <letter>)" line to its new, rebalanced letter — the
-             explanation was authored against the ORIGINAL as-written letters,
-             which no longer match the relettered options above without this. Uses
-             a placeholder swap (not a direct replace) so a remap like A<->B can't
-             double-replace an already-rewritten line — e.g. rewriting A->B then
-             later B->A would otherwise turn every A and B line into B. */
+          /* Remap each "- <letter>)" or "<letter> - " style line to its new,
+             rebalanced letter — the explanation was authored against the
+             ORIGINAL as-written letters, which no longer match the relettered
+             options above without this. Matches both the older "- A) ..."
+             checkmark style AND the newer "A - explanation" prose style (a
+             dash separator, not just ")"/"." ), since real explanations now
+             commonly use that format. Uses a placeholder swap (not a direct
+             replace) so a remap like A<->B can't double-replace an already-
+             rewritten line — e.g. rewriting A->B then later B->A would
+             otherwise turn every A and B line into B. */
           var tempMarkers = {};
           Object.keys(pendingLetterRemap).forEach(function(oldL, idx){
             tempMarkers[oldL] = '\u0000REMAP' + idx + '\u0000';
           });
           Object.keys(pendingLetterRemap).forEach(function(oldL){
-            var re = new RegExp('(^|\\n)(\\s*[-*]?\\s*)' + oldL + '(\\)|\\.)', 'g');
+            var re = new RegExp('(^|\\n)(\\s*[-*]?\\s*(?:[Cc]orrect\\s+)?)' + oldL + '(\\)|\\.|\\s*-(?!\\w))', 'g');
             explanation = explanation.replace(re, function(full, pre, dash, punct){ return pre + dash + tempMarkers[oldL] + punct; });
           });
           Object.keys(pendingLetterRemap).forEach(function(oldL){
@@ -523,6 +527,19 @@ function renderContent(text){
   }
   while (i < lines.length) {
     var line = lines[i];
+    /* Standing convention now: "Why other options are wrong :" (with or without
+       the space before the colon, or without a colon at all) is a structural
+       marker in explanation text, not just a sentence — it gets styled as its
+       own distinct heading (larger, red, underlined, bold) every time it
+       appears, exactly this line only, never the B/C/D breakdown underneath it.
+       Recognized purely by pattern here — the content author (human or AI
+       generating the explanation) never has to add any markup, just write the
+       line exactly like this and Practex does the rest. */
+    if (/^\s*why other options are wrong\s*:?\s*$/i.test(line)) {
+      flush();
+      out += '<div class="wrong-options-header">' + escapeHtml(line.trim()) + '</div>';
+      i++; continue;
+    }
     if (/^\s*#IMAGE:/.test(line)) {
       flush();
       var desc = line.replace(/^\s*#IMAGE:\s*/, '');
@@ -719,7 +736,7 @@ function deleteDeck(pathArr){
      but nothing actually leaves state.mcqs (or the server) until it's restored or
      the 30-day retention window elapses — see TRASH_RETENTION_DAYS. */
   var now = Date.now();
-  removed.forEach(function(m){ m.trashedAt = now; });
+  removed.forEach(function(m){ m.trashedAt = now; m.trashedFrom = { type: 'folder', label: pathArr.join(' > ') }; });
 
   /* Real bug found via a live report: an EMPTY folder/subject (created via "New
      subject"/"New folder" with zero questions ever added to it) is tracked entirely
@@ -1133,11 +1150,33 @@ function renderNeedsReviewView(){
 }
 
 /* ---------------- Trash (soft-deleted questions, 30-day retention) ---------------- */
+/* Real, fair complaint from a live report: Trash flattened every deletion down to
+   individual cards, even when what got deleted was an entire source or folder —
+   so deleting a 200-question book showed up as 200 separate rows instead of "1
+   deleted source." A real recycle bin (Windows' included) shows a deleted folder
+   as one restorable thing, not its contents exploded into a flat list. Groups
+   here by what was actually deleted together: delete-source and deleteDeck()
+   both tag every item they trash with trashedFrom (type + label) and share one
+   exact trashedAt timestamp per operation, so grouping by type+label+trashedAt
+   reconstructs "everything that went into the bin in this one action" — the
+   same grouping key restore/permanently-delete use to act on the whole group at
+   once. Anything trashed before this fix existed has no trashedFrom at all;
+   those fall back to showing individually, exactly like Windows still shows a
+   loose deleted file alongside deleted folders. */
 function renderTrashView(){
-  var items = trashedMcqs().slice().sort(function(a, b){ return b.trashedAt - a.trashedAt; }); /* most recently deleted first */
+  var items = trashedMcqs();
+  var groups = {};
+  var groupOrder = [];
+  items.forEach(function(m){
+    var key = trashGroupKeyOf(m);
+    if (!groups[key]) { groups[key] = { key: key, type: m.trashedFrom ? m.trashedFrom.type : 'single', label: m.trashedFrom ? m.trashedFrom.label : null, trashedAt: m.trashedAt, items: [] }; groupOrder.push(key); }
+    groups[key].items.push(m);
+  });
+  var groupList = groupOrder.map(function(k){ return groups[k]; }).sort(function(a, b){ return b.trashedAt - a.trashedAt; }); /* most recently deleted first */
+
   var html = '<div class="view-head"><div class="breadcrumb"><button class="breadcrumb-link" data-action="set-view" data-view="browse">' + icon('chevron-left',12) + ' Library</button></div>' +
     '<div class="view-title serif">Trash</div>' +
-    '<div class="view-sub">' + items.length + ' question' + (items.length===1?'':'s') + ' — anything here longer than ' + TRASH_RETENTION_DAYS + ' days is removed automatically.</div></div>';
+    '<div class="view-sub">' + items.length + ' question' + (items.length===1?'':'s') + ' across ' + groupList.length + ' deletion' + (groupList.length===1?'':'s') + ' — anything here longer than ' + TRASH_RETENTION_DAYS + ' days is removed automatically.</div></div>';
 
   if (!items.length) {
     html += '<div class="card empty-state"><span class="serif">Trash is empty</span>Deleted decks and sources land here for ' + TRASH_RETENTION_DAYS + ' days before being cleaned up automatically.</div>';
@@ -1147,20 +1186,20 @@ function renderTrashView(){
   html += '<div class="action-row"><button class="btn btn-ghost" data-action="empty-trash">' + icon('trash-2',14) + ' Empty trash</button></div>';
 
   html += '<div class="mcq-list">';
-  items.forEach(function(m){
-    var daysLeft = Math.max(0, TRASH_RETENTION_DAYS - Math.floor((Date.now() - m.trashedAt) / 86400000));
-    var qText = questionDisplayText(m);
-    var snippet = qText.replace(/\n/g,' ').slice(0, 140) + (qText.length > 140 ? '…' : '');
+  groupList.forEach(function(g){
+    var daysLeft = Math.max(0, TRASH_RETENTION_DAYS - Math.floor((Date.now() - g.trashedAt) / 86400000));
+    var groupIcon = g.type === 'source' ? 'book' : g.type === 'folder' ? 'folder' : 'notes';
+    var title = g.type === 'source' ? ('Source: ' + g.label) : g.type === 'folder' ? ('Folder: ' + g.label) : questionDisplayText(g.items[0]).replace(/\n/g,' ').slice(0, 140);
     html += '<div class="card mcq-row">' +
       '<div class="mcq-status-dot"></div>' +
-      '<div class="mcq-row-text">' + escapeHtml(snippet) +
+      '<div class="mcq-row-text">' + icon(groupIcon, 14) + ' ' + escapeHtml(title) +
       '<div class="mcq-row-meta">' +
-      '<span class="source-pill" style="background:' + colorForSource(m.source) + '">' + escapeHtml(m.source) + '</span>' +
+      '<span class="tag-pill">' + g.items.length + ' question' + (g.items.length===1?'':'s') + '</span>' +
       '<span class="tag-pill">' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left</span>' +
       '</div></div>' +
       '<div class="mcq-row-actions">' +
-      '<button class="mcq-icon-btn" data-action="restore-trash-item" data-id="' + m.id + '" title="Restore">' + icon('corner-up-right',14) + '</button>' +
-      '<button class="mcq-icon-btn" data-action="permanently-delete-trash-item" data-id="' + m.id + '" title="Delete forever">' + icon('trash-2',14) + '</button>' +
+      '<button class="mcq-icon-btn" data-action="restore-trash-group" data-group="' + escapeHtml(g.key) + '" title="Restore all ' + g.items.length + '">' + icon('corner-up-right',14) + '</button>' +
+      '<button class="mcq-icon-btn" data-action="permanently-delete-trash-group" data-group="' + escapeHtml(g.key) + '" title="Delete all ' + g.items.length + ' forever">' + icon('trash-2',14) + '</button>' +
       '</div></div>';
   });
   html += '</div>';
@@ -1838,7 +1877,14 @@ function renderAddSource(){
       '</div>';
   }
 
-  var sourceNames = Object.keys(state.sources);
+  /* Real bug found via a live report: this used to list EVERY registered source,
+     including ones with zero live questions left — meaning deleting a source's
+     last question left it sitting right here still, showing "0 MCQs," looking
+     exactly like the delete had silently failed even though it hadn't. Book
+     Shelf already got this exact fix; Manage Sources never did. Same reasoning
+     now applies here too — a source with nothing left in it has nothing left to
+     manage. */
+  var sourceNames = Object.keys(state.sources).filter(function(s){ return liveMcqs().some(function(m){ return m.source === s; }); });
   if (sourceNames.length) {
     html += '<div class="card section-block"><h3>Manage sources</h3>';
     sourceNames.forEach(function(s){
