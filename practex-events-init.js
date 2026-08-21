@@ -490,11 +490,23 @@ async function onClick(e){
        itself isn't reachable until this closes. */
     var libraryTotal = state.mcqs.length;
     showBlockingModal(renderImportProgressModal(0, libraryTotal), 'narrow');
+    importInFlight = true;
     try {
-      await saveLibrary(function(progress){ updateImportProgressModal(progress.completed, progress.total); });
+      /* Sources saved BEFORE the questions, deliberately reversed from the
+         order this used to run in. If something still manages to interrupt
+         between the two saves despite the blocking modal and the beforeunload
+         guard above (a crash, a force-quit, anything truly outside the page's
+         control), this ordering makes the failure mode the safe one: a
+         registered source with no questions under it yet, which the "hide
+         empty sources" fix elsewhere already makes invisible on Book Shelf
+         rather than confusing — instead of the old failure mode this was
+         actually reported with, questions that saved fine but whose source
+         never appeared as a visible book at all. */
       await saveSources();
+      await saveLibrary(function(progress){ updateImportProgressModal(progress.completed, progress.total); });
     } finally {
       syncInFlight = false;
+      importInFlight = false;
     }
 
     if (state.lastSaveHadPermanentConflict) {
@@ -1197,6 +1209,20 @@ async function showApp(){
     document.getElementById('loadingScreen').style.display = 'none';
     document.getElementById('appRoot').style.display = 'grid';
     await reconcilePausedSession();
+    /* Real, reproducible bug found via a live report: this fast path skipped
+       reconcileSources() entirely — the only thing that catches a question
+       whose source never got registered (e.g. an import interrupted between
+       saveLibrary() finishing and saveSources() finishing — the questions
+       themselves land fine, but the source never becomes a visible "book" in
+       Book Shelf). loadLibrary() (the real-boot path) already self-heals this
+       on every full load, but this fast path deliberately skips loadLibrary()
+       for speed — meaning a session stuck taking this path (which can be
+       indefinitely, since a reused tab keeps hitting it) never got the same
+       healing, and the missing source could look permanently gone even though
+       the questions were saved correctly the whole time. This check is cheap
+       (just scans the already-loaded state.mcqs in memory) so there's no
+       real cost to running it on every fast-path boot too, not just full ones. */
+    if (reconcileSources()) saveSources();
     bootCurrentPage();
     /* THE cross-device sync bug: this fast path skips loadLibrary() entirely for
        speed, which also means it skips the only thing that ever checks whether the
@@ -1335,6 +1361,26 @@ function bootCurrentPage(){
 var lastMouseDownOnBackdrop = false;
 document.addEventListener('mousedown', function(e){
   lastMouseDownOnBackdrop = !!(e.target && e.target.getAttribute && e.target.getAttribute('data-action') === 'modal-backdrop-close');
+});
+
+/* Guards against a real, reproducible bug: the in-app blocking import modal
+   (see confirm-import) stops someone clicking away to another screen mid-
+   import, but it can't stop the browser's OWN navigation controls — the back
+   button, closing the tab, or a hard refresh all happen entirely outside the
+   page's control. Any of those mid-import could interrupt the save sequence
+   between saveLibrary() (the questions) finishing and saveSources() (the
+   source registry) finishing — the questions land correctly, but the source
+   never becomes a visible "book," which is exactly what led to a duplicate
+   import (the person, seeing no source appear, assumed it hadn't worked and
+   tried again). importInFlight is set for the exact duration of that risky
+   window in confirm-import; while it's true, leaving triggers the browser's
+   own "are you sure?" confirmation, not a custom message (browsers don't allow
+   custom text here anymore) but enough to give a real chance to cancel. */
+var importInFlight = false;
+window.addEventListener('beforeunload', function(e){
+  if (!importInFlight) return;
+  e.preventDefault();
+  e.returnValue = '';
 });
 
 async function init(){
