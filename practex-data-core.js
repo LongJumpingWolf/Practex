@@ -896,6 +896,30 @@ function liveMcqs(){
   return state.mcqs.filter(function(m){ return !m.trashedAt; });
 }
 
+/* Gathers every distinct image hash already used ANYWHERE within one source —
+   question images, answer images, and note images alike — so a note can reuse
+   one of them instead of re-uploading a duplicate. This is genuinely linking,
+   not copying: pushing the same hash into a new note's images array just adds
+   another reference to the one already-stored/already-ImgBB-mirrored image,
+   the same way a question's own images/answerImages arrays already work when
+   multiple questions happen to share a hash. Newest-used-first, so recently
+   relevant images (most likely to be worth reusing) surface before older ones. */
+function collectImageHashesForSource(sourceName){
+  var seen = {};
+  var ordered = [];
+  var scoped = liveMcqs().filter(function(m){ return m.source === sourceName; });
+  // Newest additions first — addedAt descending — so recently-added questions'
+  // images (most likely relevant to whatever's being noted right now) surface first.
+  scoped.slice().sort(function(a, b){ return (b.addedAt || 0) - (a.addedAt || 0); }).forEach(function(m){
+    var hashes = (m.images || []).concat(m.answerImages || []);
+    (m.notes || []).forEach(function(n){ hashes = hashes.concat(n.images || []); });
+    hashes.forEach(function(h){
+      if (h && !seen[h]) { seen[h] = true; ordered.push(h); }
+    });
+  });
+  return ordered;
+}
+
 /* ================= Duplicate detection (max 3 copies of the same question) =================
    Deliberately allows UP TO 3 copies of the same question — repeated exposure to the
    same question is a genuine, intentional part of spaced-repetition practice, not a

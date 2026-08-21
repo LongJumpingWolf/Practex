@@ -348,6 +348,23 @@ async function onClick(e){
     if (noteFi) noteFi.click();
     return;
   }
+  if (action === 'toggle-note-existing-picker') {
+    if (state.pendingNoteDraft) {
+      state.pendingNoteDraft.showingPicker = !state.pendingNoteDraft.showingPicker;
+      renderNoteDraftImageGrid();
+    }
+    return;
+  }
+  if (action === 'pick-existing-note-image') {
+    if (state.pendingNoteDraft) {
+      var pickHash = el.getAttribute('data-hash');
+      if (pickHash && state.pendingNoteDraft.images.indexOf(pickHash) === -1) state.pendingNoteDraft.images.push(pickHash); /* linking, not re-uploading — the exact same stored/mirrored image, just referenced from one more place */
+      state.pendingNoteDraft.showingPicker = false;
+      renderNoteDraftImageGrid();
+      showToast('Image linked — reusing what\'s already stored, nothing re-uploaded.');
+    }
+    return;
+  }
   if (action === 'remove-note-draft-image') {
     if (state.pendingNoteDraft) {
       var rmHash2 = el.getAttribute('data-hash');

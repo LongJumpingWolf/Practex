@@ -615,13 +615,14 @@ function renderNotesSection(mcq){
 function openAddNoteModal(mcqId){
   var m = state.mcqs.find(function(x){ return x.id === mcqId; });
   if (!m) return;
-  state.pendingNoteDraft = { mcqId: mcqId, images: [] };
+  state.pendingNoteDraft = { mcqId: mcqId, images: [], showingPicker: false };
   var html = '<h3>Add a note</h3>';
   var noteQText = questionDisplayText(m);
   html += '<p class="view-sub" style="margin-bottom:12px;">' + escapeHtml(noteQText.replace(/\n/g,' ').slice(0,100)) + (noteQText.length > 100 ? '…' : '') + '</p>';
   html += '<div class="form-field"><textarea id="noteTextInput" rows="4" placeholder="A mnemonic, a correction, a clearer explanation than the one given — anything you want next time."></textarea></div>';
   html += '<div class="form-field"><label>Images (optional)</label>' +
     '<div class="mcq-image-grid" id="noteImageGrid"></div>' +
+    '<div id="noteExistingImagePicker"></div>' +
     '<input type="file" id="noteImageFileInput" accept="image/*" multiple style="display:none">' +
     '</div>';
   html += '<div class="action-row" style="margin-top:6px;margin-bottom:0;">' +
@@ -648,7 +649,30 @@ function renderNoteDraftImageGrid(){
       '</div>';
   }).join('');
   html += '<button class="mcq-image-add-tile" data-action="add-note-draft-image">' + icon('upload',18) + '<span>Add image</span></button>';
+  var noteM = state.mcqs.find(function(x){ return x.id === state.pendingNoteDraft.mcqId; });
+  var availableExisting = noteM ? collectImageHashesForSource(noteM.source).filter(function(h){ return imgs.indexOf(h) === -1; }) : [];
+  if (availableExisting.length) {
+    html += '<button class="mcq-image-add-tile" data-action="toggle-note-existing-picker">' + icon('image',18) + '<span>' + (state.pendingNoteDraft.showingPicker ? 'Hide' : 'Use existing') + '</span></button>';
+  }
   grid.innerHTML = html;
+
+  /* Reusing an image already used elsewhere in this source — genuinely linking
+     (the same stored hash, referenced again), not a new upload. Shown as its own
+     row beneath the main grid, only while toggled open, so it doesn't clutter the
+     common case (most notes probably don't need this). */
+  var pickerRoot = document.getElementById('noteExistingImagePicker');
+  if (pickerRoot) {
+    if (state.pendingNoteDraft.showingPicker && availableExisting.length) {
+      pickerRoot.innerHTML = '<div class="view-sub" style="margin:8px 0 6px;">Already used elsewhere in this source — click to reuse:</div>' +
+        '<div class="mcq-image-grid">' + availableExisting.map(function(hash){
+          return '<div class="mcq-image-thumb" data-action="pick-existing-note-image" data-hash="' + escapeHtml(hash) + '" style="cursor:pointer;" title="Reuse this image">' +
+            '<img data-hash-src="' + escapeHtml(hash) + '" alt="">' +
+            '</div>';
+        }).join('') + '</div>';
+    } else {
+      pickerRoot.innerHTML = '';
+    }
+  }
   hydrateImages();
 }
 async function attachImageToNoteDraft(file){
