@@ -719,6 +719,8 @@ function renderSettingsModalContent(){
     '</div>' +
     '<div class="settings-row" style="margin-top:10px;"><span>' + icon('trash-2',14) + ' Trash</span>' +
       '<button class="btn btn-ghost btn-sm" data-action="set-view" data-view="trash">' + trashedMcqs().length + ' item' + (trashedMcqs().length===1?'':'s') + ' — view</button></div>' +
+    '<div class="settings-row"><span>' + icon('flag',14) + ' Needs Review</span>' +
+      '<button class="btn btn-ghost btn-sm" data-action="set-view" data-view="needsreview">' + liveMcqs().filter(function(m){return m.needsReview;}).length + ' item' + (liveMcqs().filter(function(m){return m.needsReview;}).length===1?'':'s') + ' — view</button></div>' +
     '<div class="view-sub" style="margin-top:8px;margin-bottom:0;">Your library syncs to your account automatically — export is just for keeping an offline backup, or moving questions somewhere else on purpose. This exports everything; for just one subject or filtered set, use "Export this view" in the Library screen instead. Importing a backup file now lives on the Add Source screen.</div>' +
     '</div>';
 
@@ -943,6 +945,15 @@ function openDeleteDeckModal(pathKey){
 }
 
 /* ---------------- Edit MCQ modal ---------------- */
+/* Shown at the top of the edit modal for a flagged question — the review reason
+   right there where the person is already looking, plus the same "then and
+   there, add images if needed, approve" flow they asked for, rather than making
+   them bounce back to the Needs Review list to approve after fixing something. */
+function renderNeedsReviewBanner(m){
+  return '<div class="parse-err-list" style="border-color:var(--pen-amber,#D3B15C);margin-bottom:14px;">' + icon('flag',13) + ' Flagged for review' +
+    (m.reviewReason ? ': ' + escapeHtml(m.reviewReason) : ' (no specific reason given).') +
+    ' Fix what needs fixing below, add an image if that\'s what\'s missing, then Approve when you\'re satisfied.</div>';
+}
 function openEditModal(id){
   var m = state.mcqs.find(function(x){ return x.id === id; });
   if (!m) return;
@@ -955,12 +966,16 @@ function openEditModal(id){
      yet" beats a form that looks like it works and doesn't. */
   if (m.type === 'match' || m.type === 'sequence' || m.type === 'cutoff' || m.type === 'mnemonic') {
     var html2 = '<h3>Edit question</h3>';
+    if (m.needsReview) html2 += renderNeedsReviewBanner(m);
     html2 += '<p class="view-sub" style="margin-bottom:14px;">Editing ' + escapeHtml(m.type) + ' questions isn\'t supported in this view yet — this editor only knows the standard question/options/answer shape. For now, delete this question and re-paste a corrected version through Add Source.</p>';
-    html2 += '<div class="action-row" style="margin-bottom:0;"><button class="btn btn-ghost" data-action="close-modal">Close</button></div>';
+    html2 += '<div class="action-row" style="margin-bottom:0;">' +
+      (m.needsReview ? '<button class="btn btn-primary" data-action="approve-review-item" data-id="' + escapeHtml(m.id) + '">' + icon('check-circle',14) + ' Approve</button>' : '') +
+      '<button class="btn btn-ghost" data-action="close-modal">Close</button></div>';
     showRichModal(html2, 'narrow');
     return;
   }
   var html = '<h3>Edit question</h3>';
+  if (m.needsReview) html += renderNeedsReviewBanner(m);
   html += '<div class="form-field"><label>Question</label><textarea id="editQuestion" rows="4">' + escapeHtml(m.question) + '</textarea></div>';
   if (m.passage) {
     html += '<div class="form-field"><label>Passage</label><textarea id="editPassage" rows="3">' + escapeHtml(m.passage) + '</textarea></div>';
@@ -994,6 +1009,7 @@ function openEditModal(id){
   html += '<div class="form-field"><label>Tags (comma-separated)</label><input type="text" id="editTags" value="' + escapeHtml((m.tags||[]).join(', ')) + '"></div>';
   html += '<div class="action-row" style="margin-top:6px;margin-bottom:0;">' +
     '<button class="btn btn-primary" data-action="save-edit-mcq" data-id="' + m.id + '">Save changes</button>' +
+    (m.needsReview ? '<button class="btn btn-primary" data-action="approve-review-item" data-id="' + escapeHtml(m.id) + '">' + icon('check-circle',14) + ' Approve</button>' : '') +
     '<button class="btn btn-ghost" data-action="close-modal">Cancel</button></div>';
   showRichModal(html);
   state.editingMcqId = id;

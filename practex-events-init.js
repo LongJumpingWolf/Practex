@@ -429,6 +429,14 @@ async function onClick(e){
       reportHtml += '<div class="parse-err-list">' + result.errors.length + ' block(s) skipped:<br>' +
         result.errors.slice(0,15).map(function(er){ return '· ' + escapeHtml(er.message); }).join('<br>') + '</div>';
     }
+    /* Surfaced before import, not just after — someone deciding whether to import
+       right now benefits from knowing upfront that some of what they're about to
+       add needs a second look, not just discovering it later in the review queue. */
+    var flaggedCount = result.mcqs.filter(function(m){ return m.needsReview; }).length;
+    if (flaggedCount) {
+      reportHtml += '<div class="parse-err-list" style="border-color:var(--pen-amber,#D3B15C);">' + icon('flag',13) + ' ' + flaggedCount + ' question' + (flaggedCount===1?'':'s') +
+        ' flagged for review (illegible/uncertain source content) — still imported, just marked so you can find and fix ' + (flaggedCount===1?'it':'them') + ' afterward via Settings → Needs Review.</div>';
+    }
     /* Preview the duplicate check BEFORE committing, against the full picture (existing
        library + this batch) — same logic confirm-import actually applies, just shown
        ahead of time so the person knows what "Import N questions" will really do. */
@@ -532,6 +540,19 @@ async function onClick(e){
     return;
   }
 
+  if (action === 'approve-review-item') {
+    var apId = el.getAttribute('data-id');
+    var apM = state.mcqs.find(function(x){ return x.id === apId; });
+    if (apM) {
+      apM.needsReview = false;
+      apM.reviewReason = '';
+      state.hasUnsyncedChanges = true;
+      render();
+      saveLibrary();
+      showToast('Approved.');
+    }
+    return;
+  }
   if (action === 'restore-trash-item') {
     var restoreId = el.getAttribute('data-id');
     var restoreM = state.mcqs.find(function(x){ return x.id === restoreId; });
@@ -1263,7 +1284,26 @@ async function init(){
   /* Paste a screenshot (Ctrl/Cmd+V) straight into the Edit Question modal to attach it —
      bound once here rather than per modal-open, same reasoning as the click delegation
      above: re-binding on every openEditModal() call would stack duplicate listeners. */
+  /* Real bug found from a live report: pasted MCQ text sometimes vanished
+     entirely instead of appearing in the textarea. Root cause — the handler
+     below checked for ANY image item in the clipboard and unconditionally called
+     preventDefault() when found, discarding whatever text was ALSO in the same
+     clipboard payload. Many real copy sources put BOTH a text and an image
+     representation on the clipboard at once (PDF viewers, rich text from Word/
+     Docs, some screenshot/OCR tools) — so copying a block of MCQ text that
+     happened to have an image anywhere in the source selection would silently
+     eat the text and paste nothing. Text now always takes priority: if there's
+     any substantial text on the clipboard, this lets the default paste proceed
+     normally and doesn't touch the image at all — only a clipboard with NO real
+     text gets treated as a pure image paste. */
+  function clipboardHasSubstantialText(e){
+    try {
+      var t = (e.clipboardData.getData('text/plain') || e.clipboardData.getData('text') || '').trim();
+      return t.length > 0;
+    } catch(err) { return false; }
+  }
   document.addEventListener('paste', function(e){
+    if (clipboardHasSubstantialText(e)) return; /* let the default paste happen — text wins, never silently discarded for an incidental image on the same clipboard */
     if (state.editingMcqId) {
       var items = (e.clipboardData && e.clipboardData.items) || [];
       for (var i = 0; i < items.length; i++) {

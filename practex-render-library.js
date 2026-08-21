@@ -206,11 +206,28 @@ function parseLibraryText(raw, sourceOverride){
       }
 
       var newTags = [];
+      var newNeedsReview = false;
+      var newReviewReason = '';
+      /* Same flexible-position pattern as #TIER: for standard MCQ below — can appear
+         either side of #TAGS:. See the standard-MCQ block for the full reasoning;
+         this is the same feature extended to the 5 non-standard types, since
+         illegible/uncertain source content isn't unique to plain MCQs — a match
+         pair or a mnemonic letter can be just as hard to read off a scanned page. */
+      var tryParseNewTypeReview = function(){
+        if (i < lines.length && lines[i].trim().indexOf('#NEEDS_REVIEW:') === 0) {
+          var nrLine = lines[i].trim();
+          newReviewReason = nrLine.slice(nrLine.indexOf(':') + 1).trim();
+          newNeedsReview = true;
+          i++;
+        }
+      };
+      tryParseNewTypeReview();
       if (i < lines.length && lines[i].trim().indexOf('#TAGS:') === 0) {
         var ntl = lines[i].trim();
         newTags = ntl.slice(ntl.indexOf(':') + 1).split(',').map(function(s){return s.trim();}).filter(Boolean);
         i++;
       }
+      tryParseNewTypeReview();
       if (i < lines.length && lines[i].trim().indexOf('#END') === 0) { i++; }
 
       if (newQ) {
@@ -220,6 +237,8 @@ function parseLibraryText(raw, sourceOverride){
           subject: subject || 'Unsorted',
           chapterPath: chapterPath.length ? chapterPath.slice() : ['Unsorted'],
           tags: newTags,
+          needsReview: newNeedsReview, /* see #NEEDS_REVIEW: above — never silently drop illegible content, flag it for a real person to check instead */
+          reviewReason: newReviewReason,
           flagged: false,
           answerImages: [],
           notes: [],
@@ -404,6 +423,27 @@ function parseLibraryText(raw, sourceOverride){
       };
       tryParseTier();
 
+      /* #NEEDS_REVIEW: <reason> — optional, same flexible either-side-of-#TAGS
+         positioning as #TIER: above. Real workflow problem this solves: when
+         converting handwritten/scanned source material, illegible handwriting or
+         an unreadable image used to mean the safest thing was dropping that
+         question or section entirely — but that silently loses real content the
+         person actually wrote and wanted tested. This flags it instead: still
+         produce a best-effort question from what IS legible, mark it so it's
+         easy to find and fix after import rather than losing it outright. See
+         MASTER_PROMPT's conversion instructions for when to actually use this. */
+      var needsReview = false;
+      var reviewReason = '';
+      var tryParseReview = function(){
+        if (i < lines.length && lines[i].trim().indexOf('#NEEDS_REVIEW:') === 0) {
+          var nrLine = lines[i].trim();
+          reviewReason = nrLine.slice(nrLine.indexOf(':') + 1).trim();
+          needsReview = true;
+          i++;
+        }
+      };
+      tryParseReview();
+
       var tags = [];
       if (i < lines.length && lines[i].trim().indexOf('#TAGS') === 0) {
         var tl = lines[i].trim();
@@ -411,6 +451,7 @@ function parseLibraryText(raw, sourceOverride){
         i++;
       }
       tryParseTier();
+      tryParseReview();
 
       if (i < lines.length && lines[i].trim().indexOf('#END') === 0) { i++; }
 
@@ -430,6 +471,8 @@ function parseLibraryText(raw, sourceOverride){
           explanation: explanation,
           tags: tags,
           tier: tier, /* dedicated field, separate from tags — see #TIER: parsing above */
+          needsReview: needsReview,
+          reviewReason: reviewReason,
           flagged: false,
           images: qImageUrls,
           answerImages: aImageUrls,
@@ -1052,7 +1095,41 @@ function renderMain(){
   if (state.view === 'summary' && state.session) return renderSummary();
   if (state.view === 'bookshelf') return renderBookshelf();
   if (state.view === 'trash') return renderTrashView();
+  if (state.view === 'needsreview') return renderNeedsReviewView();
   return renderBrowse();
+}
+
+/* ---------------- Needs Review (questions flagged during import for illegible/
+   uncertain source content — see #NEEDS_REVIEW: in the parser and MASTER_PROMPT) ---------------- */
+function renderNeedsReviewView(){
+  var items = liveMcqs().filter(function(m){ return m.needsReview; }).slice().sort(function(a, b){ return (b.addedAt||0) - (a.addedAt||0); }); /* most recently imported first */
+  var html = '<div class="view-head"><div class="breadcrumb"><button class="breadcrumb-link" data-action="set-view" data-view="browse">' + icon('chevron-left',12) + ' Library</button></div>' +
+    '<div class="view-title serif">Needs Review</div>' +
+    '<div class="view-sub">' + items.length + ' question' + (items.length===1?'':'s') + ' flagged during import — illegible or uncertain source content that got a best-effort answer instead of being silently dropped.</div></div>';
+
+  if (!items.length) {
+    html += '<div class="card empty-state"><span class="serif">Nothing to review</span>Questions land here when a conversion flags something uncertain (illegible handwriting, an unclear image, an unreadable answer key) instead of dropping it. Fix it up, then Approve to clear it from this list.</div>';
+    return html;
+  }
+
+  html += '<div class="mcq-list">';
+  items.forEach(function(m){
+    var qText = questionDisplayText(m);
+    var snippet = qText.replace(/\n/g,' ').slice(0, 140) + (qText.length > 140 ? '…' : '');
+    html += '<div class="card mcq-row">' +
+      '<div class="mcq-status-dot" style="background:var(--pen-amber,#D3B15C);"></div>' +
+      '<div class="mcq-row-text">' + escapeHtml(snippet) +
+      '<div class="mcq-row-meta">' +
+      '<span class="source-pill" style="background:' + colorForSource(m.source) + '">' + escapeHtml(m.source) + '</span>' +
+      (m.reviewReason ? '<span class="tag-pill" style="background:var(--pen-amber-bg,#332A16);color:var(--pen-amber,#D3B15C);">' + escapeHtml(m.reviewReason) + '</span>' : '') +
+      '</div></div>' +
+      '<div class="mcq-row-actions">' +
+      '<button class="mcq-icon-btn" data-action="edit-mcq" data-id="' + m.id + '" title="Edit">' + icon('pencil',14) + '</button>' +
+      '<button class="mcq-icon-btn" data-action="approve-review-item" data-id="' + m.id + '" title="Approve — clear the review flag">' + icon('check-circle',14) + '</button>' +
+      '</div></div>';
+  });
+  html += '</div>';
+  return html;
 }
 
 /* ---------------- Trash (soft-deleted questions, 30-day retention) ---------------- */
@@ -1700,6 +1777,7 @@ var MASTER_PROMPT = "PRACTEX MCQ STANDARDIZATION PROMPT\n\n" +
 "#TAGS: <comma-separated>\n" +
 "#END\n" +
 "A card has no #OPTIONS, #ANSWER, or #EXPLANATION, and is never graded right or wrong - it's excluded from FSRS scheduling and correct/wrong stats entirely, the same way a Kardex flashcard is. Use this sparingly and only when 12-15 and the standard MCQ format genuinely don't fit - most content that could be a card is better served staying in Kardex, where it's already meant to live. Like 12-15, a card also supports #IMAGE_Q: on its own line right after #Q, but never #IMAGE_A:.\n\n" +
+"17. Illegible or unclear source material (common with scanned handwritten notes) - NEVER just drop a section because part of it can't be read with confidence. Losing content the person actually wrote and wanted tested is worse than an imperfect question. Instead: make your best-effort attempt at the question from whatever IS legible, and add a #NEEDS_REVIEW: <short reason> line (works in any question type, either right before or right after #TAGS:) explaining specifically what's uncertain - e.g. #NEEDS_REVIEW: handwriting for the third option is ambiguous, could be 'hyperplasia' or 'hyperkeratosis', or #NEEDS_REVIEW: the diagram this question depends on is illegible in the scan, or #NEEDS_REVIEW: answer key value not clearly legible, guessed C from context. This gets surfaced back to the person as a separate, clearly-flagged review queue after import - they fix it there with the real source in front of them, rather than never knowing content was silently lost. Be specific in the reason (what exactly is uncertain and what your best guess was based on) - a vague '#NEEDS_REVIEW: unclear' gives nothing to act on. Only use this for genuine illegibility/ambiguity in the source itself, not for routine uncertainty about which tier or chapter something belongs in.\n\n" +
 "=== TABLE RULES ===\n" +
 "Use standard markdown pipe tables only, inside a #Q or #EXPLANATION body:\n" +
 "| Header 1 | Header 2 |\n" +
