@@ -994,11 +994,15 @@ function renderBookshelf(){
   html += '<div class="book-shelf-grid">';
   sourceNames.forEach(function(name){
     var count = countBySource[name] || 0;
-    var cover = state.sources[name] && state.sources[name].coverImage;
+    var src = state.sources[name] || {};
+    var coverUrl = src.coverImageUrl; /* pasted link — rendered directly, never goes through ImgBB */
+    var coverHash = src.coverImage;   /* uploaded file — goes through the same ImgBB relay as question images */
     var color = colorForSource(name);
     html += '<div class="book-card" data-action="open-book" data-source="' + escapeHtml(name) + '">';
-    if (cover) {
-      html += '<div class="book-cover has-image"><img data-hash-src="' + escapeHtml(cover) + '" alt=""></div>';
+    if (coverUrl) {
+      html += '<div class="book-cover has-image"><img src="' + escapeHtml(coverUrl) + '" alt="" loading="lazy"></div>';
+    } else if (coverHash) {
+      html += '<div class="book-cover has-image"><img data-hash-src="' + escapeHtml(coverHash) + '" alt=""></div>';
     } else {
       html += '<div class="book-cover" style="background:' + color + ';"><span class="book-cover-title">' + escapeHtml(name) + '</span></div>';
     }
@@ -1150,6 +1154,29 @@ function renderSearchBar(){
     '</div>';
 }
 
+/* Was a single generic "Question list" tag on every leaf chapter card regardless of
+   what's actually in it — replaced with a real breakdown of the question TYPES
+   present, since a chapter mixing standard MCQs with a match-the-following or a
+   flashcard looked identical to one that was pure MCQ. Shows one small pill per
+   distinct type actually present (not per question — a chapter with 20 MCQs and
+   1 match still shows just "MCQ" + "Match", not 21 pills), in a fixed, predictable
+   order so the same chapter always lists its types the same way between renders. */
+var QUESTION_TYPE_LABELS = { undefined: 'MCQ', match: 'Match', sequence: 'Sequence', cutoff: 'Cutoff', mnemonic: 'Mnemonic', card: 'Flashcard' };
+var QUESTION_TYPE_ORDER = ['undefined', 'match', 'sequence', 'cutoff', 'mnemonic', 'card'];
+function renderQuestionTypeTags(qs){
+  if (!qs.length) return '<span class="deck-type-tag leaf" title="No questions logged here yet">' + icon('list',11) + ' Empty</span>';
+  var present = {};
+  qs.forEach(function(m){ present[m.type || 'undefined'] = true; });
+  var types = QUESTION_TYPE_ORDER.filter(function(t){ return present[t]; });
+  /* Wrapped in its own flex container with a real gap — the tags themselves are
+     inline-flex (for their own icon+text layout), which doesn't produce any spacing
+     between ADJACENT tags on its own; joining the HTML strings with '' would render
+     them touching with zero gap otherwise. */
+  return '<span class="deck-type-tag-row">' + types.map(function(t){
+    return '<span class="deck-type-tag leaf" title="Opens straight to its question list">' + escapeHtml(QUESTION_TYPE_LABELS[t]) + '</span>';
+  }).join('') + '</span>';
+}
+
 function renderBrowse(){
   var pausedHtml='';
   if(state.pausedSession){
@@ -1273,7 +1300,7 @@ function renderChapterGrid(tree, node){
     var childCount = Object.keys(child.children).length;
     var typeTag = childHasKids
       ? '<span class="deck-type-tag folder" title="Opens another set of chapters">' + icon('folder',11) + ' ' + childCount + ' chapter' + (childCount===1?'':'s') + '</span>'
-      : '<span class="deck-type-tag leaf" title="Opens straight to its question list">' + icon('list',11) + ' Question list</span>';
+      : renderQuestionTypeTags(qs);
 
     html += '<div class="chapter-card' + (asleep ? ' asleep' : '') + (childHasKids ? ' is-folder' : ' is-leaf') + '" data-action="select-node" data-path="' + escapeHtml(pathKey) + '">';
     html += '<div class="chapter-card-toolbar">';

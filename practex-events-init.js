@@ -129,6 +129,13 @@ async function onClick(e){
     return;
   }
   if (action === 'set-book-cover') { setBookCover(el.getAttribute('data-source')); return; }
+  if (action === 'set-book-cover-upload') { openBookCoverFilePicker(el.getAttribute('data-source')); return; }
+  if (action === 'confirm-book-cover-link') {
+    var urlInput = document.getElementById('bookCoverUrlInput');
+    attachBookCoverUrl(el.getAttribute('data-source'), urlInput ? urlInput.value : '');
+    return;
+  }
+  if (action === 'remove-book-cover') { removeBookCover(el.getAttribute('data-source')); return; }
   if (action === 'sign-out') { signOutUser(); return; }
   if (action === 'google-sign-in') { signInWithGoogle(); return; }
   if (action === 'start-queue-preview') { state.view = 'queuepreview'; state.sidebarOpen = false; render(); return; }

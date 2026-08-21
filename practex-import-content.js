@@ -351,7 +351,32 @@ async function attachImageToMcq(mcqId, file, field){
    reopened repeatedly for the same question); a temporary input created, clicked,
    and left to be garbage-collected is simpler here since this only ever fires once
    per click. */
+/* Book shelf cover images — file upload already existed and goes through the same
+   ImgBB relay as question images (storeImageFromFile below). This adds the missing
+   second path: pasting a direct image link, stored separately from the ImgBB-hash
+   path since a pasted URL is never uploaded anywhere — it's rendered with a plain
+   <img src>, which needs no CORS handling at all (that only matters for fetching
+   raw bytes, never for basic display), so there's no reason to route it through
+   ImgBB or worry about the source host's CORS policy. */
 function setBookCover(sourceName){
+  var existing = state.sources[sourceName] || {};
+  var hasCover = !!(existing.coverImage || existing.coverImageUrl);
+  var html = '<h3>Set cover image</h3>';
+  html += '<p class="view-sub" style="margin-bottom:14px;">For "' + escapeHtml(sourceName) + '"</p>';
+  html += '<div class="form-field"><label>Paste an image link</label>' +
+    '<input type="text" id="bookCoverUrlInput" placeholder="https://..." value="' + escapeHtml(existing.coverImageUrl || '') + '"></div>';
+  html += '<div class="action-row" style="margin-top:0;margin-bottom:14px;">' +
+    '<button class="btn btn-primary" data-action="confirm-book-cover-link" data-source="' + escapeHtml(sourceName) + '">Use this link</button></div>';
+  html += '<div class="view-sub" style="text-align:center;margin:4px 0 14px;">or</div>';
+  html += '<div class="action-row" style="margin-top:0;margin-bottom:' + (hasCover ? '14px' : '0') + ';">' +
+    '<button class="btn btn-ghost" data-action="set-book-cover-upload" data-source="' + escapeHtml(sourceName) + '">' + icon('upload',14) + ' Upload a file instead</button></div>';
+  if (hasCover) {
+    html += '<div class="action-row" style="margin-top:0;margin-bottom:0;">' +
+      '<button class="btn btn-danger" data-action="remove-book-cover" data-source="' + escapeHtml(sourceName) + '">' + icon('trash-2',14) + ' Remove current cover</button></div>';
+  }
+  showRichModal(html, 'narrow');
+}
+function openBookCoverFilePicker(sourceName){
   var input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/*';
@@ -361,6 +386,26 @@ function setBookCover(sourceName){
   });
   input.click();
 }
+function attachBookCoverUrl(sourceName, url){
+  url = (url || '').trim();
+  if (!/^https?:\/\//i.test(url)) { showToast('That doesn\'t look like a real link — needs to start with http:// or https://'); return; }
+  if (!state.sources[sourceName]) state.sources[sourceName] = { color: colorForSource(sourceName) };
+  state.sources[sourceName].coverImageUrl = url;
+  delete state.sources[sourceName].coverImage; /* a source has ONE cover — switching to a link retires whichever uploaded-file cover was there before, rather than leaving an orphaned hash nothing points at */
+  closeModal();
+  render();
+  showToast('Cover updated.');
+  saveSources();
+}
+function removeBookCover(sourceName){
+  if (!state.sources[sourceName]) return;
+  delete state.sources[sourceName].coverImage;
+  delete state.sources[sourceName].coverImageUrl;
+  closeModal();
+  render();
+  showToast('Cover removed.');
+  saveSources();
+}
 async function attachBookCover(sourceName, file){
   if (!file || file.type.indexOf('image/') !== 0) { showToast('That file isn\'t an image.'); return; }
   showToast('Uploading cover…');
@@ -368,6 +413,8 @@ async function attachBookCover(sourceName, file){
     var hash = await storeImageFromFile(file);
     if (!state.sources[sourceName]) state.sources[sourceName] = { color: colorForSource(sourceName) };
     state.sources[sourceName].coverImage = hash;
+    delete state.sources[sourceName].coverImageUrl; /* a source has ONE cover — switching to an upload retires whichever pasted link was there before */
+    closeModal();
     render();
     showToast('Cover updated.');
     saveSources();
