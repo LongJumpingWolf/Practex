@@ -399,14 +399,21 @@ function openPlanSetupModal(scopeType, scopeValue){
   showRichModal(html, 'narrow');
 }
 
-function setBookCover(sourceName){
+function setBookCover(sourceName, errorMsg){
   var existing = state.sources[sourceName] || {};
   var hasCover = !!(existing.coverImage || existing.coverImageUrl);
   var html = '<h3>Set cover image</h3>';
   html += '<p class="view-sub" style="margin-bottom:14px;">For "' + escapeHtml(sourceName) + '"</p>';
+  if (errorMsg) {
+    /* Visible right in the modal, not just a toast — a toast is too easy to miss,
+       especially if the browser console is also full of noise from the fetch
+       failure itself (CORS errors, and sometimes extension noise unrelated to this
+       app at all) at the exact same moment. */
+    html += '<div class="parse-err-list" style="margin-bottom:14px;">' + escapeHtml(errorMsg) + '</div>';
+  }
   html += '<div class="form-field"><label>Paste an image link</label>' +
     '<input type="text" id="bookCoverUrlInput" placeholder="https://..."></div>';
-  html += '<div class="view-sub" style="margin-top:-6px;margin-bottom:10px;">Fetched once and hosted on our end from then on — not left depending on that link staying up.</div>';
+  html += '<div class="view-sub" style="margin-top:-6px;margin-bottom:10px;">Fetched once and hosted on our end from then on — not left depending on that link staying up. Some sites block this though (a browser security rule, not something we can work around) — if a link fails, the upload option below always works.</div>';
   html += '<div class="action-row" style="margin-top:0;margin-bottom:14px;">' +
     '<button class="btn btn-primary" data-action="confirm-book-cover-link" data-source="' + escapeHtml(sourceName) + '">Fetch &amp; use this link</button></div>';
   html += '<div class="view-sub" style="text-align:center;margin:4px 0 14px;">or</div>';
@@ -459,11 +466,17 @@ async function attachBookCoverUrl(sourceName, url){
     saveSources();
   } catch (err) {
     console.error('attachBookCoverUrl:', err);
-    /* Most likely cause: the source site blocks cross-origin reads of its images
-       (a real, common restriction some hosts apply) — not something fixable from
-       here. Downloading the file yourself and using "Upload a file instead" sidesteps
-       this entirely, since a local file never needs a cross-origin fetch at all. */
-    showToast('Couldn\'t fetch that image to host it here — the source site may be blocking it. Try downloading it and using "Upload a file instead."');
+    /* Two distinct failure modes get two distinct, accurate messages — a generic
+       "the site is blocking this" explanation would be actively wrong for "you
+       pasted a webpage link instead of an image link" and would send someone
+       toward the wrong fix (retrying "Upload a file" with nothing to upload).
+       Shown inline in the modal (see setBookCover's errorMsg param), not just a
+       toast — a toast is too easy to lose in a screen full of the browser's own
+       CORS console noise from the failed fetch itself. */
+    var msg = err && err.message === 'not an image'
+      ? 'That link doesn\'t point to an actual image file — check it opens directly to a picture, not a webpage.'
+      : 'Couldn\'t fetch that image — the site it\'s hosted on is likely blocking outside access to it (a browser security rule, not something fixable here). Try "Upload a file instead" below.';
+    setBookCover(sourceName, msg);
   }
 }
 function removeBookCover(sourceName){
