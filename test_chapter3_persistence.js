@@ -7,9 +7,9 @@ const path = require('path');
 // something a synchronous try/catch around eval() can catch. Expected and harmless:
 // every assertion in this file runs and reports before init()'s async chain gets to
 // that point. Swallow it so the suite's real pass/fail is what determines exit code.
-process.on('unhandledRejection', () => {});
+process.on('unhandledRejection', (reason) => { console.error('FATAL: unhandled rejection —', reason && reason.stack ? reason.stack : reason); process.exitCode = 1; process.exit(1); });
 
-const APP_DIR = '/home/claude/practex_final';
+const APP_DIR = __dirname; // was hardcoded to a past session's path — tests live alongside the source, see HANDOFF.md
 const FILES = [
   'practex-data-core.js',
   'practex-import-content.js',
@@ -19,7 +19,7 @@ const FILES = [
 ];
 
 function freshWindow() {
-  const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="appRoot"></div><div id="loadingScreen"></div></body></html>`,
+  const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="appRoot"></div><div id="toast"></div><div id="loadingScreen"></div><div id="authGate"></div><div id="syncStatusPill"></div></body></html>`,
     { runScripts: 'outside-only', url: 'https://example.com/' });
   const { window } = dom;
   global.window = window;

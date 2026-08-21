@@ -1,7 +1,7 @@
 const { JSDOM } = require('jsdom');
 const fs = require('fs');
 
-const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="appRoot"></div></body></html>`,
+const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="appRoot"></div><div id="toast"></div><div id="loadingScreen"></div><div id="authGate"></div><div id="syncStatusPill"></div></body></html>`,
   { runScripts: 'outside-only', url: 'https://example.com/' });
 const { window } = dom;
 global.window = window;
@@ -11,8 +11,19 @@ global.localStorage = { getItem(){return null;}, setItem(){}, removeItem(){} };
 window.localStorage = global.localStorage;
 global.fetch = async () => ({ ok: false, json: async () => ({}) });
 
-let src = fs.readFileSync('/home/claude/extracted_script_testable.js', 'utf8');
-try { window.eval(src); } catch (e) { console.log('(boot-time error suppressed):', e.message); }
+// Was hardcoded to '/home/claude/extracted_script_testable.js' — a pre-file-split
+// relic that predates the current 5-file MPA architecture and doesn't exist in this
+// delivery at all. Concatenated the same way every other test in this suite does.
+const path = require('path');
+const FILES = ['practex-data-core.js','practex-import-content.js','practex-render-library.js','practex-learning-practice.js','practex-events-init.js'];
+let src = FILES.map(n => fs.readFileSync(path.join(__dirname, n), 'utf8')).join('\n');
+let loadFailed = false;
+try {
+  window.eval(src);
+} catch (e) {
+  console.error('LOAD ERROR:', e.message);
+  loadFailed = true;
+}
 
 function balancedDivs(html) {
   const opens = (html.match(/<div\b/g) || []).length;
@@ -84,4 +95,4 @@ report('unanswered', window.renderMnemonicBody(mnemQ, baseSession(), false, null
 report('revealed, not yet self-graded', window.renderMnemonicBody(mnemQ, baseSession({selected:'my guess',revealed:true}), false, null, true));
 
 console.log('\n' + (allPass ? '=== ALL RENDER TESTS PASSED (no throws, balanced markup) ===' : '=== SOME RENDER TESTS FAILED ==='));
-process.exit(allPass ? 0 : 1);
+process.exit((allPass && !loadFailed) ? 0 : 1);

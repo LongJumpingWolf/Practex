@@ -1,16 +1,7 @@
 const { JSDOM } = require('jsdom');
 const fs = require('fs');
 
-process.on('uncaughtException', function(e){
-  // Familiar boot-noise from this test suite's pattern — the full combined script's
-  // own async boot sequence sometimes touches DOM elements (loadingScreen, etc) that
-  // don't exist in this minimal harness. Harmless, already established as ignorable
-  // elsewhere in this project's tests.
-  if (String(e && e.message).indexOf('reading') !== -1) return;
-  throw e;
-});
-
-const dom = new JSDOM(`<div id="appRoot"></div><div id="toast"></div><div id="modalRoot"></div>`,
+const dom = new JSDOM(`<div id="appRoot"></div><div id="toast"></div><div id="modalRoot"></div><div id="loadingScreen"></div><div id="authGate"></div><div id="syncStatusPill"></div>`,
   { runScripts: 'outside-only', url: 'https://example.com/' });
 const { window } = dom;
 global.window = window;
@@ -19,7 +10,7 @@ global.crypto = { subtle: { digest: async () => new ArrayBuffer(32) } };
 global.fetch = async () => ({ ok: false, json: async () => ({}) });
 
 const names = ['practex-data-core.js','practex-import-content.js','practex-render-library.js','practex-learning-practice.js','practex-events-init.js'];
-const combined = names.map(n => fs.readFileSync(`/home/claude/practex_final/${n}`, 'utf8')).join('\n');
+const combined = names.map(n => fs.readFileSync(require("path").join(__dirname, n), 'utf8')).join('\n');
 const expose = `
 window.setBookCover = setBookCover;
 window.attachBookCoverUrl = attachBookCoverUrl;
@@ -27,7 +18,12 @@ window.removeBookCover = removeBookCover;
 window.attachBookCover = attachBookCover;
 window.renderBookshelf = renderBookshelf;
 `;
-try { window.eval(combined + '\n' + expose); } catch (e) {}
+try {
+  window.eval(combined + '\n' + expose);
+} catch (e) {
+  console.error('LOAD ERROR:', e.message);
+  process.exitCode = 1;
+}
 
 let failures = 0;
 function assert(label, cond, extra) {
@@ -126,5 +122,5 @@ console.log('\n=== renderBookshelf(): render priority — link cover, hash cover
 console.log('\n' + (failures === 0
   ? '=== COVER IMAGE (LINK + IMGBB) FEATURE VERIFIED ==='
   : '=== ' + failures + ' FAILURE(S) — see above ==='));
-process.exit(failures === 0 ? 0 : 1);
+process.exit(failures === 0 && process.exitCode !== 1 ? 0 : 1);
 }

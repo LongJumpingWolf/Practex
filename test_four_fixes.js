@@ -10,7 +10,7 @@ global.crypto = { subtle: { digest: async () => new ArrayBuffer(32) } };
 global.fetch = async () => ({ ok: false, json: async () => ({}) });
 
 const names = ['practex-data-core.js','practex-import-content.js','practex-render-library.js','practex-learning-practice.js','practex-events-init.js'];
-const combined = names.map(n => fs.readFileSync(`/home/claude/practex_final/${n}`, 'utf8')).join('\n');
+const combined = names.map(n => fs.readFileSync(require("path").join(__dirname, n), 'utf8')).join('\n');
 try { window.eval(combined); } catch (e) {}
 
 let localStore = {};

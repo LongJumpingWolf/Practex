@@ -2,9 +2,10 @@ const { JSDOM } = require('jsdom');
 const fs = require('fs');
 const path = require('path');
 
-process.on('unhandledRejection', () => {});
+process.on('unhandledRejection', (reason) => { console.error('FATAL: unhandled rejection —', reason && reason.stack ? reason.stack : reason); process.exitCode = 1; process.exit(1); });
 
-const APP_DIR = '/home/claude/practex_final';
+let loadFailed = false; // set if any app file fails to eval — see the load-error catch below
+const APP_DIR = __dirname; // was hardcoded to a past session's path — tests live alongside the source, see HANDOFF.md
 const FILES = [
   'practex-data-core.js',
   'practex-import-content.js',
@@ -77,7 +78,7 @@ function newDevice(deviceId, url) {
   global.localStorage = win.localStorage; global.sessionStorage = win.sessionStorage;
 
   FILES.forEach(name => {
-    try { win.eval(fs.readFileSync(path.join(APP_DIR, name), 'utf8')); } catch (e) {}
+    try { win.eval(fs.readFileSync(path.join(APP_DIR, name), 'utf8')); } catch (e) { console.error('LOAD ERROR in ' + name + ': ' + e.message); loadFailed = true; }
   });
   win.supabaseClient = makeFakeSupabase();
   // No real IndexedDB in this harness — stub the mirror with a per-device in-memory
@@ -106,9 +107,12 @@ function freshState(overrides) {
     mcqs: [], sources: {}, learningMode: { enabled: false }, darkMode: false,
     streak: { count: 0, lastDate: null }, fsrsCardExpanded: true, sleepingSubjects: {},
     autoSleepEnabled: true, autoSleepStreak: 4, emptyFolders: [], hasUnsyncedChanges: false,
-    pausedSession: null, expanded: {},
+    pausedSession: null, expanded: {}, filters: { search: '' },
   }, overrides || {});
 }
+let failures = 0; // was never declared in this file at all — the final summary line
+                   // has been throwing ReferenceError on every run, silently swallowed
+                   // by the old blanket unhandledRejection handler until now
 function assert(label, cond, extra) {
   console.log((cond ? 'PASS' : 'FAIL') + '  ' + label + (extra ? '  ' + extra : ''));
   if (!cond) failures++;
@@ -205,7 +209,7 @@ console.log('\n=== REGRESSION: mid-session, sync should push but must NOT pull (
 }
 
 console.log('\n' + (failures === 0 ? '=== ALL SYNC FIX TESTS PASSED ===' : '=== ' + failures + ' TEST(S) FAILED — see above ==='));
-process.exitCode = failures === 0 ? 0 : 1;
+process.exitCode = (failures === 0 && !loadFailed) ? 0 : 1;
 setTimeout(() => process.exit(process.exitCode), 150);
 
 })();

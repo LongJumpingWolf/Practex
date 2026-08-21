@@ -1,7 +1,7 @@
 const { JSDOM } = require('jsdom');
 const fs = require('fs');
 
-const dom = new JSDOM(`<div id="appRoot"></div><div id="toast"></div><div id="modalRoot"></div>`,
+const dom = new JSDOM(`<div id="appRoot"></div><div id="toast"></div><div id="modalRoot"></div><div id="loadingScreen"></div><div id="authGate"></div><div id="syncStatusPill"></div>`,
   { runScripts: 'outside-only', url: 'https://example.com/' });
 const { window } = dom;
 global.window = window;
@@ -9,8 +9,13 @@ global.document = window.document;
 global.crypto = { subtle: { digest: async () => new ArrayBuffer(32) } };
 
 const names = ['practex-data-core.js','practex-import-content.js','practex-render-library.js','practex-learning-practice.js','practex-events-init.js'];
-const combined = names.map(n => fs.readFileSync(`/home/claude/practex_final/${n}`, 'utf8')).join('\n');
-try { window.eval(combined); } catch (e) {}
+const combined = names.map(n => fs.readFileSync(require("path").join(__dirname, n), 'utf8')).join('\n');
+try {
+  window.eval(combined);
+} catch (e) {
+  console.error('LOAD ERROR:', e.message);
+  process.exitCode = 1;
+}
 
 let failures = 0;
 function assert(label, cond, extra) {
@@ -52,7 +57,12 @@ console.log('\n=== Graceful failure: a CORS-blocked or unreachable source fails 
 
   window.attachBookCoverUrl('Practex Sample Content', 'https://blocked-host.example/cover.jpg').then(() => {
     assert('a fetch failure does NOT silently store the raw link as a fallback', !window.state.sources['Practex Sample Content'].coverImageUrl && !window.state.sources['Practex Sample Content'].coverImage);
-    assert('a clear, honest error message is shown, suggesting the file-upload alternative', toastMsg && toastMsg.indexOf('blocking') !== -1 && toastMsg.indexOf('Upload a file') !== -1, toastMsg);
+    /* This error is shown inline in the modal, not as a toast — see the comment on
+       attachBookCoverUrl's catch block: "a toast is too easy to lose in a screen
+       full of the browser's own CORS console noise". toastMsg only ever holds the
+       earlier in-progress "Fetching and hosting…" message on this path, by design. */
+    var modalHtml = document.getElementById('modalRoot').innerHTML;
+    assert('a clear, honest error message is shown in the modal, suggesting the file-upload alternative', modalHtml.indexOf('blocking') !== -1 && modalHtml.indexOf('Upload a file') !== -1, modalHtml);
     part3();
   });
 }
@@ -90,7 +100,7 @@ console.log('\n=== REGRESSION: URL validation still runs before any fetch attemp
     console.log('\n' + (failures === 0
       ? '=== COVER LINKS NOW GENUINELY GO THROUGH IMGBB — FIXED AS REQUESTED ==='
       : '=== ' + failures + ' FAILURE(S) — see above ==='));
-    process.exit(failures === 0 ? 0 : 1);
+    process.exit(failures === 0 && process.exitCode !== 1 ? 0 : 1);
   });
 }
 }

@@ -1077,7 +1077,7 @@ function renderSidebar(){
     html += '<div><div style="font-size:18px;font-weight:700">' + ls.tomorrow + '</div><div style="font-size:10px;opacity:0.8;">Tomorrow</div></div>';
     html += '</div>';
     html += '<div style="border-top:1px solid rgba(255,255,255,0.15);padding-top:6px;font-size:11px;display:flex;justify-content:space-between;opacity:0.9;">' +
-      '<span>Tracked</span><strong>' + state.mcqs.length + ' Questions</strong></div>';
+      '<span>Tracked</span><strong>' + liveMcqs().length + ' Questions</strong></div>';
     html += '</div>';
   }
   html += '</div>';
@@ -1094,7 +1094,7 @@ function renderSidebar(){
   }
   html += '</div>';
 
-  html += '<div class="side-footer">' + state.mcqs.length + ' MCQs logged from ' + Object.keys(state.sources).length + ' source' + (Object.keys(state.sources).length===1?'':'s') + '.</div>';
+  html += '<div class="side-footer">' + liveMcqs().length + ' MCQs logged from ' + Object.keys(state.sources).length + ' source' + (Object.keys(state.sources).length===1?'':'s') + '.</div>';
   html += '</aside>';
   return html;
 }
@@ -1769,7 +1769,7 @@ function renderAddSource(){
     '<div class="action-row"><button class="btn btn-ghost" data-action="import-library">' + icon('upload',14) + ' Choose a library file…</button></div>' +
     '</div>';
 
-  if (state.mcqs.length) {
+  if (liveMcqs().length) {
     var sourceOptions = Object.keys(state.sources).map(function(s){ return '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + '</option>'; }).join('');
     html += '<div class="card section-block">' +
       '<h3>4. Bulk-attach images (optional)</h3>' +
@@ -1779,7 +1779,7 @@ function renderAddSource(){
       'jpg, png, gif, and webp are all fine; multiple images per question/side work too (add <code class="mono">_1</code>, <code class="mono">_2</code> etc. before the extension).</div>' +
       '<div class="field-row"><div class="field"><label>Download ID sheet for</label>' +
       '<select id="idSheetSourceSelect" style="width:100%;padding:8px 10px;border:1px solid var(--rule-strong);border-radius:6px;background:var(--card);color:var(--ink);font-size:13.5px;">' +
-      '<option value="">All questions (' + state.mcqs.length + ')</option>' + sourceOptions + '</select></div></div>' +
+      '<option value="">All questions (' + liveMcqs().length + ')</option>' + sourceOptions + '</select></div></div>' +
       '<div class="action-row"><button class="btn btn-ghost" data-action="download-id-sheet">' + icon('download',14) + ' Download ID sheet (CSV)</button></div>' +
       '<div class="field-row" style="margin-top:14px;"><div class="field"><label>Images ZIP</label>' +
       '<input type="file" id="imageZipInput" accept=".zip,application/zip"></div></div>' +

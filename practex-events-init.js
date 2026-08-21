@@ -704,10 +704,23 @@ async function onClick(e){
     state.mcqs = [];
     state.sources = {};
     state.selectedPath = null;
+    /* Same race as empty-trash/permanently-delete — this is actually the single most
+       destructive action in the app (the ENTIRE library, not just Trash), so it's the
+       last place this guard should be missing. Without it, a concurrent auto-sync tick
+       (retryUnsyncedChangesIfAny runs every 30s) can pull the pre-clear library straight
+       back from Supabase before deleteMcqRows/saveSources actually land, resurrecting
+       everything the person just confirmed deleting. syncInFlight is the guard
+       reconcileWithCloud() already respects and bails out on entirely. */
+    syncInFlight = true;
+    state.hasUnsyncedChanges = true;
     showToast('Clearing your library…');
     render();
-    await deleteMcqRows(allMcqIds); /* same reasoning as delete-source above — upsert can't remove rows */
-    await saveSources();
+    try {
+      await deleteMcqRows(allMcqIds); /* same reasoning as delete-source above — upsert can't remove rows */
+      await saveSources();
+    } finally {
+      syncInFlight = false;
+    }
     showToast('Library cleared.');
     return;
   }

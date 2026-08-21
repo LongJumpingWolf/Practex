@@ -795,7 +795,7 @@ function renderSettingsModalContent(){
 
   html += '<div class="settings-section"><h4>Progress</h4>' +
     '<div class="settings-row"><span class="icon-inline">' + icon('flame',14) + ' Current streak</span><strong>' + (state.streak.count||0) + ' day' + (state.streak.count===1?'':'s') + '</strong></div>' +
-    '<div class="settings-row"><span>Questions tracked</span><strong>' + state.mcqs.length + '</strong></div>' +
+    '<div class="settings-row"><span>Questions tracked</span><strong>' + liveMcqs().length + '</strong></div>' +
     '</div>';
 
   var currentLanding = 'browse';

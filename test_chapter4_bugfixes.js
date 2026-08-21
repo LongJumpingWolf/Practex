@@ -2,9 +2,10 @@ const { JSDOM } = require('jsdom');
 const fs = require('fs');
 const path = require('path');
 
-process.on('unhandledRejection', () => {});
+process.on('unhandledRejection', (reason) => { console.error('FATAL: unhandled rejection —', reason && reason.stack ? reason.stack : reason); process.exitCode = 1; process.exit(1); });
 
-const APP_DIR = '/home/claude/practex_final';
+let loadFailed = false; // set if any app file fails to eval — see the load-error catch below
+const APP_DIR = __dirname; // was hardcoded to a past session's path — tests live alongside the source, see HANDOFF.md
 const FILES = [
   'practex-data-core.js',
   'practex-import-content.js',
@@ -30,7 +31,7 @@ const persistentSessionStorage = {
 };
 
 function newWindow(url) {
-  const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="appRoot"></div><div id="toast"></div></body></html>`,
+  const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="appRoot"></div><div id="toast"></div><div id="loadingScreen"></div><div id="authGate"></div><div id="syncStatusPill"></div></body></html>`,
     { runScripts: 'outside-only', url });
   const win = dom.window;
   global.window = win; global.document = win.document;
@@ -41,7 +42,7 @@ function newWindow(url) {
   global.localStorage = persistentLocalStorage;
   global.sessionStorage = persistentSessionStorage;
   FILES.forEach(name => {
-    try { win.eval(fs.readFileSync(path.join(APP_DIR, name), 'utf8')); } catch (e) { /* expected boot noise, see earlier chapters' tests */ }
+    try { win.eval(fs.readFileSync(path.join(APP_DIR, name), 'utf8')); } catch (e) { console.error('LOAD ERROR in ' + name + ': ' + e.message); loadFailed = true; }
   });
   return win;
 }
@@ -164,5 +165,5 @@ console.log('\n=== REGRESSION: saveLibrary() and saveUserSettings() keep caches 
 }
 
 console.log('\n' + (failures === 0 ? '=== ALL BUGFIX TESTS PASSED ===' : '=== ' + failures + ' TEST(S) FAILED — see above ==='));
-process.exitCode = failures === 0 ? 0 : 1;
+process.exitCode = (failures === 0 && !loadFailed) ? 0 : 1;
 setTimeout(() => process.exit(process.exitCode), 150);

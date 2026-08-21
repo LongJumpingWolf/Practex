@@ -2,7 +2,7 @@ const { JSDOM } = require('jsdom');
 const fs = require('fs');
 
 const dom = new JSDOM(`<!DOCTYPE html><html><body>
-  <div id="appRoot"></div>
+  <div id="appRoot"></div><div id="toast"></div><div id="loadingScreen"></div><div id="authGate"></div><div id="syncStatusPill"></div>
 </body></html>`, { runScripts: 'outside-only', url: 'https://example.com/' });
 
 const { window } = dom;
@@ -14,7 +14,12 @@ window.localStorage = global.localStorage;
 global.fetch = async () => ({ ok: false, json: async () => ({}) });
 global.indexedDB = undefined; // image DB paths aren't exercised by this test
 
-let src = fs.readFileSync('/home/claude/extracted_script_testable.js', 'utf8');
+// Was hardcoded to '/home/claude/extracted_script_testable.js' — a pre-file-split
+// relic that predates the current 5-file MPA architecture and doesn't exist in this
+// delivery at all. Concatenated the same way every other test in this suite does.
+const path = require('path');
+const FILES = ['practex-data-core.js','practex-import-content.js','practex-render-library.js','practex-learning-practice.js','practex-events-init.js'];
+let src = FILES.map(n => fs.readFileSync(path.join(__dirname, n), 'utf8')).join('\n');
 // The real app boots itself on real DOM elements (loadingScreen etc.) that don't exist
 // in this minimal harness — strip the auto-boot IIFE calls at the bottom is overkill;
 // instead just eval it and swallow boot-time errors, since we only need the function
@@ -67,14 +72,16 @@ const cutoffMalformed = { type: 'cutoff', range:[8,18,0.1], threshold: 13, below
 allPass &= check('cutoff: malformed question (no testValue) returns null, not false', window.evaluateCorrect(cutoffMalformed, 10), null);
 
 // MNEMONIC (self-graded, mirrors isShortAnswer)
-// window.__state is a REFERENCE to the actual closure-internal `state` object the app
-// uses — mutating it here mutates what evaluateCorrect() reads inside the IIFE too.
-window.__state.session = { shortAnswerCorrect: true };
+// state is a plain top-level var in the app's shared-global-scope files (no
+// enclosing IIFE since the file split — see HANDOFF.md), so it's already
+// window.state directly; no __state alias needed. Mutating it here mutates
+// what evaluateCorrect() reads internally too.
+window.state.session = { shortAnswerCorrect: true };
 const mnemQ = { type: 'mnemonic', letters:[{letter:'C',meaning:'x'}], testIndex: 0 };
 allPass &= check('mnemonic: self-graded true', window.evaluateCorrect(mnemQ, 'my guess'), true);
-window.__state.session.shortAnswerCorrect = false;
+window.state.session.shortAnswerCorrect = false;
 allPass &= check('mnemonic: self-graded false', window.evaluateCorrect(mnemQ, 'my guess'), false);
-window.__state.session.shortAnswerCorrect = null;
+window.state.session.shortAnswerCorrect = null;
 allPass &= check('mnemonic: not yet self-graded returns null', window.evaluateCorrect(mnemQ, 'my guess'), null);
 
 // Existing standard MCQ path — regression check, must be unaffected
@@ -82,7 +89,7 @@ const stdQ = { type: undefined, answer: ['B'] };
 allPass &= check('regression: standard MCQ correct still works', window.evaluateCorrect(stdQ, ['B']), true);
 allPass &= check('regression: standard MCQ wrong still works', window.evaluateCorrect(stdQ, ['A']), false);
 const shortQ = { isShortAnswer: true };
-window.__state.session.shortAnswerCorrect = true;
+window.state.session.shortAnswerCorrect = true;
 allPass &= check('regression: isShortAnswer path still works', window.evaluateCorrect(shortQ, 'anything'), true);
 
 console.log('\n--- pickedStrFor() sanity ---');

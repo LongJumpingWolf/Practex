@@ -2,9 +2,10 @@ const { JSDOM } = require('jsdom');
 const fs = require('fs');
 const path = require('path');
 
-process.on('unhandledRejection', () => {});
+process.on('unhandledRejection', (reason) => { console.error('FATAL: unhandled rejection —', reason && reason.stack ? reason.stack : reason); process.exitCode = 1; process.exit(1); });
 
-const APP_DIR = '/home/claude/practex_final';
+let loadFailed = false; // set if any app file fails to eval — see the load-error catch below
+const APP_DIR = __dirname; // was hardcoded to a past session's path — tests live alongside the source, see HANDOFF.md
 const FILES = [
   'practex-data-core.js',
   'practex-import-content.js',
@@ -38,7 +39,7 @@ const persistentSessionStorage = {
 let fakeMirror = null;
 
 function newWindow(url) {
-  const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="appRoot"></div><div id="toast"></div><div id="loadingScreen"></div><div id="authGate"></div></body></html>`,
+  const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="appRoot"></div><div id="toast"></div><div id="loadingScreen"></div><div id="authGate"></div><div id="syncStatusPill"></div></body></html>`,
     { runScripts: 'outside-only', url });
   const win = dom.window;
   global.window = win; global.document = win.document;
@@ -47,7 +48,7 @@ function newWindow(url) {
   Object.defineProperty(win, 'sessionStorage', { value: persistentSessionStorage, configurable: true, writable: true });
   global.sessionStorage = persistentSessionStorage;
   FILES.forEach(name => {
-    try { win.eval(fs.readFileSync(path.join(APP_DIR, name), 'utf8')); } catch (e) { /* expected boot noise */ }
+    try { win.eval(fs.readFileSync(path.join(APP_DIR, name), 'utf8')); } catch (e) { console.error('LOAD ERROR in ' + name + ': ' + e.message); loadFailed = true; }
   });
   // Stub the mirror functions directly — simplest reliable way to control what
   // "IndexedDB already has" without standing up a real IndexedDB implementation.
@@ -145,7 +146,7 @@ console.log('\n=== REGRESSION: FSRS toggle race fix still works with the smaller
 }
 
 console.log('\n' + (failures === 0 ? '=== ALL QUOTA-FIX TESTS PASSED ===' : '=== ' + failures + ' TEST(S) FAILED — see above ==='));
-process.exitCode = failures === 0 ? 0 : 1;
+process.exitCode = (failures === 0 && !loadFailed) ? 0 : 1;
 setTimeout(() => process.exit(process.exitCode), 150);
 
 })();
