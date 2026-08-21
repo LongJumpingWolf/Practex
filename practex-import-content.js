@@ -288,17 +288,35 @@ async function confirmImportWithChoice(resetProgress){
     });
   }
   reconcileSources(); /* backfill any source an imported question references that wasn't in the file's own sources metadata — see the comment on reconcileSources for why this gap can happen at all */
-  render();
-  showToast('Saving ' + added + ' question' + (added===1?'':'s') + '…');
-  await saveLibrary(); /* awaited — same reasoning as confirm-import: this is a bulk operation, not a frequent tap, worth the wait for correctness */
-  await saveSources();
+
+  /* Real bug found via a live report: this was a completely separate import path
+     from confirm-import (pasted text) — JSON file import has its own function
+     entirely — and it never got the same fix. Same modal treatment applies here
+     for the exact same reason: a fire-and-toast "Saving…" with nothing persistent
+     behind it is genuinely ambiguous about whether an import finished, especially
+     for a bulk file import that can take a real moment. Every import path in the
+     app should feel the same, not just the one that happened to get fixed first. */
+  var libraryTotal2 = state.mcqs.length;
+  showBlockingModal(renderImportProgressModal(0, libraryTotal2), 'narrow');
+  syncInFlight = true;
+  importInFlight = true;
+  try {
+    await saveSources(); /* sources before questions — same reasoning as confirm-import, the safer failure mode if something still interrupts */
+    await saveLibrary(function(progress){ updateImportProgressModal(progress.completed, progress.total); });
+  } finally {
+    syncInFlight = false;
+    importInFlight = false;
+  }
   if (state.lastSaveHadPermanentConflict) {
-    /* saveLibrary() already showed a specific explanation — don't pile a misleading
-       "success" message on top of it. */
-  } else if (state.hasUnsyncedChanges) {
-    showToast(added + ' question' + (added===1?'':'s') + ' saved locally — will sync once you\'re back online.');
+    closeModal();
+    render();
   } else {
-    showToast(added + ' question' + (added===1?'':'s') + (resetProgress ? ' imported fresh.' : ' imported with their existing progress.'));
+    var doneRoot2 = document.getElementById('modalRoot');
+    var doneCard2 = doneRoot2 && doneRoot2.querySelector('.modal-card');
+    if (doneCard2) doneCard2.innerHTML = renderImportDoneModal(added, 0);
+    if (state.hasUnsyncedChanges) {
+      showToast(added + ' question' + (added===1?'':'s') + ' saved locally — will sync once you\'re back online.');
+    }
   }
 }
 function showModal(title, message, buttons){
