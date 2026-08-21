@@ -48,6 +48,7 @@ async function onClick(e){
     saveLibrary();
     return;
   }
+  if (action === 'cleanup-duplicates') { await cleanupDuplicates(); return; }
   if (action === 'toggle-fsrs-card') {
     state.fsrsCardExpanded = !state.fsrsCardExpanded;
     saveFsrsCardExpanded();
@@ -383,7 +384,17 @@ async function onClick(e){
       reportHtml += '<div class="parse-err-list">' + result.errors.length + ' block(s) skipped:<br>' +
         result.errors.slice(0,15).map(function(er){ return '· ' + escapeHtml(er.message); }).join('<br>') + '</div>';
     }
-    reportHtml += '<div class="action-row"><button class="btn btn-primary" data-action="confirm-import">Import ' + result.mcqs.length + ' questions</button></div>';
+    /* Preview the duplicate check BEFORE committing, against the full picture (existing
+       library + this batch) — same logic confirm-import actually applies, just shown
+       ahead of time so the person knows what "Import N questions" will really do. */
+    var previewDup = partitionDuplicates(liveMcqs().concat(result.mcqs));
+    var previewPendingIds = {}; result.mcqs.forEach(function(m){ previewPendingIds[m.id] = true; });
+    var previewExcessCount = previewDup.excess.filter(function(m){ return previewPendingIds[m.id]; }).length;
+    if (previewExcessCount) {
+      reportHtml += '<div class="parse-err-list">' + previewDup.duplicateGroupCount + ' duplicate group' + (previewDup.duplicateGroupCount===1?'':'s') +
+        ' detected — ' + previewExcessCount + ' question' + (previewExcessCount===1?'':'s') + ' will be skipped on import (already at the 3-copy limit).</div>';
+    }
+    reportHtml += '<div class="action-row"><button class="btn btn-primary" data-action="confirm-import">Import ' + (result.mcqs.length - previewExcessCount) + ' question' + ((result.mcqs.length - previewExcessCount)===1?'':'s') + '</button></div>';
     reportEl.innerHTML = reportHtml;
     reportEl._pending = result.mcqs;
     return;
@@ -393,13 +404,27 @@ async function onClick(e){
     var reportEl2 = document.getElementById('parseReport');
     var pending = reportEl2 && reportEl2._pending;
     if (!pending || !pending.length) return;
-    pending.forEach(function(m){
+    /* Duplicate check happens against the FULL picture — existing library plus this
+       batch together — not just within the batch itself, so re-importing something
+       that's already well-represented in the library correctly gets trimmed too, not
+       just duplicates that happen to appear more than 3 times within the pasted text
+       alone. Only the NEWLY IMPORTED excess gets dropped here — existing questions
+       that were already over the limit before this import are untouched; that's what
+       the separate "Clean up duplicates" pass in Settings is for. */
+    var pendingIds = {}; pending.forEach(function(m){ pendingIds[m.id] = true; });
+    var dupResult = partitionDuplicates(liveMcqs().concat(pending));
+    var excessPendingIds = {}; dupResult.excess.forEach(function(m){ if (pendingIds[m.id]) excessPendingIds[m.id] = true; });
+    var toImport = pending.filter(function(m){ return !excessPendingIds[m.id]; });
+    var skippedCount = pending.length - toImport.length;
+
+    toImport.forEach(function(m){
       if (!state.sources[m.source]) state.sources[m.source] = { color: colorForSource(m.source) };
     });
-    state.mcqs = state.mcqs.concat(pending);
+    state.mcqs = state.mcqs.concat(toImport);
     document.getElementById('ingestArea').value = '';
     state.view = 'browse';
-    showToast('Saving ' + pending.length + ' question' + (pending.length===1?'':'s') + '…');
+    showToast('Saving ' + toImport.length + ' question' + (toImport.length===1?'':'s') +
+      (skippedCount ? (' — ' + skippedCount + ' duplicate' + (skippedCount===1?'':'s') + ' skipped (already have 3 copies)') : '') + '…');
     render();
     /* Deliberately AWAITED, not fire-and-forget — this is exactly the operation that
        broke before: showing "success" and letting you navigate/reload away while the

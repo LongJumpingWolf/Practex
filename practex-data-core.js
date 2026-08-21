@@ -867,6 +867,58 @@ function liveMcqs(){
   return state.mcqs.filter(function(m){ return !m.trashedAt; });
 }
 
+/* ================= Duplicate detection (max 3 copies of the same question) =================
+   Deliberately allows UP TO 3 copies of the same question — repeated exposure to the
+   same question is a genuine, intentional part of spaced-repetition practice, not a
+   mistake to eliminate entirely. Only excess beyond that gets removed, whether found
+   by the manual "Clean up duplicates" pass (practex-import-content.js) or caught live
+   during import (the confirm-import handler in practex-events-init.js). Both routes
+   share this exact same core logic so "duplicate" and "which copies to keep" can't
+   silently mean something different depending on which path found them. */
+var MAX_DUPLICATE_COPIES = 3;
+
+function normalizedQuestionText(m){
+  return questionDisplayText(m).trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/* Given a candidate list of mcqs (existing library, a fresh import batch, or both
+   combined), groups by normalized text and decides which copies to KEEP (up to 3 per
+   group) versus which are EXCESS. Keep-priority favors whichever copies are most
+   costly to lose: real learning history first (actual FSRS progress shouldn't be
+   thrown away), then not-asleep, then flagged/noted (deliberate user investment),
+   then earliest addedAt as a final, stable tiebreak. */
+function partitionDuplicates(mcqs){
+  var groups = {};
+  mcqs.forEach(function(m){
+    var key = normalizedQuestionText(m);
+    if (!key) return; // blank/empty text can't be meaningfully deduped — leave it alone rather than guessing
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(m);
+  });
+  var keep = [];
+  var excess = [];
+  var duplicateGroupCount = 0;
+  Object.keys(groups).forEach(function(key){
+    var group = groups[key];
+    if (group.length <= MAX_DUPLICATE_COPIES) { keep = keep.concat(group); return; }
+    duplicateGroupCount++;
+    var sorted = group.slice().sort(function(a, b){
+      var ah = (a.learning && a.learning.history) ? a.learning.history.length : 0;
+      var bh = (b.learning && b.learning.history) ? b.learning.history.length : 0;
+      if (ah !== bh) return bh - ah; // more history first — real progress is the most costly thing to lose
+      var aAsleep = a.asleep ? 1 : 0, bAsleep = b.asleep ? 1 : 0;
+      if (aAsleep !== bAsleep) return aAsleep - bAsleep; // not-asleep first
+      var aInvested = (a.flagged || (a.notes && a.notes.length)) ? 1 : 0;
+      var bInvested = (b.flagged || (b.notes && b.notes.length)) ? 1 : 0;
+      if (aInvested !== bInvested) return bInvested - aInvested; // flagged/annotated first — deliberate user care
+      return (a.addedAt || 0) - (b.addedAt || 0); // earliest first — stable, deterministic final tiebreak
+    });
+    keep = keep.concat(sorted.slice(0, MAX_DUPLICATE_COPIES));
+    excess = excess.concat(sorted.slice(MAX_DUPLICATE_COPIES));
+  });
+  return { keep: keep, excess: excess, duplicateGroupCount: duplicateGroupCount };
+}
+
 /* Runs once per real boot (not on the same-tab fast path — trash purging is a
    background-tidiness concern, not something that needs to happen on every single
    library<->practice hop). Anything past the retention window gets permanently

@@ -16,6 +16,28 @@ function recomputeAllDueDates(){
   return changed;
 }
 
+/* Manual "Clean up duplicates" pass — covers what confirm-import's automatic check
+   can't: duplicates that built up over time from separate past imports, or that were
+   already over the 3-copy limit before that check ever existed. Runs against the
+   live library only (trashed questions aren't part of "the library" for this
+   purpose); excess copies are soft-deleted the same way any other removal in this
+   app works — moved to Trash, not gone forever, in case the keep-priority guessed
+   wrong about which copies mattered most. */
+async function cleanupDuplicates(){
+  var result = partitionDuplicates(liveMcqs());
+  if (!result.excess.length) {
+    showToast('No excess duplicates found — every question appears 3 times or fewer.');
+    return;
+  }
+  var now = Date.now();
+  result.excess.forEach(function(m){ m.trashedAt = now; });
+  render();
+  showToast(result.duplicateGroupCount + ' duplicate group' + (result.duplicateGroupCount===1?'':'s') +
+    ' detected — ' + result.excess.length + ' question' + (result.excess.length===1?'':'s') +
+    ' moved to Trash (kept 3 copies of each, restorable for ' + TRASH_RETENTION_DAYS + ' days).');
+  await saveLibrary();
+}
+
 /* Real bug found via a live import: the question list, CSV export, "Add a note"
    modal, and "Review history" modal all read m.question unconditionally — the
    field name standard MCQ types use. The 4 newer types (match/sequence/cutoff/
@@ -561,10 +583,15 @@ function renderSettingsModalContent(){
       '<span class="settings-toggle' + (state.autoSleepEnabled?' on':'') + '" data-action="toggle-auto-sleep" role="switch" aria-checked="' + (state.autoSleepEnabled?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
     (state.autoSleepEnabled ? '<div class="settings-row"><span>Streak needed (N)</span>' +
       '<input type="number" min="2" max="15" id="autoSleepStreakInput" value="' + state.autoSleepStreak + '" data-action="set-auto-sleep-streak" style="width:56px;padding:5px 8px;border:1px solid var(--rule-strong);border-radius:6px;background:var(--card);color:var(--ink);font-size:13px;text-align:center;"></div>' : '') +
-    '<div class="settings-row" style="border-bottom:none;flex-direction:column;align-items:stretch;gap:8px;">' +
+    '<div class="settings-row" style="flex-direction:column;align-items:stretch;gap:8px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;"><span>Re-schedule library with the current rules</span>' +
       '<button class="btn btn-ghost btn-sm" data-action="recompute-due-dates">' + icon('refresh-cw',13) + ' Run</button></div>' +
       '<div class="view-sub" style="margin-bottom:0;">Fixes due dates on questions scheduled before a recent scheduling fix. Doesn\'t touch your answer history, only recomputes when things are due — safe to run anytime.</div>' +
+    '</div>' +
+    '<div class="settings-row" style="border-bottom:none;flex-direction:column;align-items:stretch;gap:8px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;"><span>Clean up duplicate questions</span>' +
+      '<button class="btn btn-ghost btn-sm" data-action="cleanup-duplicates">' + icon('trash-2',13) + ' Run</button></div>' +
+      '<div class="view-sub" style="margin-bottom:0;">Up to ' + MAX_DUPLICATE_COPIES + ' copies of the same question is fine on purpose — repeated exposure genuinely helps. Only trims what\'s left after that, moving the excess to Trash rather than deleting it outright.</div>' +
     '</div>' +
     '</div>';
 
