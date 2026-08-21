@@ -10,7 +10,7 @@ function getLearningQueue(ids){
   var byId = {};
   state.mcqs.forEach(function(m){ byId[m.id]=m; });
   var due = ids.map(function(id){ return byId[id]; }).filter(Boolean).filter(function(q){
-    return q.learning && (q.learning.due||0) <= now && !state.sleepingSubjects[q.subject] && !q.asleep;
+    return q.learning && !q.trashedAt && (q.learning.due||0) <= now && !state.sleepingSubjects[q.subject] && !q.asleep;
   });
   due.sort(function(a,b){
     var order={misconception:0,noconcept:1,learning:2,mastered:3,new:4};

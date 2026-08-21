@@ -620,7 +620,7 @@ function passesFilters(m){
 
 function allTags(){
   var set = {};
-  state.mcqs.forEach(function(m){ m.tags.forEach(function(t){ set[t] = true; }); });
+  liveMcqs().forEach(function(m){ m.tags.forEach(function(t){ set[t] = true; }); });
   return Object.keys(set).sort();
 }
 
@@ -762,7 +762,7 @@ function bindSequenceDrag(m){
 function getLearningStats(){
   var now = Date.now();
   var stats = { due: 0, new: 0, noconcept: 0, misconception: 0, learning: 0, mastered: 0, tomorrow: 0, recovering: 0 };
-  state.mcqs.forEach(function(q){
+  liveMcqs().forEach(function(q){
     if(!q.learning) return;
     if(state.sleepingSubjects[q.subject] || q.asleep) return; /* asleep subjects/questions don't contribute to due/state counts */
     var s = getLearningState(q);
@@ -785,12 +785,12 @@ function getLearningStats(){
 
 function getDashboardData(){
   var ls = getLearningStats();
-  var totalTracked = state.mcqs.length;
+  var totalTracked = liveMcqs().length;
   var masteryPct = totalTracked ? Math.round((ls.mastered / totalTracked) * 100) : 0;
 
   // Weakest subjects (asleep subjects/questions excluded — not recommended)
   var subjMap = {};
-  state.mcqs.forEach(function(m){
+  liveMcqs().forEach(function(m){
     if (state.sleepingSubjects[m.subject] || m.asleep) return;
     if(!subjMap[m.subject]) subjMap[m.subject] = { total: 0, mastered: 0 };
     subjMap[m.subject].total++;
@@ -804,7 +804,7 @@ function getDashboardData(){
 
   // Persistent misconceptions (asleep subjects/questions excluded — not recommended)
   var miscMap = {};
-  state.mcqs.forEach(function(m){
+  liveMcqs().forEach(function(m){
     if (state.sleepingSubjects[m.subject] || m.asleep) return;
     if(getLearningState(m) === 'misconception') {
       var trap = getMostRepeatedWrong(m);
@@ -818,7 +818,7 @@ function getDashboardData(){
 
   var todayStr = dateStr(Date.now());
   var reviewsToday = 0;
-  state.mcqs.forEach(function(m){
+  liveMcqs().forEach(function(m){
     (m.learning.history || []).forEach(function(h){ if (dateStr(h.ts) === todayStr) reviewsToday++; });
   });
 
@@ -981,7 +981,7 @@ function renderBookshelf(){
   var sourceNames = Object.keys(state.sources).sort();
   var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
   var countBySource = {};
-  state.mcqs.forEach(function(m){ countBySource[m.source] = (countBySource[m.source]||0) + 1; });
+  liveMcqs().forEach(function(m){ countBySource[m.source] = (countBySource[m.source]||0) + 1; });
 
   var html = '<div class="view-head"><div class="view-title serif">Book Shelf</div>' +
     '<div class="view-sub">' + sourceNames.length + ' source' + (sourceNames.length===1?'':'s') + ' — click one to see its chapters, or set a cover.</div></div>';
@@ -1333,7 +1333,7 @@ function renderChapterGrid(tree, node){
 /* Flat filtered question list — shown once you're inside a leaf chapter, or after "View questions" */
 function renderQuestionList(tree, node, searchAll){
   var title = searchAll ? 'Search results' : (state.selectedPath ? state.selectedPath[state.selectedPath.length-1] : 'All subjects');
-  var ids = (searchAll || !node) ? state.mcqs.map(function(m){return m.id;}) : collectIds(node);
+  var ids = (searchAll || !node) ? liveMcqs().map(function(m){return m.id;}) : collectIds(node);
   var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
   var list = ids.map(function(id){ return byId[id]; }).filter(Boolean).filter(passesFilters);
   /* Sleeping subjects stay visible for browsing, but drop out of the root-level "Start practice" pool/count. */
@@ -1598,7 +1598,7 @@ function renderAddSource(){
   if (sourceNames.length) {
     html += '<div class="card section-block"><h3>Manage sources</h3>';
     sourceNames.forEach(function(s){
-      var count = state.mcqs.filter(function(m){ return m.source === s; }).length;
+      var count = liveMcqs().filter(function(m){ return m.source === s; }).length;
       html += '<div class="source-manage-row">' +
         '<span class="chip-dot" style="background:' + colorForSource(s) + '"></span>' +
         '<span style="flex:1;">' + escapeHtml(s) + '</span>' +

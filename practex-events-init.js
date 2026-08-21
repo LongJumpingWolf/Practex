@@ -140,19 +140,25 @@ async function onClick(e){
   if (action === 'google-sign-in') { signInWithGoogle(); return; }
   if (action === 'start-queue-preview') { state.view = 'queuepreview'; state.sidebarOpen = false; render(); return; }
   if (action === 'start-due-session') {
-    var dueIds = getLearningQueue(state.mcqs.map(function(m){return m.id;}));
+    var dueIds = getLearningQueue(state.mcqs.map(function(m){return m.id;})); /* getLearningQueue() itself now filters trashedAt internally, protecting this regardless of what's passed in */
     requestStartPractice(dueIds, true);
     return;
   }
   if (action === 'start-study-ahead') {
     var tomorrow = Date.now() + 86400000;
     var byId = {}; state.mcqs.forEach(function(m){ byId[m.id]=m; });
-    var ids = state.mcqs.filter(function(q){ return (q.learning.due||0) <= tomorrow; }).map(function(q){ return q.id; });
+    /* Real bug found via a live report: this bypassed getLearningQueue() entirely and
+       did its own filtering with no trashedAt check — a soft-deleted question due
+       soon could genuinely end up in a live practice session here. */
+    var ids = liveMcqs().filter(function(q){ return (q.learning.due||0) <= tomorrow; }).map(function(q){ return q.id; });
     requestStartPractice(ids, true);
     return;
   }
   if (action === 'start-practice-all') {
-    var allIds = state.mcqs.map(function(m){ return m.id; });
+    /* Same bug, more severe here — "Start practice (all)" had NO filtering at all,
+       meaning a deleted question could actually be answered during a live session,
+       feeding back into its learning history despite supposedly being gone. */
+    var allIds = liveMcqs().map(function(m){ return m.id; });
     requestStartPractice(allIds, false);
     return;
   }
@@ -216,7 +222,11 @@ async function onClick(e){
   if (action === 'start-practice') {
     var tree = buildTree();
     var node = state.selectedPath ? getNodeByPath(tree, state.selectedPath) : null;
-    var ids = node ? collectIds(node) : state.mcqs.map(function(m){ return m.id; });
+    /* Real bug found via a live report: this is the actual generic "Start Practice"
+       button used everywhere in the app, not just the settings-menu "all" variant —
+       its root-level fallback (no specific deck selected) had the same missing
+       trashedAt filter as everything else audited here. */
+    var ids = node ? collectIds(node) : liveMcqs().map(function(m){ return m.id; });
     var byId = {}; state.mcqs.forEach(function(m){ byId[m.id]=m; });
     if (!node) ids = ids.filter(function(id){ return byId[id] && !state.sleepingSubjects[byId[id].subject]; }); /* root-level "Start Practice" skips sleeping subjects entirely */
     ids = ids.filter(function(id){ return byId[id] && !byId[id].asleep; }); /* individually-slept questions are excluded everywhere, not just from the root */
@@ -231,7 +241,7 @@ async function onClick(e){
     var expSearchAll = !!(state.filters.search || '').trim();
     var expTree = buildTree();
     var expNode = state.selectedPath ? getNodeByPath(expTree, state.selectedPath) : null;
-    var expIds = (expSearchAll || !expNode) ? state.mcqs.map(function(m){ return m.id; }) : collectIds(expNode);
+    var expIds = (expSearchAll || !expNode) ? liveMcqs().map(function(m){ return m.id; }) : collectIds(expNode);
     var expById = {}; state.mcqs.forEach(function(m){ expById[m.id] = m; });
     var expList = expIds.map(function(id){ return expById[id]; }).filter(Boolean).filter(passesFilters);
     var expLabel = expSearchAll ? 'search-results' : (state.selectedPath ? state.selectedPath[state.selectedPath.length-1].toLowerCase().replace(/[^a-z0-9]+/g,'-') : 'all-subjects');

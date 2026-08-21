@@ -37,7 +37,7 @@ function csvEscape(s){
 function downloadIdSheet(){
   var sourceFilter = document.getElementById('idSheetSourceSelect');
   var src = sourceFilter ? sourceFilter.value : '';
-  var rows = state.mcqs.filter(function(m){ return !src || m.source === src; });
+  var rows = liveMcqs().filter(function(m){ return !src || m.source === src; });
   if (!rows.length) { showToast('No questions match that source.'); return; }
   var lines = ['id,question,subject,chapter,source'];
   rows.forEach(function(m){

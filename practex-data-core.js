@@ -852,6 +852,21 @@ function trashedMcqs(){
   return state.mcqs.filter(function(m){ return !!m.trashedAt; });
 }
 
+/* Real bug found via a live report: buildTree() was fixed to exclude trashed items
+   when Trash was built, but that was the ONLY place — every other count/list/stats
+   function across the app (Book Shelf per-book counts, sidebar due/misconception
+   stats, dashboard totals, tag filters, search-all, the due-review queue, Manage
+   Sources counts) still iterated state.mcqs directly with no trashedAt check at all,
+   so a soft-deleted question kept fully counting everywhere except the one place
+   that was actually fixed — exactly the "29 outside, 10 inside" symptom reported.
+   liveMcqs() is the single, canonical "what should count as part of the library
+   right now" list — every one of those call sites below now goes through this
+   instead of state.mcqs directly, so this can't silently drift out of sync again
+   the next time something new gets added that needs the same exclusion. */
+function liveMcqs(){
+  return state.mcqs.filter(function(m){ return !m.trashedAt; });
+}
+
 /* Runs once per real boot (not on the same-tab fast path — trash purging is a
    background-tidiness concern, not something that needs to happen on every single
    library<->practice hop). Anything past the retention window gets permanently
