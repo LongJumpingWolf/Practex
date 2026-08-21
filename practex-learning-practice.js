@@ -771,17 +771,25 @@ function renderMatchBody(m, s, isReviewing, result, viewRevealed){
 
   var html = '<div class="card answer-sheet">';
   html += qMetaAndStemHtml(m, s, m.stem);
-  html += '<div class="multi-select-hint">' + icon('check-circle',13) + ' Tap an item on the left, then its match on the right. Tap an already-matched item on the right to undo just that pair.</div>';
+  html += '<div class="multi-select-hint">' + icon('check-circle',13) + ' Tap an item on the left, then try any match on the right — it stays open to change until you tap a different left item or tap it again.</div>';
   html += '<div class="match-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px;">';
 
   html += '<div>';
   m.pairs.forEach(function(pair, i){
     var isLinked = links[i] !== undefined;
-    var isPending = viewSel.pendingLeft === i;
+    var isActive = viewSel.pendingLeft === i;
     var cls = 'match-item';
-    if (viewRevealed) cls += (links[i] === i ? ' match-correct' : ' match-wrong');
-    else if (isLinked) cls += ' match-linked';
-    else if (isPending) cls += ' match-pending';
+    if (viewRevealed) {
+      cls += (links[i] === i ? ' match-correct' : ' match-wrong');
+    } else {
+      /* Pair color is keyed off the LEFT's own index (i), never the right item it
+         happens to be linked to — so it stays the same color for this left no matter
+         which right gets tried against it while it's active. Both sides of the SAME
+         pair always share the same color, which is the actual point: color is what
+         shows you a pairing, not row position (the right column is shuffled). */
+      if (isLinked) cls += ' match-pair-' + (i % 6);
+      if (isActive) cls += ' match-active'; /* stays marked active even once linked — this is what "still freely editable" looks like */
+    }
     html += '<button class="' + cls + '" data-left-id="' + i + '" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:10px 12px;border-radius:8px;" ' +
       (viewRevealed || isReviewing ? 'disabled' : 'data-action="match-pick-left" data-i="' + i + '"') + '>' +
       (i+1) + '. ' + escapeHtml(pair.left) + '</button>';
@@ -797,8 +805,11 @@ function renderMatchBody(m, s, isReviewing, result, viewRevealed){
     var linkedToLeft = Object.keys(links).find(function(li){ return links[li] === origIdx; });
     var isLinked = linkedToLeft !== undefined;
     var cls = 'match-item';
-    if (viewRevealed) cls += (isLinked && Number(linkedToLeft) === origIdx ? ' match-correct' : (isLinked ? ' match-wrong' : ''));
-    else if (isLinked) cls += ' match-linked';
+    if (viewRevealed) {
+      cls += (isLinked && Number(linkedToLeft) === origIdx ? ' match-correct' : (isLinked ? ' match-wrong' : ''));
+    } else if (isLinked) {
+      cls += ' match-pair-' + (Number(linkedToLeft) % 6); /* same color as its left partner, by definition */
+    }
     /* data-right-id survives regardless of revealed/disabled state — unlike data-i,
        which only exists on the interactive (non-disabled) version of this button —
        so it's what gives animateMatchToCorrect() a stable identity to key the FLIP

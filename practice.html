@@ -56,6 +56,17 @@
      inside body.dark-mode below. */
   --overlay-bg:#1F2A33;
   --overlay-ink:#FFFFFF;
+  /* Dedicated palette for match-question pair coloring — deliberately NOT reusing
+     --pen-blue/--pen-amber, which already carry other meanings elsewhere (bookmark/
+     sleep toggle state, folder icons, hint banners). A pair and its color have no
+     other significance in the app, so mixing them with those would be confusing.
+     Six colors, cycled with % 6 if a question somehow has more pairs than that. */
+  --pair-0:#6B4C93; --pair-0-bg:#EDE7F3;
+  --pair-1:#1F7A6E; --pair-1-bg:#DFF0EC;
+  --pair-2:#A34567; --pair-2-bg:#F5E3EA;
+  --pair-3:#4653A3; --pair-3-bg:#E6E8F5;
+  --pair-4:#B0621F; --pair-4-bg:#F5E7D8;
+  --pair-5:#1E7F94; --pair-5-bg:#DFF0F3;
 }
 /* FSRS mode re-themes the app (cover/accent colour) so it's visually obvious
    spaced-repetition scheduling is driving what you see. */
@@ -83,6 +94,12 @@ body.dark-mode{
   --pen-amber:#D3B15C;
   --pen-amber-bg:#332A16;
   --highlighter-ink:#F0C33C;
+  --pair-0:#A98FD1; --pair-0-bg:#2A2138;
+  --pair-1:#5CC2AE; --pair-1-bg:#17332E;
+  --pair-2:#E08AA8; --pair-2-bg:#3A2029;
+  --pair-3:#8B95D6; --pair-3-bg:#232A47;
+  --pair-4:#E0A05C; --pair-4-bg:#3A2B17;
+  --pair-5:#5CC0D6; --pair-5-bg:#17313A;
 }
 body.dark-mode.fsrs-mode{
   --cover:#8362AD;
@@ -587,6 +604,20 @@ textarea.ingest-area{
 .match-item:disabled,.seq-item{cursor:default;}
 .match-item.match-pending{border-color:var(--cover);background:var(--paper);}
 .match-item.match-linked{border-color:var(--ink-soft);}
+/* One class per pair color, applied via pairIndex % 6 in JS — both sides of a pair
+   get the SAME class (keyed off the LEFT item's own index, which never changes),
+   so the color itself is what shows you which left goes with which right, without
+   needing them to sit in the same row. */
+.match-item.match-pair-0{border-color:var(--pair-0);background:var(--pair-0-bg);}
+.match-item.match-pair-1{border-color:var(--pair-1);background:var(--pair-1-bg);}
+.match-item.match-pair-2{border-color:var(--pair-2);background:var(--pair-2-bg);}
+.match-item.match-pair-3{border-color:var(--pair-3);background:var(--pair-3-bg);}
+.match-item.match-pair-4{border-color:var(--pair-4);background:var(--pair-4-bg);}
+.match-item.match-pair-5{border-color:var(--pair-5);background:var(--pair-5-bg);}
+/* The currently "active"/sticky left — stays marked this way even once it has a
+   pair color, so it's clear you can keep freely re-picking its match in the right
+   column until you move on to a different left or tap this one again. */
+.match-item.match-active{box-shadow:0 0 0 2px var(--cover);}
 .match-item.match-correct{border-color:var(--pen-green);background:var(--pen-green-bg);}
 .match-item.match-wrong{border-color:var(--pen-red);background:var(--pen-red-bg);}
 .seq-item.seq-correct{border-color:var(--pen-green);background:var(--pen-green-bg);}

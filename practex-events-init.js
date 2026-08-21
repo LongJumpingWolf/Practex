@@ -761,7 +761,14 @@ async function onClick(e){
     var otherLeft = Object.keys(sel2.links).find(function(li){ return sel2.links[li] === rightIdx && Number(li) !== sel2.pendingLeft; });
     if (otherLeft !== undefined) delete sel2.links[otherLeft];
     sel2.links[sel2.pendingLeft] = rightIdx;
-    sel2.pendingLeft = null;
+    /* Was `sel2.pendingLeft = null;` here — cleared the active left the instant ANY
+       right was picked, which meant trying a different right for the same left
+       required re-tapping the left every single time. A real, specific request:
+       the active left should stay "sticky" — freely re-pickable, including stealing
+       an already-used right from another left — until the person deliberately moves
+       on, either by tapping this same left again (finalize/deselect) or tapping a
+       DIFFERENT left (match-pick-left already handles both of those correctly on its
+       own; nothing here needs to change for that half). */
     render();
     return;
   }
