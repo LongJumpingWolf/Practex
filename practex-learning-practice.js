@@ -686,7 +686,7 @@ function renderMatchBody(m, s, isReviewing, result, viewRevealed){
 
   var html = '<div class="card answer-sheet">';
   html += qMetaAndStemHtml(m, s, m.stem);
-  html += '<div class="multi-select-hint">' + icon('check-circle',13) + ' Tap an item on the left, then its match on the right</div>';
+  html += '<div class="multi-select-hint">' + icon('check-circle',13) + ' Tap an item on the left, then its match on the right. Tap an already-matched item on the right to undo just that pair.</div>';
   html += '<div class="match-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px;">';
 
   html += '<div>';
@@ -718,8 +718,10 @@ function renderMatchBody(m, s, isReviewing, result, viewRevealed){
   html += '</div></div>';
 
   var allLinked = Object.keys(links).length === m.pairs.length;
+  var anyLinked = Object.keys(links).length > 0;
   if (!viewRevealed) {
-    html += '<div class="answer-footer" style="justify-content:flex-end;">' +
+    html += '<div class="answer-footer" style="justify-content:space-between;">' +
+      (anyLinked ? '<button class="btn btn-ghost" data-action="match-reset">' + icon('undo',14) + ' Reset all</button>' : '<span></span>') +
       '<button class="btn btn-primary" data-action="reveal-mcq"' + (allLinked ? '' : ' disabled') + '>Check answer</button></div>';
   } else {
     html += renderRevealFooter(m, s, isReviewing);
@@ -817,7 +819,7 @@ function renderMnemonicBody(m, s, isReviewing, result, viewRevealed){
     html += '<div class="answer-footer" style="justify-content:flex-end;"><button class="btn btn-primary" data-action="reveal-short">Reveal answer</button></div>';
   } else {
     html += '<div class="view-sub" style="margin-bottom:8px;">You answered: ' + escapeHtml(viewSel || '(blank)') + '</div>';
-    html += '<div class="reveal-panel"><div class="view-sub"><b>' + escapeHtml(testLetter.letter) + '</b> = ' + escapeHtml(testLetter.meaning) + '</div></div>';
+    html += '<div class="reveal-panel"><div class="reveal-explain"><b>' + escapeHtml(testLetter.letter) + '</b> = ' + escapeHtml(testLetter.meaning) + '</div></div>';
     html += renderNotesSection(m);
     if (isReviewing) {
       /* nothing to submit — movement via Prev/Next/Overview up top, same as other reviewed questions */

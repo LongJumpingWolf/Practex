@@ -733,17 +733,44 @@ async function onClick(e){
     if (state.session.revealed) return;
     var sel = state.session.selected;
     if (!sel) return;
-    sel.pendingLeft = parseInt(el.getAttribute('data-i'), 10);
+    var leftI = parseInt(el.getAttribute('data-i'), 10);
+    if (sel.pendingLeft === leftI) sel.pendingLeft = null; // tapping the same pending left again cancels the pending pick
+    else sel.pendingLeft = leftI; // works the same whether this left is already linked or not — picking a new right below will replace its existing pairing
     render();
     return;
   }
   if (action === 'match-pick-right') {
     if (state.session.revealed) return;
     var sel2 = state.session.selected;
-    if (!sel2 || sel2.pendingLeft === null || sel2.pendingLeft === undefined) return;
+    if (!sel2) return;
     var rightIdx = parseInt(el.getAttribute('data-i'), 10);
+    if (sel2.pendingLeft === null || sel2.pendingLeft === undefined) {
+      /* Real gap found via a live report: once a pair was made, there was no way to
+         undo it short of overwriting it by picking a different right for that left —
+         no way to leave it fully unpaired again. Tapping an already-linked right item
+         with nothing currently pending now unlinks it directly — a real "undo this
+         pairing" affordance, not just "replace this pairing." */
+      var existingLeft = Object.keys(sel2.links).find(function(li){ return sel2.links[li] === rightIdx; });
+      if (existingLeft !== undefined) { delete sel2.links[existingLeft]; render(); }
+      return;
+    }
+    /* Right items must stay uniquely assigned — without this, two different lefts
+       could silently both point at the same right (nothing here previously checked),
+       making the reveal ambiguous about which pairing was actually "yours". If this
+       right was already claimed by a DIFFERENT left, clear that link first. */
+    var otherLeft = Object.keys(sel2.links).find(function(li){ return sel2.links[li] === rightIdx && Number(li) !== sel2.pendingLeft; });
+    if (otherLeft !== undefined) delete sel2.links[otherLeft];
     sel2.links[sel2.pendingLeft] = rightIdx;
     sel2.pendingLeft = null;
+    render();
+    return;
+  }
+  if (action === 'match-reset') {
+    if (state.session.revealed) return;
+    var sel3 = state.session.selected;
+    if (!sel3) return;
+    sel3.links = {};
+    sel3.pendingLeft = null;
     render();
     return;
   }

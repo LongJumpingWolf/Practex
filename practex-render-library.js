@@ -389,6 +389,21 @@ function renderContent(text){
       i = table.nextIdx;
       continue;
     }
+    /* Markdown-style bullet lists ("- " or "* " at the start of a line) — Practex's
+       own authoring convention already asks for "bullet any answer with 2+ distinct
+       facts, no dense prose paragraphs", but renderContent() had no way to actually
+       render one — every list-like line just fell into the same <p><br> paragraph
+       treatment as ordinary prose, indistinguishable from it. */
+    if (/^\s*[-*]\s+/.test(line)) {
+      flush();
+      var listItems = [];
+      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
+        listItems.push(lines[i].replace(/^\s*[-*]\s+/, ''));
+        i++;
+      }
+      out += '<ul class="content-bullets">' + listItems.map(function(li){ return '<li>' + escapeHtml(li) + '</li>'; }).join('') + '</ul>';
+      continue;
+    }
     if (line.trim() === '') { flush(); i++; continue; }
     buf.push(line);
     i++;
