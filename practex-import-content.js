@@ -311,7 +311,46 @@ function showRichModal(innerHtml, size){
   root.innerHTML='<div class="modal-backdrop" data-action="modal-backdrop-close"><div class="modal-card '+sizeClass+'" data-stop-close>'+innerHtml+'</div></div>';
   hydrateImages();
 }
+/* A genuinely non-dismissible modal — no backdrop-close action rendered at all,
+   no close button. Real bug this fixes: import feedback used to be a single
+   toast that fades in a few seconds, with nothing persistent showing whether
+   the import was still running or had finished — ambiguous enough that a real
+   report described re-uploading the same source a second time, having assumed
+   the first attempt silently failed to start. A modal you can't accidentally
+   dismiss or click past, showing genuine progress and then a clear completed
+   state, closes that gap directly — it's also structurally impossible to
+   trigger a second import while this is up, since the Add Source screen
+   underneath isn't reachable until it closes. */
+function showBlockingModal(innerHtml, size){
+  var root=document.getElementById('modalRoot');
+  var sizeClass = size === 'narrow' ? 'narrow' : 'wide';
+  root.innerHTML='<div class="modal-backdrop"><div class="modal-card '+sizeClass+'">'+innerHtml+'</div></div>';
+  hydrateImages();
+}
 function closeModal(){ document.getElementById('modalRoot').innerHTML=''; state.activeModal=null; state.editingMcqId=null; }
+
+function renderImportProgressModal(completed, total){
+  var pct = total ? Math.round((completed / total) * 100) : 0;
+  return '<h3>Importing your questions</h3>' +
+    '<p class="view-sub" style="margin-bottom:14px;">Don\'t close this or navigate away — the import is still running. This re-saves your whole library, not just what you\'re adding, so the count below may look bigger than expected; that\'s normal.</p>' +
+    '<div class="import-progress-track"><div class="import-progress-fill" id="importProgressFill" style="width:' + pct + '%;"></div></div>' +
+    '<div class="view-sub" id="importProgressLabel" style="margin-top:8px;text-align:center;">' + completed + ' of ' + total + ' synced (' + pct + '%)</div>';
+}
+function updateImportProgressModal(completed, total){
+  var fill = document.getElementById('importProgressFill');
+  var label = document.getElementById('importProgressLabel');
+  if (!fill || !label) return; // modal isn't showing this content anymore (e.g. already transitioned to the done state) — nothing to update
+  var pct = total ? Math.round((completed / total) * 100) : 0;
+  fill.style.width = pct + '%';
+  label.textContent = completed + ' of ' + total + ' synced (' + pct + '%)';
+}
+function renderImportDoneModal(importedCount, skippedCount){
+  var html = '<h3>' + icon('check-circle',18) + ' Import complete</h3>';
+  html += '<p class="view-sub" style="margin-bottom:14px;">' + importedCount + ' question' + (importedCount===1?'':'s') + ' imported and saved' +
+    (skippedCount ? (' — ' + skippedCount + ' duplicate' + (skippedCount===1?'':'s') + ' skipped (already at the 3-copy limit)') : '') + '.</p>';
+  html += '<div class="action-row" style="margin-top:0;margin-bottom:0;"><button class="btn btn-primary" data-action="close-import-done">Go to Library</button></div>';
+  return html;
+}
 
 /* Any <img data-hash-src="HASH"> anywhere in the current DOM gets its real src filled
    in asynchronously — local IndexedDB cache first (instant), falling back to the

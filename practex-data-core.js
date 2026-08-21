@@ -881,6 +881,20 @@ function trashedMcqs(){
   return state.mcqs.filter(function(m){ return !!m.trashedAt; });
 }
 
+/* One canonical group key, shared between renderTrashView() (which builds the
+   grouped rows) and the restore/delete-forever group actions (which need to
+   find the exact same set of items again from just the key stored on a button).
+   Items trashed together (one whole source or folder deletion) share both a
+   trashedFrom label and an identical trashedAt timestamp — delete-source and
+   deleteDeck() both compute that timestamp once and stamp every item in the
+   same operation with it, so grouping on type+label+trashedAt reconstructs
+   "everything that went into the bin in this one action." Anything with no
+   trashedFrom (trashed before this existed) falls back to its own single-item
+   group, keyed by id so two such items never collide. */
+function trashGroupKeyOf(m){
+  return m.trashedFrom ? (m.trashedFrom.type + '␟' + m.trashedFrom.label + '␟' + m.trashedAt) : ('single␟' + m.id + '␟' + m.trashedAt);
+}
+
 /* Real bug found via a live report: buildTree() was fixed to exclude trashed items
    when Trash was built, but that was the ONLY place — every other count/list/stats
    function across the app (Book Shelf per-book counts, sidebar due/misconception
@@ -1167,7 +1181,12 @@ async function manualSync(){
 /* Upserts the current in-memory library in one batched request (Postgres upsert
    accepts an array, so this is a single round trip regardless of library size).
    Note: this does NOT delete rows that were removed locally — see deleteMcqRows(). */
-async function saveLibrary(){
+async function saveLibrary(onProgress){
+  /* onProgress is optional — every existing call site keeps working exactly as
+     before with zero behavior change; only a caller that actually wants to show
+     real progress (e.g. the import flow, see confirm-import) passes one. Called
+     as onProgress({completed, total}) after each batch. */
+  onProgress = onProgress || function(){};
   persistLocalMirror(); /* local-first, unconditional, before any network attempt */
   persistSessionCache(); /* Chapter 4 bugfix — same reasoning as saveUserSettings(): keeps this tab's fast-path copy of the library current the instant it changes in memory, independent of the async Supabase upsert below */
   state.lastSaveHadPermanentConflict = false;
@@ -1189,6 +1208,7 @@ async function saveLibrary(){
       var batch = rows.slice(bi, bi + SAVE_BATCH_SIZE);
       var res = await supabaseClient.from('mcqs').upsert(batch);
       if (res.error) throw res.error;
+      onProgress({ completed: Math.min(bi + SAVE_BATCH_SIZE, rows.length), total: rows.length });
     }
     state.hasUnsyncedChanges = false;
     updateSyncIndicator();

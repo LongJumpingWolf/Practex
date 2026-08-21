@@ -475,26 +475,49 @@ async function onClick(e){
     });
     state.mcqs = state.mcqs.concat(toImport);
     document.getElementById('ingestArea').value = '';
-    state.view = 'browse';
-    showToast('Saving ' + toImport.length + ' question' + (toImport.length===1?'':'s') +
-      (skippedCount ? (' — ' + skippedCount + ' duplicate' + (skippedCount===1?'':'s') + ' skipped (already have 3 copies)') : '') + '…');
-    render();
-    /* Deliberately AWAITED, not fire-and-forget — this is exactly the operation that
-       broke before: showing "success" and letting you navigate/reload away while the
-       actual Supabase write was still in flight meant a reload could abort it before
-       it ever reached the server, silently losing the whole import. Bulk import is
-       rare enough that the extra wait is worth the correctness; frequent taps
-       (Next question, Bookmark, etc.) stay optimistic on purpose. */
-    await saveLibrary();
-    await saveSources();
-    if (state.lastSaveHadPermanentConflict) {
-      /* saveLibrary() already showed a specific explanation — don't pile a misleading
-         "success" message on top of it. */
-    } else if (state.hasUnsyncedChanges) {
-      showToast(pending.length + ' question' + (pending.length===1?'':'s') + ' saved locally — will sync once you\'re back online.');
-    } else {
-      showToast(pending.length + ' question' + (pending.length===1?'':'s') + ' imported and saved.');
+    syncInFlight = true; /* bulk import is the same class of mutation as the trash/rename operations elsewhere — blocks a concurrent auto-sync from pulling stale data back mid-import */
+    state.hasUnsyncedChanges = true;
+
+    /* Real bug found via a live report: the old flow set state.view='browse' and
+       showed a toast immediately, BEFORE the actual save had even started — the
+       only feedback was that one toast, which fades in a few seconds with nothing
+       persistent behind it. No way to tell if an import was still running or had
+       silently failed to start; one report described re-uploading the same
+       source a second time because of exactly that ambiguity. A blocking modal
+       with real, live progress (not a fake spinner — this is wired to the actual
+       batch-by-batch save progress) replaces that, and it's structurally
+       impossible to trigger a second import while it's up, since Add Source
+       itself isn't reachable until this closes. */
+    var libraryTotal = state.mcqs.length;
+    showBlockingModal(renderImportProgressModal(0, libraryTotal), 'narrow');
+    try {
+      await saveLibrary(function(progress){ updateImportProgressModal(progress.completed, progress.total); });
+      await saveSources();
+    } finally {
+      syncInFlight = false;
     }
+
+    if (state.lastSaveHadPermanentConflict) {
+      /* saveLibrary() already showed a specific explanation via its own toast —
+         close the progress modal and let that stand, rather than piling a
+         misleading "done" confirmation on top of a save that actually failed. */
+      closeModal();
+      state.view = 'browse';
+      render();
+    } else {
+      var doneRoot = document.getElementById('modalRoot');
+      var doneCard = doneRoot && doneRoot.querySelector('.modal-card');
+      if (doneCard) doneCard.innerHTML = renderImportDoneModal(toImport.length, skippedCount);
+      if (state.hasUnsyncedChanges) {
+        showToast(pending.length + ' question' + (pending.length===1?'':'s') + ' saved locally — will sync once you\'re back online.');
+      }
+    }
+    return;
+  }
+  if (action === 'close-import-done') {
+    closeModal();
+    state.view = 'browse';
+    render();
     return;
   }
 
@@ -523,7 +546,7 @@ async function onClick(e){
     if (!confirm('Move "' + srcName + '" and all its MCQs to Trash? Restorable for ' + TRASH_RETENTION_DAYS + ' days.')) return;
     var trashedNow = Date.now();
     var trashedCount = 0;
-    state.mcqs.forEach(function(m){ if (m.source === srcName && !m.trashedAt) { m.trashedAt = trashedNow; trashedCount++; } });
+    state.mcqs.forEach(function(m){ if (m.source === srcName && !m.trashedAt) { m.trashedAt = trashedNow; m.trashedFrom = { type: 'source', label: srcName }; trashedCount++; } });
     syncInFlight = true; /* same race and same fix as the other trash mutations above */
     state.hasUnsyncedChanges = true;
     /* Source metadata (name/color) deliberately stays — a trashed question restored
@@ -583,6 +606,49 @@ async function onClick(e){
       syncInFlight = false;
     }
     showToast('Deleted forever.');
+    return;
+  }
+
+  /* Group versions — act on everything trashed together in one deletion (a whole
+     source or folder), matching how a real recycle bin restores/deletes a
+     deleted folder as one thing rather than requiring every file inside it to be
+     picked one at a time. Same grouping key renderTrashView() itself used to
+     build these rows in the first place. */
+  if (action === 'restore-trash-group') {
+    var restoreGroupKey = el.getAttribute('data-group');
+    var toRestore = trashedMcqs().filter(function(m){ return trashGroupKeyOf(m) === restoreGroupKey; });
+    if (!toRestore.length) return;
+    toRestore.forEach(function(m){ delete m.trashedAt; delete m.trashedFrom; });
+    syncInFlight = true;
+    state.hasUnsyncedChanges = true;
+    render();
+    saveLibrary().finally(function(){ syncInFlight = false; });
+    showToast('Restored ' + toRestore.length + ' question' + (toRestore.length===1?'':'s') + '.');
+    return;
+  }
+
+  if (action === 'permanently-delete-trash-group') {
+    var deleteGroupKey = el.getAttribute('data-group');
+    var toDelete = trashedMcqs().filter(function(m){ return trashGroupKeyOf(m) === deleteGroupKey; });
+    if (!toDelete.length) return;
+    if (!confirm('Delete these ' + toDelete.length + ' question' + (toDelete.length===1?'':'s') + ' forever? This cannot be undone.')) return;
+    var groupDeleteIds = toDelete.map(function(m){ return m.id; });
+    var groupDeleteHashes = [];
+    toDelete.forEach(function(m){
+      (m.images || []).forEach(function(h){ groupDeleteHashes.push(h); });
+      (m.answerImages || []).forEach(function(h){ groupDeleteHashes.push(h); });
+    });
+    state.mcqs = state.mcqs.filter(function(m){ return groupDeleteIds.indexOf(m.id) === -1; });
+    syncInFlight = true;
+    state.hasUnsyncedChanges = true;
+    render();
+    try {
+      await deleteMcqRows(groupDeleteIds);
+      await purgeOrphanedImageHashes(groupDeleteHashes);
+    } finally {
+      syncInFlight = false;
+    }
+    showToast('Deleted ' + toDelete.length + ' question' + (toDelete.length===1?'':'s') + ' forever.');
     return;
   }
 
