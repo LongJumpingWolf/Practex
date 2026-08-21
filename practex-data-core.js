@@ -813,22 +813,78 @@ function bumpStreak(){
    real-world "you might be back" moments happen: refocusing the tab,
    switching back to it, the browser's own online event firing, being
    restored from the back/forward cache, or — as a catch-all in case none of
-   those fire for some reason — a 30-second safety-net timer regardless. */
+   those fire for some reason — a 30-second safety-net timer regardless.
+
+   REWRITTEN after a real cross-device sync failure report — traced to a serious
+   gap: every sync path here (auto-retry, the 30s timer, the sync-status-pill
+   click, and manualSync() below) was PUSH-ONLY. None of them ever re-fetched
+   from Supabase — so a device with nothing locally unsynced (the common case:
+   you didn't just edit anything) would NEVER check whether another device had
+   pushed something newer, no matter how many times you clicked "sync" or how
+   long you waited. Worse, pressing sync on a stale device would silently
+   overwrite the cloud's newer copy with this device's older one.
+
+   Modeled directly on Kardex's doSync(), which already solves this correctly:
+   pull-then-push-to-reconfirm when this device has nothing of its own to
+   protect; push-then-pull-to-reconfirm when it does (so an unsynced local edit
+   isn't destroyed by the pull, but the device still ends up current either way).
+   loadLibrary() is Practex's real "pull everything" function — it was already
+   being called once at boot, just never again after that. */
 var syncInFlight = false;
 var lastAutoSyncAt = 0;
 var AUTO_SYNC_MIN_INTERVAL_MS = 15000; // throttle — don't hammer retries more than once per 15s
 
-async function retryUnsyncedChangesIfAny(){
-  if (!state.hasUnsyncedChanges || !state.currentUser || !supabaseClient || syncInFlight) return;
+async function reconcileWithCloud(opts){
+  opts = opts || {};
+  if (!state.currentUser || !supabaseClient) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    if (!opts.silent) showToast('You\'re offline — Practex will sync automatically once you\'re back.');
+    return;
+  }
+  if (syncInFlight) return;
+  /* Mid-session, a PULL would wholesale-replace state.mcqs — the exact objects the
+     active practice screen is reading/writing to right now — which risks discarding
+     a not-yet-committed local learning update from earlier in THIS session if the
+     pull lands between an answer and its own saveLibrary() call finishing. A PUSH is
+     still safe mid-session (it doesn't touch state.mcqs wholesale, just uploads the
+     current array — which per-answer commits are already keeping current), so this
+     only skips the pull half, not the whole reconciliation — clicking sync
+     mid-practice should still visibly do something, not silently no-op. */
+  var midSession = typeof isMidSession === 'function' && isMidSession();
   syncInFlight = true;
   updateSyncIndicator();
   try {
-    await saveLibrary();
-    await saveUserSettings();
+    var pushed;
+    if (midSession) {
+      pushed = await pushLocalChanges();
+    } else if (state.hasUnsyncedChanges) {
+      pushed = await pushLocalChanges();
+      await loadLibrary();
+      if (pushed) pushed = await pushLocalChanges(); // re-confirm lockstep, same as Kardex's doSync()
+    } else {
+      await loadLibrary();
+      pushed = await pushLocalChanges();
+    }
+    if (!midSession) render(); /* the pull may have brought in real changes (another device's answers, edits) — reflect them on screen. Mid-session, nothing was pulled, so nothing to re-render for this reason. */
+    if (!opts.silent) {
+      showToast(state.hasUnsyncedChanges ? 'Could not fully sync — check your connection and try again.' : 'Synced.');
+    }
+  } catch (err) {
+    console.error('reconcileWithCloud:', err);
+    if (!opts.silent) showToast('Sync failed — check your connection and try again.');
   } finally {
     syncInFlight = false;
     updateSyncIndicator();
   }
+}
+async function pushLocalChanges(){
+  await saveLibrary();
+  await saveUserSettings();
+  return !state.hasUnsyncedChanges;
+}
+
+async function retryUnsyncedChangesIfAny(){
+  return reconcileWithCloud({ silent: true });
 }
 setInterval(retryUnsyncedChangesIfAny, 30000);
 
@@ -862,22 +918,11 @@ function renderSyncStatusPill(){
     icon(iconName, 13) + ' ' + label + '</div>';
 }
 async function manualSync(){
-  if (!state.currentUser || !supabaseClient) return;
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    showToast('You\'re offline — Practex will sync automatically once you\'re back.');
-    return;
-  }
-  if (syncInFlight) return;
-  syncInFlight = true;
-  updateSyncIndicator();
-  try {
-    await saveLibrary();
-    await saveUserSettings();
-    showToast(state.hasUnsyncedChanges ? 'Could not sync — check your connection and try again.' : 'Synced.');
-  } finally {
-    syncInFlight = false;
-    updateSyncIndicator();
-  }
+  /* Was push-only (saveLibrary + saveUserSettings, no pull) — the exact bug this
+     whole section was rewritten to fix. Now the same real pull-and-reconcile logic
+     as the auto-retry path, just not silent, so a manual click always gives an
+     honest "did this actually catch up" result instead of a false "Synced." */
+  return reconcileWithCloud({ silent: false });
 }
 /* Upserts the current in-memory library in one batched request (Postgres upsert
    accepts an array, so this is a single round trip regardless of library size).

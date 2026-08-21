@@ -873,6 +873,21 @@ async function showApp(){
     document.getElementById('appRoot').style.display = 'grid';
     await reconcilePausedSession();
     bootCurrentPage();
+    /* THE cross-device sync bug: this fast path skips loadLibrary() entirely for
+       speed, which also means it skips the only thing that ever checks whether the
+       cloud has changed — e.g. a test finished on another device. A reload only
+       clears sessionStorage when the TAB actually closes, not on refresh, so a
+       reused tab would take this fast path forever and never see another device's
+       progress no matter how many times it was refreshed or "Sync" was clicked
+       (manualSync() had its own, separate version of this same bug — see the big
+       comment above reconcileWithCloud() in practex-data-core.js).
+       Fire-and-forget, silent, and throttled through the EXISTING autoSync()
+       15-second minimum interval — reused as-is rather than inventing a second
+       throttle — so rapid back-and-forth navigation doesn't refetch the whole
+       library every single hop (which would undo the point of this fast path), but
+       coming back after any real gap (finished a test elsewhere, stepped away)
+       reliably catches up within moments of the page settling, not never. */
+    autoSync();
     return;
   }
 
