@@ -321,7 +321,12 @@ async function confirmImportWithChoice(resetProgress){
 }
 function showModal(title, message, buttons){
   var root=document.getElementById('modalRoot');
-  root.innerHTML='<div class="modal-backdrop"><div class="modal-card"><h3>'+escapeHtml(title)+'</h3><p>'+escapeHtml(message)+'</p><div class="action-row" style="margin-bottom:0;">'+buttons.map(function(b){return '<button class="btn '+(b.primary?'btn-primary':'btn-ghost')+'" data-action="'+b.action+'">'+escapeHtml(b.label)+'</button>';}).join('')+'</div></div></div>';
+  root.innerHTML='<div class="modal-backdrop"><div class="modal-card"><h3>'+escapeHtml(title)+'</h3><p>'+escapeHtml(message)+'</p><div class="action-row" style="margin-bottom:0;">'+buttons.map(function(b){
+    var cls = b.danger ? 'btn-danger' : (b.primary ? 'btn-primary' : 'btn-ghost');
+    var attrs = '';
+    if (b.data) { Object.keys(b.data).forEach(function(k){ attrs += ' data-' + k + '="' + escapeHtml(String(b.data[k])) + '"'; }); }
+    return '<button class="btn '+cls+'" data-action="'+b.action+'"'+attrs+'>'+escapeHtml(b.label)+'</button>';
+  }).join('')+'</div></div></div>';
 }
 function showRichModal(innerHtml, size){
   var root=document.getElementById('modalRoot');

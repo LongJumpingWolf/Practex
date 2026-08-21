@@ -70,7 +70,14 @@ async function onClick(e){
   }
   if (action === 'start-plan-session') { startPlanSession(el.getAttribute('data-plan-key')); return; }
   if (action === 'cancel-plan') {
-    if (!confirm('Cancel this study plan? Your progress on it won\'t be undone, but the plan itself (and its pacing) will be gone.')) return;
+    showModal('Cancel this plan?', 'Your progress on it won\'t be undone, but the plan itself (and its pacing) will be gone.', [
+      { action: 'close-modal', label: 'Keep plan' },
+      { action: 'confirm-cancel-plan', label: 'Cancel plan', danger: true, data: { 'plan-key': el.getAttribute('data-plan-key') } }
+    ]);
+    return;
+  }
+  if (action === 'confirm-cancel-plan') {
+    closeModal();
     cancelStudyPlan(el.getAttribute('data-plan-key'));
     render();
     showToast('Plan cancelled.');
@@ -555,7 +562,15 @@ async function onClick(e){
   }
   if (action === 'delete-source') {
     var srcName = el.getAttribute('data-source');
-    if (!confirm('Move "' + srcName + '" and all its MCQs to Trash? Restorable for ' + TRASH_RETENTION_DAYS + ' days.')) return;
+    showModal('Move to Trash?', 'Move "' + srcName + '" and all its MCQs to Trash? Restorable for ' + TRASH_RETENTION_DAYS + ' days.', [
+      { action: 'close-modal', label: 'Cancel' },
+      { action: 'confirm-delete-source', label: 'Move to Trash', danger: true, data: { source: srcName } }
+    ]);
+    return;
+  }
+  if (action === 'confirm-delete-source') {
+    closeModal();
+    var srcName = el.getAttribute('data-source');
     var trashedNow = Date.now();
     var trashedCount = 0;
     state.mcqs.forEach(function(m){ if (m.source === srcName && !m.trashedAt) { m.trashedAt = trashedNow; m.trashedFrom = { type: 'source', label: srcName }; trashedCount++; } });
@@ -603,7 +618,15 @@ async function onClick(e){
 
   if (action === 'permanently-delete-trash-item') {
     var permId = el.getAttribute('data-id');
-    if (!confirm('Delete this question forever? This cannot be undone.')) return;
+    showModal('Delete forever?', 'Delete this question forever? This cannot be undone.', [
+      { action: 'close-modal', label: 'Cancel' },
+      { action: 'confirm-permanently-delete-trash-item', label: 'Delete forever', danger: true, data: { id: permId } }
+    ]);
+    return;
+  }
+  if (action === 'confirm-permanently-delete-trash-item') {
+    closeModal();
+    var permId = el.getAttribute('data-id');
     var permM = state.mcqs.find(function(x){ return x.id === permId; });
     if (!permM) return;
     var permHashes = (permM.images || []).concat(permM.answerImages || []);
@@ -643,7 +666,17 @@ async function onClick(e){
     var deleteGroupKey = el.getAttribute('data-group');
     var toDelete = trashedMcqs().filter(function(m){ return trashGroupKeyOf(m) === deleteGroupKey; });
     if (!toDelete.length) return;
-    if (!confirm('Delete these ' + toDelete.length + ' question' + (toDelete.length===1?'':'s') + ' forever? This cannot be undone.')) return;
+    showModal('Delete forever?', 'Delete these ' + toDelete.length + ' question' + (toDelete.length===1?'':'s') + ' forever? This cannot be undone.', [
+      { action: 'close-modal', label: 'Cancel' },
+      { action: 'confirm-permanently-delete-trash-group', label: 'Delete forever', danger: true, data: { group: deleteGroupKey } }
+    ]);
+    return;
+  }
+  if (action === 'confirm-permanently-delete-trash-group') {
+    closeModal();
+    var deleteGroupKey = el.getAttribute('data-group');
+    var toDelete = trashedMcqs().filter(function(m){ return trashGroupKeyOf(m) === deleteGroupKey; });
+    if (!toDelete.length) return;
     var groupDeleteIds = toDelete.map(function(m){ return m.id; });
     var groupDeleteHashes = [];
     toDelete.forEach(function(m){
@@ -667,7 +700,16 @@ async function onClick(e){
   if (action === 'empty-trash') {
     var toEmpty = trashedMcqs();
     if (!toEmpty.length) return;
-    if (!confirm('Permanently delete all ' + toEmpty.length + ' question' + (toEmpty.length===1?'':'s') + ' in Trash? This cannot be undone.')) return;
+    showModal('Empty Trash?', 'Permanently delete all ' + toEmpty.length + ' question' + (toEmpty.length===1?'':'s') + ' in Trash? This cannot be undone.', [
+      { action: 'close-modal', label: 'Cancel' },
+      { action: 'confirm-empty-trash', label: 'Empty Trash', danger: true }
+    ]);
+    return;
+  }
+  if (action === 'confirm-empty-trash') {
+    closeModal();
+    var toEmpty = trashedMcqs();
+    if (!toEmpty.length) return;
     var emptyIds = toEmpty.map(function(m){ return m.id; });
     var emptyHashes = [];
     toEmpty.forEach(function(m){
@@ -699,7 +741,14 @@ async function onClick(e){
   }
 
   if (action === 'clear-all') {
-    if (!confirm('Delete your entire Practex library? This cannot be undone.')) return;
+    showModal('Clear entire library?', 'Delete your entire Practex library? This cannot be undone.', [
+      { action: 'close-modal', label: 'Cancel' },
+      { action: 'confirm-clear-all', label: 'Clear entire library', danger: true }
+    ]);
+    return;
+  }
+  if (action === 'confirm-clear-all') {
+    closeModal();
     var allMcqIds = state.mcqs.map(function(m){ return m.id; });
     state.mcqs = [];
     state.sources = {};
