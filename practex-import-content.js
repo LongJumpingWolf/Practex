@@ -495,6 +495,8 @@ function renderSettingsModalContent(){
     '<div class="data-btn-row">' +
       '<button class="data-btn primary" data-action="export-library">' + icon('download',15) + ' Export library</button>' +
     '</div>' +
+    '<div class="settings-row" style="margin-top:10px;"><span>' + icon('trash-2',14) + ' Trash</span>' +
+      '<button class="btn btn-ghost btn-sm" data-action="set-view" data-view="trash">' + trashedMcqs().length + ' item' + (trashedMcqs().length===1?'':'s') + ' — view</button></div>' +
     '<div class="view-sub" style="margin-top:8px;margin-bottom:0;">Your library syncs to your account automatically — export is just for keeping an offline backup, or moving questions somewhere else on purpose. This exports everything; for just one subject or filtered set, use "Export this view" in the Library screen instead. Importing a backup file now lives on the Add Source screen.</div>' +
     '</div>';
 

@@ -409,6 +409,7 @@ function buildTree(){
   var sourceFilter = (state.view === 'bookshelf' && state.bookshelfActiveSource) ? state.bookshelfActiveSource : null;
   var root = {};
   state.mcqs.forEach(function(m){
+    if (m.trashedAt) return; /* soft-deleted — invisible everywhere browsing/counting/practicing happens, without needing to touch every read site individually; see TRASH_RETENTION_DAYS and the Trash view for where these actually live now */
     if (sourceFilter && m.source !== sourceFilter) return;
     if (!root[m.subject]) root[m.subject] = { name: m.subject, count: 0, children: {}, ids: [] };
     var node = root[m.subject];
@@ -529,10 +530,14 @@ function duplicateDeck(pathArr){
 }
 function deleteDeck(pathArr){
   var removed = mcqsUnderPath(pathArr);
-  var idsSet = {};
-  removed.forEach(function(m){ idsSet[m.id] = true; });
-  state.mcqs = state.mcqs.filter(function(m){ return !idsSet[m.id]; });
-  return removed; /* full mcq objects, not just ids — needed to know which image hashes they held */
+  /* Soft delete — mark and keep, don't remove from state.mcqs at all. buildTree()
+     already excludes anything with trashedAt set, so this is invisible everywhere
+     browsing happens immediately, exactly like a real delete looks from the outside,
+     but nothing actually leaves state.mcqs (or the server) until it's restored or
+     the 30-day retention window elapses — see TRASH_RETENTION_DAYS. */
+  var now = Date.now();
+  removed.forEach(function(m){ m.trashedAt = now; });
+  return removed; /* full mcq objects — the trash view needs the real content to show/restore them */
 }
 
 /* ---------------- Filtering ---------------- */
@@ -802,7 +807,43 @@ function renderMain(){
   if (state.view === 'practice' && state.session) return renderPractice();
   if (state.view === 'summary' && state.session) return renderSummary();
   if (state.view === 'bookshelf') return renderBookshelf();
+  if (state.view === 'trash') return renderTrashView();
   return renderBrowse();
+}
+
+/* ---------------- Trash (soft-deleted questions, 30-day retention) ---------------- */
+function renderTrashView(){
+  var items = trashedMcqs().slice().sort(function(a, b){ return b.trashedAt - a.trashedAt; }); /* most recently deleted first */
+  var html = '<div class="view-head"><div class="breadcrumb"><button class="breadcrumb-link" data-action="set-view" data-view="browse">' + icon('chevron-left',12) + ' Library</button></div>' +
+    '<div class="view-title serif">Trash</div>' +
+    '<div class="view-sub">' + items.length + ' question' + (items.length===1?'':'s') + ' — anything here longer than ' + TRASH_RETENTION_DAYS + ' days is removed automatically.</div></div>';
+
+  if (!items.length) {
+    html += '<div class="card empty-state"><span class="serif">Trash is empty</span>Deleted decks and sources land here for ' + TRASH_RETENTION_DAYS + ' days before being cleaned up automatically.</div>';
+    return html;
+  }
+
+  html += '<div class="action-row"><button class="btn btn-ghost" data-action="empty-trash">' + icon('trash-2',14) + ' Empty trash</button></div>';
+
+  html += '<div class="mcq-list">';
+  items.forEach(function(m){
+    var daysLeft = Math.max(0, TRASH_RETENTION_DAYS - Math.floor((Date.now() - m.trashedAt) / 86400000));
+    var qText = questionDisplayText(m);
+    var snippet = qText.replace(/\n/g,' ').slice(0, 140) + (qText.length > 140 ? '…' : '');
+    html += '<div class="card mcq-row">' +
+      '<div class="mcq-status-dot"></div>' +
+      '<div class="mcq-row-text">' + escapeHtml(snippet) +
+      '<div class="mcq-row-meta">' +
+      '<span class="source-pill" style="background:' + colorForSource(m.source) + '">' + escapeHtml(m.source) + '</span>' +
+      '<span class="tag-pill">' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left</span>' +
+      '</div></div>' +
+      '<div class="mcq-row-actions">' +
+      '<button class="mcq-icon-btn" data-action="restore-trash-item" data-id="' + m.id + '" title="Restore">' + icon('corner-up-right',14) + '</button>' +
+      '<button class="mcq-icon-btn" data-action="permanently-delete-trash-item" data-id="' + m.id + '" title="Delete forever">' + icon('trash-2',14) + '</button>' +
+      '</div></div>';
+  });
+  html += '</div>';
+  return html;
 }
 
 /* ---------------- Book shelf view (by source) ---------------- */

@@ -753,6 +753,7 @@ async function loadLibrary(onProgress){
     persistLocalMirror(); /* refresh the offline-fallback cache with this known-correct load — otherwise it could keep holding a stale/incomplete snapshot from before the pagination fix indefinitely, until something else happened to trigger a save */
   }
   persistSessionCache(); /* Chapter 4 — seeds the same-tab fast path so the NEXT library.html<->practice.html hop in this tab doesn't need a full reload; see the big comment above persistSessionCache() */
+  purgeExpiredTrash(); /* fire-and-forget, not awaited — a real full load only happens once per genuinely new session (new tab, reopened browser), which is exactly the right frequency for a background tidiness check like this; not run on the same-tab fast path on purpose */
 }
 /* All the small per-user preferences live in one row so toggling any of them is a
    single upsert rather than a separate table/network round trip each. */
@@ -833,6 +834,42 @@ function bumpStreak(){
 var syncInFlight = false;
 var lastAutoSyncAt = 0;
 var AUTO_SYNC_MIN_INTERVAL_MS = 15000; // throttle — don't hammer retries more than once per 15s
+
+/* ================= Trash (soft delete, 30-day retention) =================
+   Modeled directly on Kardex's own trash feature (TRASH_RETENTION_DAYS = 30 there
+   too) — the pattern is proven, this just adapts it to Practex's flat mcq-array
+   data model instead of Kardex's nested deck tree, which is simpler here: a soft-
+   deleted question is just an mcq with m.trashedAt set, still sitting in state.mcqs
+   and still synced normally via the existing saveLibrary() upsert — no separate
+   trash table, no snapshot/skeleton reconstruction needed, since the row was never
+   actually removed. buildTree() (practex-render-library.js) excludes anything with
+   trashedAt set, which is what makes it invisible to browsing/counting/practicing
+   everywhere at once, from one filter, rather than needing to be re-checked at
+   every individual read site. */
+var TRASH_RETENTION_DAYS = 30;
+
+function trashedMcqs(){
+  return state.mcqs.filter(function(m){ return !!m.trashedAt; });
+}
+
+/* Runs once per real boot (not on the same-tab fast path — trash purging is a
+   background-tidiness concern, not something that needs to happen on every single
+   library<->practice hop). Anything past the retention window gets permanently
+   removed — from state.mcqs AND the server — same as Kardex's purgeExpiredTrash(). */
+async function purgeExpiredTrash(){
+  var cutoff = Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  var expired = state.mcqs.filter(function(m){ return m.trashedAt && m.trashedAt < cutoff; });
+  if (!expired.length) return;
+  var expiredIds = expired.map(function(m){ return m.id; });
+  var candidateHashes = [];
+  expired.forEach(function(m){
+    (m.images || []).forEach(function(h){ candidateHashes.push(h); });
+    (m.answerImages || []).forEach(function(h){ candidateHashes.push(h); });
+  });
+  state.mcqs = state.mcqs.filter(function(m){ return !m.trashedAt || m.trashedAt >= cutoff; });
+  await deleteMcqRows(expiredIds);
+  await purgeOrphanedImageHashes(candidateHashes);
+}
 
 async function reconcileWithCloud(opts){
   opts = opts || {};

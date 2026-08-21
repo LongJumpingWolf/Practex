@@ -26,7 +26,7 @@ async function onClick(e){
 
   if (action === 'toggle-sidebar') { state.sidebarOpen = !state.sidebarOpen; render(); return; }
   if (action === 'manual-sync') { manualSync(); return; }
-  if (action === 'set-view') { if (guardNavigation(action, el)) return; state.view = el.getAttribute('data-view'); state.sidebarOpen = false; render(); return; }
+  if (action === 'set-view') { if (guardNavigation(action, el)) return; closeModal(); state.view = el.getAttribute('data-view'); state.sidebarOpen = false; render(); return; }
   if (action === 'open-dashboard') { if (guardNavigation(action, el)) return; state.view = 'dashboard'; state.sidebarOpen = false; render(); return; }
   if (action === 'toggle-fsrs-mode') {
     state.learningMode.enabled = !state.learningMode.enabled;
@@ -405,18 +405,60 @@ async function onClick(e){
 
   if (action === 'delete-source') {
     var srcName = el.getAttribute('data-source');
-    if (!confirm('Delete "' + srcName + '" and all its MCQs? This cannot be undone.')) return;
-    var removedSrcIds = state.mcqs.filter(function(m){ return m.source === srcName; }).map(function(m){ return m.id; });
-    state.mcqs = state.mcqs.filter(function(m){ return m.source !== srcName; });
-    delete state.sources[srcName];
-    showToast('Deleting source…');
+    if (!confirm('Move "' + srcName + '" and all its MCQs to Trash? Restorable for ' + TRASH_RETENTION_DAYS + ' days.')) return;
+    var trashedNow = Date.now();
+    var trashedCount = 0;
+    state.mcqs.forEach(function(m){ if (m.source === srcName && !m.trashedAt) { m.trashedAt = trashedNow; trashedCount++; } });
+    /* Source metadata (name/color) deliberately stays — a trashed question restored
+       later should still show its original source pill correctly, not fall back to
+       a regenerated color as if it were never labeled at all. */
+    showToast('Moving to Trash…');
     render();
-    /* Awaited, and an explicit delete rather than an upsert of what's left — upsert
-       only ever updates/inserts rows present in the payload, it never removes rows
-       that are simply missing from it, so this always needed a real DELETE call. */
-    await deleteMcqRows(removedSrcIds);
-    await saveSources();
-    showToast('Source deleted.');
+    await saveLibrary(); /* normal upsert — nothing left the table, just marked */
+    showToast(trashedCount + ' question' + (trashedCount===1?'':'s') + ' moved to Trash.');
+    return;
+  }
+
+  if (action === 'restore-trash-item') {
+    var restoreId = el.getAttribute('data-id');
+    var restoreM = state.mcqs.find(function(x){ return x.id === restoreId; });
+    if (!restoreM) return;
+    delete restoreM.trashedAt;
+    render();
+    saveLibrary(); /* fire-and-forget, matches the pattern used for every other in-place edit (bookmark toggle, sleep toggle, etc) */
+    showToast('Restored.');
+    return;
+  }
+
+  if (action === 'permanently-delete-trash-item') {
+    var permId = el.getAttribute('data-id');
+    if (!confirm('Delete this question forever? This cannot be undone.')) return;
+    var permM = state.mcqs.find(function(x){ return x.id === permId; });
+    if (!permM) return;
+    var permHashes = (permM.images || []).concat(permM.answerImages || []);
+    state.mcqs = state.mcqs.filter(function(x){ return x.id !== permId; });
+    render();
+    await deleteMcqRows([permId]);
+    await purgeOrphanedImageHashes(permHashes);
+    showToast('Deleted forever.');
+    return;
+  }
+
+  if (action === 'empty-trash') {
+    var toEmpty = trashedMcqs();
+    if (!toEmpty.length) return;
+    if (!confirm('Permanently delete all ' + toEmpty.length + ' question' + (toEmpty.length===1?'':'s') + ' in Trash? This cannot be undone.')) return;
+    var emptyIds = toEmpty.map(function(m){ return m.id; });
+    var emptyHashes = [];
+    toEmpty.forEach(function(m){
+      (m.images || []).forEach(function(h){ emptyHashes.push(h); });
+      (m.answerImages || []).forEach(function(h){ emptyHashes.push(h); });
+    });
+    state.mcqs = state.mcqs.filter(function(m){ return !m.trashedAt; });
+    render();
+    await deleteMcqRows(emptyIds);
+    await purgeOrphanedImageHashes(emptyHashes);
+    showToast('Trash emptied.');
     return;
   }
 
@@ -600,20 +642,13 @@ async function onClick(e){
     state.pendingDeckDelete = null;
     if (delPath) {
       var delArr = delPath.split('␟');
-      var removedMcqs = deleteDeck(delArr);
-      var removedIds = removedMcqs.map(function(m){ return m.id; });
+      var removedMcqs = deleteDeck(delArr); /* soft delete — see deleteDeck(), nothing actually leaves state.mcqs or the server here */
       if (state.selectedPath && state.selectedPath.join('␟').indexOf(delPath) === 0) {
         state.selectedPath = null; state.forceList = false;
       }
       closeModal(); render();
-      showToast('Deleted ' + removedIds.length + ' question' + (removedIds.length===1?'':'s') + '.');
-      var candidateHashes = [];
-      removedMcqs.forEach(function(m){
-        (m.images || []).forEach(function(h){ candidateHashes.push(h); });
-        (m.answerImages || []).forEach(function(h){ candidateHashes.push(h); });
-      });
-      await deleteMcqRows(removedIds);
-      await purgeOrphanedImageHashes(candidateHashes);
+      showToast('Moved ' + removedMcqs.length + ' question' + (removedMcqs.length===1?'':'s') + ' to Trash — restorable for ' + TRASH_RETENTION_DAYS + ' days.');
+      await saveLibrary(); /* normal upsert — trashedAt is just another field on the same rows, no explicit delete call needed since nothing is actually gone yet */
     } else {
       closeModal();
     }
