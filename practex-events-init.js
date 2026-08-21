@@ -489,7 +489,7 @@ async function onClick(e){
        impossible to trigger a second import while it's up, since Add Source
        itself isn't reachable until this closes. */
     var libraryTotal = state.mcqs.length;
-    showBlockingModal(renderImportProgressModal(0, libraryTotal), 'narrow');
+    showBlockingModal(renderImportProgressModal(0, libraryTotal, toImport.length), 'narrow');
     importInFlight = true;
     try {
       /* Sources saved BEFORE the questions, deliberately reversed from the
@@ -503,7 +503,7 @@ async function onClick(e){
          actually reported with, questions that saved fine but whose source
          never appeared as a visible book at all. */
       await saveSources();
-      await saveLibrary(function(progress){ updateImportProgressModal(progress.completed, progress.total); });
+      await saveLibrary(function(progress){ updateImportProgressModal(progress.completed, progress.total, toImport.length); });
     } finally {
       syncInFlight = false;
       importInFlight = false;

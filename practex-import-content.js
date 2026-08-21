@@ -297,12 +297,12 @@ async function confirmImportWithChoice(resetProgress){
      for a bulk file import that can take a real moment. Every import path in the
      app should feel the same, not just the one that happened to get fixed first. */
   var libraryTotal2 = state.mcqs.length;
-  showBlockingModal(renderImportProgressModal(0, libraryTotal2), 'narrow');
+  showBlockingModal(renderImportProgressModal(0, libraryTotal2, added), 'narrow');
   syncInFlight = true;
   importInFlight = true;
   try {
     await saveSources(); /* sources before questions — same reasoning as confirm-import, the safer failure mode if something still interrupts */
-    await saveLibrary(function(progress){ updateImportProgressModal(progress.completed, progress.total); });
+    await saveLibrary(function(progress){ updateImportProgressModal(progress.completed, progress.total, added); });
   } finally {
     syncInFlight = false;
     importInFlight = false;
@@ -347,20 +347,32 @@ function showBlockingModal(innerHtml, size){
 }
 function closeModal(){ document.getElementById('modalRoot').innerHTML=''; state.activeModal=null; state.editingMcqId=null; }
 
-function renderImportProgressModal(completed, total){
+/* completed/total here are always saveLibrary()'s real batch progress against the
+   WHOLE library (it re-upserts every row, not just what's being imported — see the
+   comment on saveLibrary). Showing those raw numbers to the user was confusing
+   ("4800 of 6597 synced" on a 12-question import), so the bar and percentage are
+   still driven by the real completed/total (that's genuine save progress), but the
+   displayed count is rescaled onto a 0..importedCount range — the number people
+   actually care about. importedCount defaults to total for any old call site that
+   doesn't pass one, so behavior is unchanged unless a caller opts in. */
+function renderImportProgressModal(completed, total, importedCount){
+  if (importedCount == null) importedCount = total;
   var pct = total ? Math.round((completed / total) * 100) : 0;
+  var displayed = total ? Math.round((completed / total) * importedCount) : 0;
   return '<h3>Importing your questions</h3>' +
-    '<p class="view-sub" style="margin-bottom:14px;">Don\'t close this or navigate away — the import is still running. This re-saves your whole library, not just what you\'re adding, so the count below may look bigger than expected; that\'s normal.</p>' +
+    '<p class="view-sub" style="margin-bottom:14px;">Don\'t close this or navigate away — the import is still running.</p>' +
     '<div class="import-progress-track"><div class="import-progress-fill" id="importProgressFill" style="width:' + pct + '%;"></div></div>' +
-    '<div class="view-sub" id="importProgressLabel" style="margin-top:8px;text-align:center;">' + completed + ' of ' + total + ' synced (' + pct + '%)</div>';
+    '<div class="view-sub" id="importProgressLabel" style="margin-top:8px;text-align:center;">' + displayed + ' of ' + importedCount + ' synced (' + pct + '%)</div>';
 }
-function updateImportProgressModal(completed, total){
+function updateImportProgressModal(completed, total, importedCount){
   var fill = document.getElementById('importProgressFill');
   var label = document.getElementById('importProgressLabel');
   if (!fill || !label) return; // modal isn't showing this content anymore (e.g. already transitioned to the done state) — nothing to update
+  if (importedCount == null) importedCount = total;
   var pct = total ? Math.round((completed / total) * 100) : 0;
+  var displayed = total ? Math.round((completed / total) * importedCount) : 0;
   fill.style.width = pct + '%';
-  label.textContent = completed + ' of ' + total + ' synced (' + pct + '%)';
+  label.textContent = displayed + ' of ' + importedCount + ' synced (' + pct + '%)';
 }
 function renderImportDoneModal(importedCount, skippedCount){
   var html = '<h3>' + icon('check-circle',18) + ' Import complete</h3>';
