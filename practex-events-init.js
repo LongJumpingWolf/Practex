@@ -799,6 +799,12 @@ async function onClick(e){
     animateSequenceToCorrect(seqM); /* commits the correct order to state.session.selected AND animates the reflow — see the big comment on this function for why it's not just render() */
     return;
   }
+  if (action === 'match-show-correct') {
+    var matchM = state.mcqs.find(function(x){ return x.id === state.session.ids[state.session.viewIndex]; });
+    if (!matchM || matchM.type !== 'match') return;
+    animateMatchToCorrect(matchM); /* realigns the right column to match rows AND animates the reflow — see the big comment on this function */
+    return;
+  }
 
   if (action === 'reveal-short') {
     var val = document.getElementById('shortAnswerInput').value.trim();

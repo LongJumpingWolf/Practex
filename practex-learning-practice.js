@@ -675,6 +675,42 @@ function moveArrayItem(arr, fromIndex, toIndex){
 
 /* "Show correct order" — animates the CURRENT (possibly wrong) arrangement into the
    correct one, rather than just re-rendering straight to it. Standard FLIP technique:
+/* Shared FLIP-animation core, extracted so sequence's "show correct order" and
+   match's "show correct pairs" (below) don't duplicate the same measure-commit-
+   remeasure-invert mechanic. See animateSequenceToCorrect for the full technique
+   explanation. containerId/itemSelector/idAttr identify which elements to track;
+   commitFn does the actual state mutation + render() in between the two measurements. */
+function animateFlipReorder(containerId, itemSelector, idAttr, commitFn){
+  var container = typeof document !== 'undefined' ? document.getElementById(containerId) : null;
+  var firstRects = {};
+  if (container) {
+    Array.prototype.forEach.call(container.querySelectorAll(itemSelector), function(el){
+      var id = el.getAttribute(idAttr);
+      if (el.getBoundingClientRect) firstRects[id] = el.getBoundingClientRect();
+    });
+  }
+
+  commitFn();
+
+  var newContainer = typeof document !== 'undefined' ? document.getElementById(containerId) : null;
+  if (!newContainer) return; /* no DOM to animate against — state is still correct, just no visible motion */
+  Array.prototype.forEach.call(newContainer.querySelectorAll(itemSelector), function(el){
+    var id = el.getAttribute(idAttr);
+    var first = firstRects[id];
+    if (!first || !el.getBoundingClientRect) return;
+    var last = el.getBoundingClientRect();
+    var deltaY = first.top - last.top;
+    if (!deltaY) return;
+    el.style.transition = 'none';
+    el.style.transform = 'translateY(' + deltaY + 'px)';
+    void el.offsetHeight; /* force reflow so the browser registers the starting position before the transition below is allowed to animate toward 0 */
+    el.style.transition = '';
+    el.style.transform = '';
+  });
+}
+
+/* "Show correct order" — animates the CURRENT (possibly wrong) arrangement into the
+   correct one, rather than just re-rendering straight to it. Standard FLIP technique:
    measure positions before the reorder (First), commit the state change and let a
    normal render() lay everything out in its new order (Last), then for each item
    apply an instant inverse transform back to where it visually WAS (Invert) and
@@ -685,32 +721,27 @@ function moveArrayItem(arr, fromIndex, toIndex){
    does, so this is genuinely animating "this step slid from here to there", not
    just whatever happened to occupy a DOM slot before and after. */
 function animateSequenceToCorrect(m){
-  var container = typeof document !== 'undefined' ? document.getElementById('seqList') : null;
-  var firstRects = {};
-  if (container) {
-    Array.prototype.forEach.call(container.querySelectorAll('.seq-item'), function(el){
-      var id = el.getAttribute('data-step-id');
-      if (el.getBoundingClientRect) firstRects[id] = el.getBoundingClientRect();
-    });
-  }
+  animateFlipReorder('seqList', '.seq-item', 'data-step-id', function(){
+    state.session.selected = m.steps_correct_order.map(function(_, i){ return i; }); /* the fully correct order, by definition */
+    render();
+  });
+}
 
-  state.session.selected = m.steps_correct_order.map(function(_, i){ return i; }); /* the fully correct order, by definition */
-  render();
-
-  var newContainer = typeof document !== 'undefined' ? document.getElementById('seqList') : null;
-  if (!newContainer) return; /* no DOM to animate against (e.g. this environment has no real layout engine) — state is still correct, just no visible motion */
-  Array.prototype.forEach.call(newContainer.querySelectorAll('.seq-item'), function(el){
-    var id = el.getAttribute('data-step-id');
-    var first = firstRects[id];
-    if (!first || !el.getBoundingClientRect) return;
-    var last = el.getBoundingClientRect();
-    var deltaY = first.top - last.top;
-    if (!deltaY) return;
-    el.style.transition = 'none';
-    el.style.transform = 'translateY(' + deltaY + 'px)';
-    void el.offsetHeight; /* force a reflow so the browser registers the starting position before the transition below is allowed to animate toward 0 */
-    el.style.transition = '';
-    el.style.transform = '';
+/* "Show correct pairs" — same FLIP technique as sequence above, applied to match's
+   right-hand column. The right column's DISPLAY order (rightOrder) is what's
+   shuffled, never the pairing data itself — reordering rightOrder to plain
+   [0,1,2,...n-1] makes row i's right item become exactly pair i's own right side,
+   which by construction is the correct match for row i's left item (left is always
+   rendered in natural pairs order, never shuffled). The existing red/green coloring
+   already keys off m.pairs identity (origIdx) rather than visual row position, so
+   realigning the rows this way doesn't touch or need to touch that logic at all —
+   it just makes the existing correctness coloring trivial to read at a glance,
+   since "your pick" and "the right answer" now sit in the same row for direct
+   comparison instead of needing to be traced across a shuffled column. */
+function animateMatchToCorrect(m){
+  animateFlipReorder('matchRightCol', '.match-item[data-right-id]', 'data-right-id', function(){
+    state.session.selected.rightOrder = m.pairs.map(function(_, i){ return i; });
+    render();
   });
 }
 
@@ -751,13 +782,16 @@ function renderMatchBody(m, s, isReviewing, result, viewRevealed){
     if (viewRevealed) cls += (links[i] === i ? ' match-correct' : ' match-wrong');
     else if (isLinked) cls += ' match-linked';
     else if (isPending) cls += ' match-pending';
-    html += '<button class="' + cls + '" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:10px 12px;border-radius:8px;" ' +
+    html += '<button class="' + cls + '" data-left-id="' + i + '" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:10px 12px;border-radius:8px;" ' +
       (viewRevealed || isReviewing ? 'disabled' : 'data-action="match-pick-left" data-i="' + i + '"') + '>' +
       (i+1) + '. ' + escapeHtml(pair.left) + '</button>';
   });
   html += '</div>';
 
-  html += '<div>';
+  /* id here is what animateMatchToCorrect() measures/animates against — the container
+     for the right column specifically, since that's the only side whose display
+     order ever changes (left is always plain pairs order, never shuffled). */
+  html += '<div id="matchRightCol">';
   rightOrder.forEach(function(origIdx){
     var pair = m.pairs[origIdx];
     var linkedToLeft = Object.keys(links).find(function(li){ return links[li] === origIdx; });
@@ -765,7 +799,11 @@ function renderMatchBody(m, s, isReviewing, result, viewRevealed){
     var cls = 'match-item';
     if (viewRevealed) cls += (isLinked && Number(linkedToLeft) === origIdx ? ' match-correct' : (isLinked ? ' match-wrong' : ''));
     else if (isLinked) cls += ' match-linked';
-    html += '<button class="' + cls + '" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:10px 12px;border-radius:8px;" ' +
+    /* data-right-id survives regardless of revealed/disabled state — unlike data-i,
+       which only exists on the interactive (non-disabled) version of this button —
+       so it's what gives animateMatchToCorrect() a stable identity to key the FLIP
+       animation off of even after reveal has disabled the click action itself. */
+    html += '<button class="' + cls + '" data-right-id="' + origIdx + '" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:10px 12px;border-radius:8px;" ' +
       (viewRevealed || isReviewing ? 'disabled' : 'data-action="match-pick-right" data-i="' + origIdx + '"') + '>' +
       escapeHtml(pair.right) + '</button>';
   });
@@ -773,10 +811,23 @@ function renderMatchBody(m, s, isReviewing, result, viewRevealed){
 
   var allLinked = Object.keys(links).length === m.pairs.length;
   var anyLinked = Object.keys(links).length > 0;
+  var allCorrect = m.pairs.every(function(pair, i){ return links[i] === i; });
   if (!viewRevealed) {
     html += '<div class="answer-footer" style="justify-content:space-between;">' +
       (anyLinked ? '<button class="btn btn-ghost" data-action="match-reset">' + icon('undo',14) + ' Reset all</button>' : '<span></span>') +
       '<button class="btn btn-primary" data-action="reveal-mcq"' + (allLinked ? '' : ' disabled') + '>Check answer</button></div>';
+  } else if (!allCorrect && !isReviewing) {
+    /* Same pattern as sequence's "show correct order" — the red/green coloring above
+       already tells you WHICH of your picks were right or wrong, but with the right
+       column still in its shuffled display order, there's no way to see AT A GLANCE
+       what the correct match for a wrong pick actually was without hunting for it.
+       This realigns the rows so the answer sits directly across from your guess. */
+    html += '<div class="reveal-panel">';
+    html += '<div class="reveal-verdict wrong">Not quite</div>';
+    html += renderNotesSection(m);
+    html += '<div class="answer-footer" style="justify-content:flex-end;">' +
+      '<button class="btn btn-primary" data-action="match-show-correct">' + icon('corner-up-right',14) + ' Show correct pairs</button></div>';
+    html += '</div>';
   } else {
     html += renderRevealFooter(m, s, isReviewing);
   }

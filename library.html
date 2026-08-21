@@ -583,7 +583,7 @@ textarea.ingest-area{
 /* New question types — match/sequence/cutoff/mnemonic — reuse the same pen-green/
    pen-red/cover tokens as the standard bubble-MCQ reveal states above, so a correct
    or wrong answer reads identically regardless of question type. */
-.match-item,.seq-item{border:1px solid var(--rule);background:var(--card);color:var(--ink);font-size:13.5px;cursor:pointer;transition:border-color .15s,background .15s;}
+.match-item,.seq-item{border:1px solid var(--rule);background:var(--card);color:var(--ink);font-size:13.5px;cursor:pointer;transition:border-color .15s,background .15s,transform .22s cubic-bezier(.22,.68,.36,1);will-change:transform;}
 .match-item:disabled,.seq-item{cursor:default;}
 .match-item.match-pending{border-color:var(--cover);background:var(--paper);}
 .match-item.match-linked{border-color:var(--ink-soft);}
