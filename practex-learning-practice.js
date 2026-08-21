@@ -721,8 +721,16 @@ function animateFlipReorder(containerId, itemSelector, idAttr, commitFn){
    does, so this is genuinely animating "this step slid from here to there", not
    just whatever happened to occupy a DOM slot before and after. */
 function animateSequenceToCorrect(m){
+  /* Preserve the person's ACTUAL (wrong) attempt for scoring before overwriting
+     state.session.selected for display — unlike match (where rightOrder is purely
+     cosmetic and links stays untouched), sequence's selected array IS both the
+     display order and the scored answer, so overwriting it here would otherwise
+     silently launder a wrong attempt into a "correct" one the moment advanceAfterReveal()
+     runs, corrupting FSRS scheduling with a false signal that this was actually known.
+     advanceAfterReveal() checks for this snapshot and scores against it instead. */
+  state.session.preRevealSelected = state.session.selected.slice();
   animateFlipReorder('seqList', '.seq-item', 'data-step-id', function(){
-    state.session.selected = m.steps_correct_order.map(function(_, i){ return i; }); /* the fully correct order, by definition */
+    state.session.selected = m.steps_correct_order.map(function(_, i){ return i; }); /* the fully correct order, by definition — now just for DISPLAY */
     render();
   });
 }
@@ -739,6 +747,7 @@ function animateSequenceToCorrect(m){
    since "your pick" and "the right answer" now sit in the same row for direct
    comparison instead of needing to be traced across a shuffled column. */
 function animateMatchToCorrect(m){
+  state.session.selected.correctPairsShown = true; /* THE fix — without this, allCorrect (computed from the honest, unchanged `links`) never becomes true, so the render kept re-showing this same button forever instead of ever reaching Next. links is deliberately left untouched — this only changes what's DISPLAYED, the actual scored answer stays the person's real (wrong) attempt. */
   animateFlipReorder('matchRightCol', '.match-item[data-right-id]', 'data-right-id', function(){
     state.session.selected.rightOrder = m.pairs.map(function(_, i){ return i; });
     render();
@@ -823,16 +832,17 @@ function renderMatchBody(m, s, isReviewing, result, viewRevealed){
   var allLinked = Object.keys(links).length === m.pairs.length;
   var anyLinked = Object.keys(links).length > 0;
   var allCorrect = m.pairs.every(function(pair, i){ return links[i] === i; });
+  var correctPairsShown = !!(viewSel && viewSel.correctPairsShown);
   if (!viewRevealed) {
     html += '<div class="answer-footer" style="justify-content:space-between;">' +
       (anyLinked ? '<button class="btn btn-ghost" data-action="match-reset">' + icon('undo',14) + ' Reset all</button>' : '<span></span>') +
       '<button class="btn btn-primary" data-action="reveal-mcq"' + (allLinked ? '' : ' disabled') + '>Check answer</button></div>';
-  } else if (!allCorrect && !isReviewing) {
-    /* Same pattern as sequence's "show correct order" — the red/green coloring above
-       already tells you WHICH of your picks were right or wrong, but with the right
-       column still in its shuffled display order, there's no way to see AT A GLANCE
-       what the correct match for a wrong pick actually was without hunting for it.
-       This realigns the rows so the answer sits directly across from your guess. */
+  } else if (!allCorrect && !isReviewing && !correctPairsShown) {
+    /* THE bug this was found and fixed for: allCorrect is (correctly, deliberately)
+       computed from links, which "Show correct pairs" never touches — only the
+       cosmetic rightOrder changes, so allCorrect stays false forever after a wrong
+       attempt, and without checking correctPairsShown here too, this branch would
+       keep re-showing this same button instead of ever reaching Next. */
     html += '<div class="reveal-panel">';
     html += '<div class="reveal-verdict wrong">Not quite</div>';
     html += renderNotesSection(m);
@@ -1118,8 +1128,13 @@ async function advanceAfterReveal(){
   var s = state.session;
   var m = state.mcqs.find(function(x){ return x.id === s.ids[s.index]; });
   if (!m) return;
-  var correct = evaluateCorrect(m, s.selected);
-  var pickedStr = pickedStrFor(m, s.selected);
+  /* If "Show correct order" was used on a sequence question, preRevealSelected holds
+     the person's real (wrong) attempt — score against THAT, not the post-reveal
+     display state, so a wrong answer they had to be shown never gets recorded as if
+     they'd gotten it right on their own. See the big comment on animateSequenceToCorrect. */
+  var scoringSelected = s.preRevealSelected !== undefined ? s.preRevealSelected : s.selected;
+  var correct = evaluateCorrect(m, scoringSelected);
+  var pickedStr = pickedStrFor(m, scoringSelected);
   var timeToAnswerMs = s.lastTimeToAnswerMs;
   var timeOnExplanationMs = s.revealedAt ? (Date.now() - s.revealedAt) : null;
 
@@ -1131,7 +1146,7 @@ async function advanceAfterReveal(){
     statsBefore: JSON.parse(JSON.stringify(s.stats)),
     resultsLenBefore: s.results.length,
     index: s.index,
-    selected: s.selected
+    selected: scoringSelected /* the honest original attempt, not the post-reveal display state — undo should restore what was actually there */
   });
 
   if (m.type !== 'card') {
@@ -1149,13 +1164,14 @@ async function advanceAfterReveal(){
   if (correct === true) s.stats.correct++;
   if (correct === false) s.stats.wrong++;
 
-  s.results.push({ id: m.id, correct: correct, selected: s.selected });
+  s.results.push({ id: m.id, correct: correct, selected: scoringSelected }); /* same reasoning — reviewing this question later should show what was actually chosen, not the correct-order display left behind by "Show correct order" */
   bumpStreak();
 
   var justAutoSlept = m.autoSlept;
   if (justAutoSlept) m.autoSlept = false; // one-shot — don't re-toast on a future render
 
   s.index++; s.selected = null; s.revealed = false; s.shortAnswerCorrect = null; s.viewIndex = s.index;
+  delete s.preRevealSelected; /* reset for whatever question comes next — this flag only ever applies to the one question it was captured for */
   s.questionShownAt = Date.now(); s.revealedAt = null; s.lastTimeToAnswerMs = null; /* start the clock fresh for whatever's next */
   if (s.index >= s.ids.length) { state.view = 'summary'; clearLiveSessionSync(); /* finished normally — this isn't an ungraceful exit, don't let it be adopted as a crash-recovery resume next load */ }
   render(); /* update the screen immediately — don't make the person wait on a network round trip just to see the next question */

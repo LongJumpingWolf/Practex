@@ -1235,6 +1235,12 @@ document.addEventListener('keydown', function(e){
      this keyboard path has to do the same work manually since it bypasses those. */
   if(e.code==='Space'){
     e.preventDefault();
+    /* Card has no check/reveal step at all — it's just read the content, then Next.
+       Without this, it fell into the generic hasSelection fallback below, which is
+       always false for a card (nothing is ever "selected"), so space silently did
+       nothing — the one type where every other keyboard shortcut in this handler
+       genuinely doesn't apply, since there's nothing to check an answer against. */
+    if (m.type === 'card') { advanceAfterReveal(); return; }
     if(!s.revealed){
       var hasSelection;
       if (m.isShortAnswer) {
@@ -1258,6 +1264,21 @@ document.addEventListener('keydown', function(e){
       revealCurrent();
     } else {
       if ((m.isShortAnswer || m.type === 'mnemonic') && s.shortAnswerCorrect === null) return; /* must self-grade via the buttons first — otherwise this would silently record as wrong */
+      /* Mirrors the render logic's own branching exactly — space should trigger
+         whichever button is actually showing on screen. For a wrong match/sequence
+         answer, that's "Show correct pairs/order" FIRST (a second space press after
+         that reaches Next) — without this check, space would skip straight past that
+         intermediate reveal step and jump to advancing, which never happened when
+         clicking through by hand. */
+      if (m.type === 'sequence') {
+        var seqAllCorrect = Array.isArray(s.selected) && s.selected.every(function(origIdx, pos){ return origIdx === pos; });
+        if (!seqAllCorrect) { animateSequenceToCorrect(m); return; }
+      }
+      if (m.type === 'match') {
+        var matchAllCorrect = s.selected && s.selected.links && m.pairs.every(function(pair, i){ return s.selected.links[i] === i; });
+        var matchShown = !!(s.selected && s.selected.correctPairsShown);
+        if (!matchAllCorrect && !matchShown) { animateMatchToCorrect(m); return; }
+      }
       advanceAfterReveal();
     }
     return;
