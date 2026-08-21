@@ -28,6 +28,13 @@ async function onClick(e){
   if (action === 'manual-sync') { manualSync(); return; }
   if (action === 'set-view') { if (guardNavigation(action, el)) return; closeModal(); state.view = el.getAttribute('data-view'); state.sidebarOpen = false; render(); return; }
   if (action === 'open-dashboard') { if (guardNavigation(action, el)) return; state.view = 'dashboard'; state.sidebarOpen = false; render(); return; }
+  if (action === 'set-landing-view') {
+    var landingVal = el.getAttribute('data-value');
+    try { localStorage.setItem('practex_landing_view', landingVal); } catch(e) {}
+    render(); /* refreshes the Settings modal's own button highlight, same hook every other setting toggle already relies on */
+    showToast('Practex will now open to ' + (landingVal === 'bookshelf' ? 'Book Shelf' : 'Library') + '.');
+    return;
+  }
   if (action === 'toggle-fsrs-mode') {
     state.learningMode.enabled = !state.learningMode.enabled;
     saveFsrsMode();
@@ -63,6 +70,7 @@ async function onClick(e){
   }
   if (action === 'start-plan-session') { startPlanSession(el.getAttribute('data-plan-key')); return; }
   if (action === 'cancel-plan') {
+    if (!confirm('Cancel this study plan? Your progress on it won\'t be undone, but the plan itself (and its pacing) will be gone.')) return;
     cancelStudyPlan(el.getAttribute('data-plan-key'));
     render();
     showToast('Plan cancelled.');
@@ -471,12 +479,18 @@ async function onClick(e){
     var trashedNow = Date.now();
     var trashedCount = 0;
     state.mcqs.forEach(function(m){ if (m.source === srcName && !m.trashedAt) { m.trashedAt = trashedNow; trashedCount++; } });
+    syncInFlight = true; /* same race and same fix as the other trash mutations above */
+    state.hasUnsyncedChanges = true;
     /* Source metadata (name/color) deliberately stays — a trashed question restored
        later should still show its original source pill correctly, not fall back to
        a regenerated color as if it were never labeled at all. */
     showToast('Moving to Trash…');
     render();
-    await saveLibrary(); /* normal upsert — nothing left the table, just marked */
+    try {
+      await saveLibrary(); /* normal upsert — nothing left the table, just marked */
+    } finally {
+      syncInFlight = false;
+    }
     showToast(trashedCount + ' question' + (trashedCount===1?'':'s') + ' moved to Trash.');
     return;
   }
@@ -486,8 +500,10 @@ async function onClick(e){
     var restoreM = state.mcqs.find(function(x){ return x.id === restoreId; });
     if (!restoreM) return;
     delete restoreM.trashedAt;
+    syncInFlight = true; /* same protection as the other trash mutations, cleaned up via .finally() since this save stays fire-and-forget like every other in-place edit */
+    state.hasUnsyncedChanges = true;
     render();
-    saveLibrary(); /* fire-and-forget, matches the pattern used for every other in-place edit (bookmark toggle, sleep toggle, etc) */
+    saveLibrary().finally(function(){ syncInFlight = false; });
     showToast('Restored.');
     return;
   }
@@ -499,9 +515,15 @@ async function onClick(e){
     if (!permM) return;
     var permHashes = (permM.images || []).concat(permM.answerImages || []);
     state.mcqs = state.mcqs.filter(function(x){ return x.id !== permId; });
+    syncInFlight = true; /* same fix as empty-trash — blocks any concurrent sync for the actual duration of the delete, see the comment there for why hasUnsyncedChanges alone isn't enough */
+    state.hasUnsyncedChanges = true;
     render();
-    await deleteMcqRows([permId]);
-    await purgeOrphanedImageHashes(permHashes);
+    try {
+      await deleteMcqRows([permId]);
+      await purgeOrphanedImageHashes(permHashes);
+    } finally {
+      syncInFlight = false;
+    }
     showToast('Deleted forever.');
     return;
   }
@@ -517,9 +539,25 @@ async function onClick(e){
       (m.answerImages || []).forEach(function(h){ emptyHashes.push(h); });
     });
     state.mcqs = state.mcqs.filter(function(m){ return !m.trashedAt; });
+    /* Real, reproducible bug: between this local update and deleteMcqRows actually
+       landing on the server, a concurrent auto-sync could run. Setting
+       hasUnsyncedChanges alone turned out NOT to be enough — reconcileWithCloud's
+       "push first" branch still calls loadLibrary() (a pull) afterward to
+       reconfirm lockstep, and that pull can still race ahead of the real row
+       deletion finishing, resurrecting exactly what was just emptied either way.
+       syncInFlight is the guard reconcileWithCloud() already respects and bails
+       out on entirely (`if (syncInFlight) return;`) — reusing it here blocks any
+       concurrent sync attempt completely for the actual duration of the delete,
+       not just reordering it. */
+    syncInFlight = true;
+    state.hasUnsyncedChanges = true;
     render();
-    await deleteMcqRows(emptyIds);
-    await purgeOrphanedImageHashes(emptyHashes);
+    try {
+      await deleteMcqRows(emptyIds);
+      await purgeOrphanedImageHashes(emptyHashes);
+    } finally {
+      syncInFlight = false;
+    }
     showToast('Trash emptied.');
     return;
   }
@@ -705,13 +743,19 @@ async function onClick(e){
     if (delPath) {
       var delArr = delPath.split('␟');
       var removedMcqs = deleteDeck(delArr); /* soft delete — see deleteDeck(), nothing actually leaves state.mcqs or the server here */
+      syncInFlight = true; /* blocks any concurrent auto-sync until saveLibrary() below actually lands — same race and same fix as empty-trash/permanently-delete */
+      state.hasUnsyncedChanges = true;
       if (state.selectedPath && state.selectedPath.join('␟').indexOf(delPath) === 0) {
         state.selectedPath = null; state.forceList = false;
       }
       closeModal(); render();
       showToast(removedMcqs.length ? ('Moved ' + removedMcqs.length + ' question' + (removedMcqs.length===1?'':'s') + ' to Trash — restorable for ' + TRASH_RETENTION_DAYS + ' days.') : 'Folder deleted.');
-      await saveLibrary(); /* normal upsert — trashedAt is just another field on the same rows, no explicit delete call needed since nothing is actually gone yet */
-      await saveUserSettings(); /* emptyFolders lives in a separate settings column, not state.mcqs — deleting an empty folder only touches THIS, and without saving it too the folder would silently reappear on next sync from another device even though it looked deleted locally */
+      try {
+        await saveLibrary(); /* normal upsert — trashedAt is just another field on the same rows, no explicit delete call needed since nothing is actually gone yet */
+        await saveUserSettings(); /* emptyFolders lives in a separate settings column, not state.mcqs — deleting an empty folder only touches THIS, and without saving it too the folder would silently reappear on next sync from another device even though it looked deleted locally */
+      } finally {
+        syncInFlight = false;
+      }
     } else {
       closeModal();
     }
@@ -931,8 +975,11 @@ async function onClick(e){
   }
 
   if (action === 'back-to-library') {
+    /* Same origin-context fallback as pendingNavTargetUrl() — read BEFORE clearing
+       state.session, same reasoning as the other two exit paths above. */
+    var backUrl = state.session && state.session.originContext ? originContextToUrl(state.session.originContext) : null;
     state.session = null;
-    window.location.href = 'library.html';
+    window.location.href = backUrl || 'library.html';
     return;
   }
 }
@@ -1116,6 +1163,20 @@ function bootCurrentPage(){
       resetFolderFilters();
     } else if (qView) {
       state.view = qView;
+      if (qView === 'bookshelf') {
+        var qSource = params.get('source');
+        if (qSource) state.bookshelfActiveSource = qSource; /* restores which specific book was open, not just the shelf grid — matches originContextToUrl()'s &source= param when a test was started from inside a book */
+      }
+    } else {
+      /* A genuinely fresh visit — no navigation redirect brought us here — uses
+         whichever landing view the person picked in Settings, defaulting to
+         Library if they've never set one. Deliberately checked AFTER qView/qPath,
+         so a real in-app navigation (e.g. clicking "Library" from Book Shelf)
+         always wins over this default, which only applies to opening the site cold. */
+      try {
+        var savedLanding = localStorage.getItem('practex_landing_view');
+        if (savedLanding === 'bookshelf') state.view = 'bookshelf';
+      } catch(e) {}
     }
   }
 

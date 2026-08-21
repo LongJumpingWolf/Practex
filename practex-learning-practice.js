@@ -466,7 +466,8 @@ function startPractice(ids, planKey){
     questionShownAt: Date.now(), /* silent timing — when the current question first became interactive */
     revealedAt: null,            /* silent timing — when it was revealed, so time-on-explanation can be measured */
     lastTimeToAnswerMs: null,
-    planKey: planKey || null /* tags this session as belonging to a study plan — advanceAfterReveal() checks this to update plan progress as each question is answered */
+    planKey: planKey || null, /* tags this session as belonging to a study plan — advanceAfterReveal() checks this to update plan progress as each question is answered */
+    originContext: currentNavOriginContext() /* where this session was started from — pendingNavTargetUrl() falls back to this on exit so leaving a test returns to where it actually began, not always the bare library root */
   };
   /* Chapter 4 (MPA): practice now lives on its own page, so a freshly-started session
      has to survive the navigation the same way a resumed one does — there is no

@@ -593,7 +593,15 @@ function renderSettingsModalContent(){
     '<div class="settings-row"><span>Questions tracked</span><strong>' + state.mcqs.length + '</strong></div>' +
     '</div>';
 
+  var currentLanding = 'browse';
+  try { if (localStorage.getItem('practex_landing_view') === 'bookshelf') currentLanding = 'bookshelf'; } catch(e) {}
+
   html += '<div class="settings-section" style="margin-bottom:0;"><h4>Appearance &amp; scheduling</h4>' +
+    '<div class="settings-row"><span>Open to</span>' +
+      '<span style="display:flex;gap:6px;">' +
+      '<button class="btn btn-sm ' + (currentLanding==='browse'?'btn-primary':'btn-ghost') + '" data-action="set-landing-view" data-value="browse">Library</button>' +
+      '<button class="btn btn-sm ' + (currentLanding==='bookshelf'?'btn-primary':'btn-ghost') + '" data-action="set-landing-view" data-value="bookshelf">Book Shelf</button>' +
+      '</span></div>' +
     '<div class="settings-row"><span>Dark mode</span>' +
       '<span class="settings-toggle' + (state.darkMode?' on':'') + '" data-action="toggle-dark-mode" role="switch" aria-checked="' + (state.darkMode?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
     '<div class="settings-row"><span>FSRS mode</span>' +
@@ -927,14 +935,51 @@ function guardNavigation(action, el){
    so "where they were headed" has to survive an actual navigation — encoded as a
    query string that library.html's own boot reads once on load (see the boot script
    in library.html) to restore the same view/path this used to set directly. */
+/* Captures WHERE a practice session is being started from — which view, which
+   chapter/deck, or which book-shelf book — so leaving the session (any of the 3
+   ways: Leave without pausing, Pause & leave with no other nav pending, or
+   finishing normally and clicking "Back to library") returns to that exact spot
+   instead of always dumping back at the bare library root. Read at the moment
+   startPractice() is called (before the MPA hand-off), tagged onto the session
+   object the same way planKey already is, so it survives the real page navigation
+   to practice.html and is still there whenever the session eventually ends. */
+function currentNavOriginContext(){
+  return {
+    view: state.view,
+    selectedPath: (state.selectedPath && state.selectedPath.length) ? state.selectedPath.slice() : null,
+    bookshelfActiveSource: state.bookshelfActiveSource || null,
+  };
+}
+function originContextToUrl(origin){
+  if (!origin) return null;
+  if (origin.view === 'bookshelf') {
+    return 'library.html?view=bookshelf' + (origin.bookshelfActiveSource ? '&source=' + encodeURIComponent(origin.bookshelfActiveSource) : '');
+  }
+  if (origin.selectedPath && origin.selectedPath.length) {
+    return 'library.html?view=browse&path=' + encodeURIComponent(origin.selectedPath.join('␟'));
+  }
+  if (origin.view && origin.view !== 'practice' && origin.view !== 'summary') {
+    return 'library.html?view=' + encodeURIComponent(origin.view);
+  }
+  return 'library.html?view=browse';
+}
+
 function pendingNavTargetUrl(){
   var nav = state.pendingNav;
   state.pendingNav = null;
-  if (!nav) return 'library.html';
-  if (nav.action === 'set-view') return 'library.html?view=' + encodeURIComponent(nav.view || 'browse');
-  if (nav.action === 'open-dashboard') return 'library.html?view=dashboard';
-  if (nav.action === 'select-node' && nav.path) return 'library.html?view=browse&path=' + encodeURIComponent(nav.path);
-  return 'library.html';
+  if (nav) {
+    if (nav.action === 'set-view') return 'library.html?view=' + encodeURIComponent(nav.view || 'browse');
+    if (nav.action === 'open-dashboard') return 'library.html?view=dashboard';
+    if (nav.action === 'select-node' && nav.path) return 'library.html?view=browse&path=' + encodeURIComponent(nav.path);
+  }
+  /* No specific nav-link interrupted this exit (the person used Leave/Pause &
+     leave directly) — fall back to wherever THIS session actually started from,
+     rather than always landing on the bare library root. state.session is still
+     populated at every call site that reaches here (checked before it gets
+     cleared), so its captured originContext (see currentNavOriginContext above)
+     is exactly what's needed. */
+  var originUrl = state.session && state.session.originContext ? originContextToUrl(state.session.originContext) : null;
+  return originUrl || 'library.html';
 }
 function bookmarkButton(m){
   return '<button class="btn btn-ghost btn-sm bookmark-btn'+(m.flagged?' bookmarked':'')+'" data-action="bookmark-current" title="Bookmark question (F)" aria-label="'+(m.flagged?'Remove bookmark':'Bookmark question')+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4V3z"></path></svg><span>'+(m.flagged?'Bookmarked':'Bookmark')+'</span></button>';
