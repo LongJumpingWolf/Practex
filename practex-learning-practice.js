@@ -431,9 +431,13 @@ function goToPracticeIfSessionPending(){
   return true;
 }
 
-function startPractice(ids){
+function startPractice(ids, planKey){
   var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
-  if(state.learningMode && state.learningMode.enabled){
+  /* A plan session already did its own selection (planSelectQuestions) — re-filtering
+     through getLearningQueue here would silently collapse it back down to only
+     currently-due questions, defeating the entire point of a plan (systematic
+     coverage of the whole scope over N days, not just today's FSRS-due subset). */
+  if(!planKey && state.learningMode && state.learningMode.enabled){
     ids = getLearningQueue(ids);
   }
   var pool = ids.map(function(id){ return byId[id]; }).filter(Boolean);
@@ -461,7 +465,8 @@ function startPractice(ids){
     stats: { correct:0, wrong:0, misconception:0, learning:0, mastered:0, noconcept:0 },
     questionShownAt: Date.now(), /* silent timing — when the current question first became interactive */
     revealedAt: null,            /* silent timing — when it was revealed, so time-on-explanation can be measured */
-    lastTimeToAnswerMs: null
+    lastTimeToAnswerMs: null,
+    planKey: planKey || null /* tags this session as belonging to a study plan — advanceAfterReveal() checks this to update plan progress as each question is answered */
   };
   /* Chapter 4 (MPA): practice now lives on its own page, so a freshly-started session
      has to survive the navigation the same way a resumed one does — there is no
@@ -1166,6 +1171,16 @@ async function advanceAfterReveal(){
 
   s.results.push({ id: m.id, correct: correct, selected: scoringSelected }); /* same reasoning — reviewing this question later should show what was actually chosen, not the correct-order display left behind by "Show correct order" */
   bumpStreak();
+
+  /* Plan progress — credited once per question actually advanced past, matching
+     every other per-question tally above (card excluded for the same reason it's
+     excluded from stats/FSRS: it was never actually answered). Uses saveUserSettings()
+     specifically (not saveLibrary(), which handles state.mcqs) since study plans live
+     in state.studyPlans, a separate piece of synced state. */
+  if (s.planKey && state.studyPlans[s.planKey] && m.type !== 'card') {
+    state.studyPlans[s.planKey].totalCompleted++;
+    saveUserSettings();
+  }
 
   var justAutoSlept = m.autoSlept;
   if (justAutoSlept) m.autoSlept = false; // one-shot — don't re-toast on a future render

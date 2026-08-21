@@ -1009,6 +1009,7 @@ function renderBookshelf(){
     html += '<button class="book-cover-edit" data-action="set-book-cover" data-source="' + escapeHtml(name) + '" title="Set cover image" aria-label="Set cover image">' + icon('image',13) + '</button>';
     html += '<div class="book-label" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</div>';
     html += '<div class="book-count">' + count + ' question' + (count===1?'':'s') + '</div>';
+    html += renderPlanWidget('source', name);
     html += '</div>';
   });
   html += '</div>';
@@ -1152,6 +1153,35 @@ function renderSearchBar(){
     '<input type="text" id="globalSearchInput" placeholder="Search questions…" value="' + escapeHtml(term) + '">' +
     (term ? '<button class="main-search-clear" data-action="clear-search" title="Clear search" aria-label="Clear search">' + icon('x',14) + '</button>' : '') +
     '</div>';
+}
+
+/* Shared between subject cards (Library root) and book cards (Book Shelf) — the
+   underlying plan data model doesn't care which surface it was set from, so one
+   render function covers both instead of duplicating the "active plan / no plan"
+   markup in two places that could quietly drift apart. */
+function renderPlanWidget(scopeType, scopeValue){
+  var key = planKeyFor(scopeType, scopeValue);
+  var plan = state.studyPlans[key];
+  if (!plan) {
+    return '<div class="plan-widget"><button class="btn btn-ghost btn-sm" data-action="open-plan-setup" data-scope-type="' + escapeHtml(scopeType) + '" data-scope-value="' + escapeHtml(scopeValue) + '">' +
+      icon('flame',13) + ' Set a study plan</button></div>';
+  }
+  var daysElapsed = Math.floor((Date.now() - plan.createdAt) / 86400000);
+  var dayNumber = Math.min(plan.days, daysElapsed + 1);
+  var target = planTodayTarget(plan);
+  var done = plan.totalCompleted >= plan.totalQuestions;
+  var html = '<div class="plan-widget">';
+  if (done) {
+    html += '<div class="plan-progress-line">' + icon('check-circle',13) + ' Plan complete — ' + plan.totalQuestions + '/' + plan.totalQuestions + '</div>';
+    html += '<button class="btn btn-ghost btn-sm" data-action="cancel-plan" data-plan-key="' + escapeHtml(key) + '">Clear</button>';
+  } else {
+    html += '<div class="plan-progress-line">Day ' + dayNumber + ' of ' + plan.days + ' — ' + plan.totalCompleted + '/' + plan.totalQuestions + ' done · today: ' + target + '</div>';
+    html += '<div class="action-row" style="margin-top:6px;margin-bottom:0;">' +
+      '<button class="btn btn-primary btn-sm" data-action="start-plan-session" data-plan-key="' + escapeHtml(key) + '">Continue</button>' +
+      '<button class="btn btn-ghost btn-sm" data-action="cancel-plan" data-plan-key="' + escapeHtml(key) + '">Cancel plan</button></div>';
+  }
+  html += '</div>';
+  return html;
 }
 
 /* Was a single generic "Question list" tag on every leaf chapter card regardless of
@@ -1321,7 +1351,9 @@ function renderChapterGrid(tree, node){
     }
     if (flagged) html += ' · ' + flagged + ' flagged';
     if (asleep) html += ' · not recommended while asleep';
-    html += '</div></div>';
+    html += '</div>';
+    if (isSubjectLevel) html += renderPlanWidget('subject', k); /* plans are subject/book scoped, not per-chapter — matches "per book or per subject" */
+    html += '</div>';
     html += '<button class="chapter-card-view" data-action="view-node-questions" data-path="' + escapeHtml(pathKey) + '">' +
       'View questions ' + icon('chevron-right',13) + '</button>';
     html += '</div>';

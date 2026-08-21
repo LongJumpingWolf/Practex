@@ -66,6 +66,7 @@ var state = {
   pendingImportPayload: null, /* a parsed JSON import file, waiting on the user to choose keep-progress vs start-fresh before it actually gets applied */
   pendingNoteDraft: null, /* {mcqId, images} while the Add Note modal is open, before it's actually saved onto the question */
   emptyFolders: [], /* array of path-arrays for folders created on purpose with nothing in them yet — the tree is otherwise entirely implied by which subject/chapterPath actual questions carry, so without this there's no way to represent "a folder that exists but has zero questions" at all */
+  studyPlans: {}, /* keyed by "subject::Name" or "source::Name" or "all" — see createStudyPlan()/planTodayTarget() for the full design. Requires the study_plans column added to user_settings — see STUDY_PLANS_MIGRATION.sql */
   bookCoverDraft: null, /* {source} while the "set cover" upload is in progress */
   bookshelfActiveSource: null /* which book is currently drilled into on the shelf — null means showing the shelf grid itself */
 };
@@ -124,6 +125,7 @@ async function persistLocalMirror(){
       autoSleepEnabled: state.autoSleepEnabled,
       autoSleepStreak: state.autoSleepStreak,
       emptyFolders: state.emptyFolders,
+      studyPlans: state.studyPlans,
       pausedSession: state.pausedSession
     };
     var db = await openDataMirrorDb();
@@ -221,6 +223,7 @@ function persistSessionCache(){
       autoSleepEnabled: state.autoSleepEnabled,
       autoSleepStreak: state.autoSleepStreak,
       emptyFolders: state.emptyFolders,
+      studyPlans: state.studyPlans,
     }));
   } catch(err) {
     /* This entry is now deliberately tiny (settings only, no question data) — should
@@ -249,6 +252,7 @@ function applySessionCache(cache){
   state.autoSleepEnabled = cache.autoSleepEnabled !== false;
   state.autoSleepStreak = cache.autoSleepStreak || 4;
   state.emptyFolders = cache.emptyFolders || [];
+  state.studyPlans = cache.studyPlans || {};
 }
 /* The mcqs/sources half of the fast path — reads the EXISTING IndexedDB mirror
    directly rather than anything sessionStorage-based (see the big comment above).
@@ -632,6 +636,7 @@ function applyMirrorToState(mirror, skipMcqs){
   state.autoSleepEnabled = mirror.autoSleepEnabled !== false;
   state.autoSleepStreak = mirror.autoSleepStreak || 4;
   state.emptyFolders = Array.isArray(mirror.emptyFolders) ? mirror.emptyFolders : [];
+  state.studyPlans = mirror.studyPlans || {};
 }
 async function fetchAllMcqRows(userId, onProgress){
   /* Supabase/PostgREST caps rows per request (commonly 1000 by default) — a plain
@@ -732,6 +737,7 @@ async function loadLibrary(onProgress){
     state.autoSleepEnabled = row ? (row.auto_sleep_enabled !== false) : true;
     state.autoSleepStreak = (row && row.auto_sleep_streak) || 4;
     state.emptyFolders = (row && row.empty_folders) || [];
+    state.studyPlans = (row && row.study_plans) || {};
   } catch(e) {
     console.error('loadLibrary (settings):', e);
     var mirror2 = await loadLocalMirror();
@@ -775,6 +781,7 @@ async function saveUserSettings(){
       auto_sleep_enabled: state.autoSleepEnabled,
       auto_sleep_streak: state.autoSleepStreak,
       empty_folders: state.emptyFolders,
+      study_plans: state.studyPlans,
       updated_at: new Date().toISOString()
     });
     if (res.error) throw res.error;
@@ -917,6 +924,89 @@ function partitionDuplicates(mcqs){
     excess = excess.concat(sorted.slice(MAX_DUPLICATE_COPIES));
   });
   return { keep: keep, excess: excess, duplicateGroupCount: duplicateGroupCount };
+}
+
+/* ================= Study plans =================
+   Built for exactly the problem a real load reported: FSRS showing "6000 due today"
+   the moment a large library is imported is technically accurate and completely
+   unusable. A plan takes a scope (one subject, one book/source, or the whole
+   library) and a number of days, and paces coverage of that scope across those days
+   — not a fixed daily quota that goes stale, but recomputed fresh each time from
+   whatever's actually left and however many days actually remain, so falling behind
+   or getting ahead both redistribute naturally instead of needing to be managed by
+   hand. Persisted via the study_plans column on user_settings — see
+   STUDY_PLANS_MIGRATION.sql for the (required, one-time) schema change this needs. */
+
+function planKeyFor(scopeType, scopeValue){
+  return scopeType === 'all' ? 'all' : (scopeType + '::' + scopeValue);
+}
+
+function planScopeMcqs(plan){
+  if (plan.scopeType === 'all') return liveMcqs();
+  if (plan.scopeType === 'subject') return liveMcqs().filter(function(m){ return m.subject === plan.scopeValue; });
+  if (plan.scopeType === 'source') return liveMcqs().filter(function(m){ return m.source === plan.scopeValue; });
+  return [];
+}
+
+/* The actual pacing math. totalQuestions/days are fixed at plan creation (the
+   original commitment); totalCompleted grows as the plan is worked through.
+   Recomputing "how many today" from whatever's ACTUALLY left and however many days
+   ACTUALLY remain — rather than a flat totalQuestions/days computed once — is what
+   makes this self-correcting: skip a few days and tomorrow's number goes up
+   automatically; get ahead and it goes down. Never divides by zero or a negative —
+   daysRemaining is floored at 1, so even on or past the last day there's still a
+   real, honest target instead of an error or an infinite one. */
+function planTodayTarget(plan){
+  var daysElapsed = Math.floor((Date.now() - plan.createdAt) / 86400000);
+  var daysRemaining = Math.max(1, plan.days - daysElapsed);
+  var questionsRemaining = Math.max(0, plan.totalQuestions - plan.totalCompleted);
+  return Math.ceil(questionsRemaining / daysRemaining);
+}
+
+/* Which questions actually make up "today's target" — never-seen-before questions
+   first (a plan's primary purpose is usually first-pass coverage of a big import),
+   then whatever's been seen least recently among the rest, so working through a
+   plan naturally cycles through the whole scope rather than fixating on whatever
+   happens to sort first by id. Deliberately NOT limited to "currently due" — a
+   plan's job is coverage within a timeframe, not spaced-repetition timing, which is
+   why startPractice() skips its own getLearningQueue re-filter for a planKey'd
+   session (see the comment there). */
+function planSelectQuestions(plan, count){
+  var pool = planScopeMcqs(plan).slice();
+  pool.sort(function(a, b){
+    var aH = (a.learning && a.learning.history) ? a.learning.history.length : 0;
+    var bH = (b.learning && b.learning.history) ? b.learning.history.length : 0;
+    if ((aH === 0) !== (bH === 0)) return aH === 0 ? -1 : 1; // never-seen first
+    var aLast = (a.learning && a.learning.lastReviewed) || 0;
+    var bLast = (b.learning && b.learning.lastReviewed) || 0;
+    return aLast - bLast; // least-recently-reviewed first among the rest
+  });
+  return pool.slice(0, count).map(function(m){ return m.id; });
+}
+
+function createStudyPlan(scopeType, scopeValue, days){
+  var key = planKeyFor(scopeType, scopeValue);
+  var plan = { scopeType: scopeType, scopeValue: scopeValue, days: days, createdAt: Date.now(), totalCompleted: 0 };
+  plan.totalQuestions = planScopeMcqs(plan).length; /* snapshot at creation — the original commitment stays stable even as the library changes later; re-planning is just deleting and creating again */
+  state.studyPlans[key] = plan;
+  return plan;
+}
+
+function cancelStudyPlan(key){
+  delete state.studyPlans[key];
+}
+
+/* Entry point for "Continue today's plan" — computes today's target, selects the
+   questions, and starts a session tagged with planKey so advanceAfterReveal() can
+   credit progress back to the right plan as each question gets answered. */
+function startPlanSession(key){
+  var plan = state.studyPlans[key];
+  if (!plan) { showToast('That plan no longer exists.'); return; }
+  var target = planTodayTarget(plan);
+  if (target <= 0 || plan.totalCompleted >= plan.totalQuestions) { showToast('This plan is already complete!'); return; }
+  var ids = planSelectQuestions(plan, target);
+  if (!ids.length) { showToast('Nothing left to practice for this plan right now.'); return; }
+  requestStartPractice(ids, state.learningMode.enabled, key);
 }
 
 /* Runs once per real boot (not on the same-tab fast path — trash purging is a

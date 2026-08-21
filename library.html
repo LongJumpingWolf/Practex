@@ -61,12 +61,17 @@
      sleep toggle state, folder icons, hint banners). A pair and its color have no
      other significance in the app, so mixing them with those would be confusing.
      Six colors, cycled with % 6 if a question somehow has more pairs than that. */
-  --pair-0:#6B4C93; --pair-0-bg:#EDE7F3;
-  --pair-1:#1F7A6E; --pair-1-bg:#DFF0EC;
-  --pair-2:#A34567; --pair-2-bg:#F5E3EA;
-  --pair-3:#4653A3; --pair-3-bg:#E6E8F5;
-  --pair-4:#B0621F; --pair-4-bg:#F5E7D8;
-  --pair-5:#1E7F94; --pair-5-bg:#DFF0F3;
+  /* Rebuilt after a real report that the old palette had two near-collisions (purple/
+     indigo only 34deg apart in hue, teal/cyan only 19deg apart) and inconsistent
+     saturation making some entries look washed out next to others. Every adjacent
+     pair here is at least 43deg apart in hue, with matched saturation/lightness
+     across all six, verified numerically before committing to these values. */
+  --pair-0:#9C7824; --pair-0-bg:#F6F1E3; /* gold */
+  --pair-1:#249C7E; --pair-1-bg:#E3F6F2; /* teal */
+  --pair-2:#24629C; --pair-2-bg:#E3EDF6; /* blue */
+  --pair-3:#3C249C; --pair-3-bg:#E7E3F6; /* indigo */
+  --pair-4:#94249C; --pair-4-bg:#F5E3F6; /* purple-magenta */
+  --pair-5:#9C244C; --pair-5-bg:#F6E3E9; /* pink */
 }
 /* FSRS mode re-themes the app (cover/accent colour) so it's visually obvious
    spaced-repetition scheduling is driving what you see. */
@@ -94,12 +99,12 @@ body.dark-mode{
   --pen-amber:#D3B15C;
   --pen-amber-bg:#332A16;
   --highlighter-ink:#F0C33C;
-  --pair-0:#A98FD1; --pair-0-bg:#2A2138;
-  --pair-1:#5CC2AE; --pair-1-bg:#17332E;
-  --pair-2:#E08AA8; --pair-2-bg:#3A2029;
-  --pair-3:#8B95D6; --pair-3-bg:#232A47;
-  --pair-4:#E0A05C; --pair-4-bg:#3A2B17;
-  --pair-5:#5CC0D6; --pair-5-bg:#17313A;
+  --pair-0:#DCC07E; --pair-0-bg:#3B3016; /* gold */
+  --pair-1:#7EDCC5; --pair-1-bg:#163B31; /* teal */
+  --pair-2:#7EAEDC; --pair-2-bg:#16293B; /* blue */
+  --pair-3:#917EDC; --pair-3-bg:#1D163B; /* indigo */
+  --pair-4:#D67EDC; --pair-4-bg:#38163B; /* purple-magenta */
+  --pair-5:#DC7E9D; --pair-5-bg:#3B1622; /* pink */
 }
 body.dark-mode.fsrs-mode{
   --cover:#8362AD;
@@ -366,6 +371,10 @@ input,textarea,select{font-family:inherit;color:inherit;}
 .deck-type-tag.folder{background:var(--pen-amber-bg);color:var(--pen-amber);}
 .deck-type-tag.folder svg{fill:var(--pen-amber);stroke:var(--pen-amber);}
 .deck-type-tag.leaf{background:var(--paper);color:var(--ink-soft);font-weight:600;}
+.deck-type-tag-row{display:inline-flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;}
+.plan-widget{margin-top:10px;padding-top:10px;border-top:1px dashed var(--rule-strong);}
+.plan-progress-line{font-size:12px;font-weight:600;color:var(--cover);}
+.deck-type-tag-row .deck-type-tag{margin-bottom:0;}
 /* Folder decks (have nested chapters — clicking drills into another grid) get a real
    manila-folder tint so the distinction reads instantly, not just from a small badge.
    Leaf decks (clicking opens the question list directly) stay plain paper-white. */

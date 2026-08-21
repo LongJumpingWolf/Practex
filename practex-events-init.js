@@ -49,6 +49,26 @@ async function onClick(e){
     return;
   }
   if (action === 'cleanup-duplicates') { await cleanupDuplicates(); return; }
+  if (action === 'open-plan-setup') { openPlanSetupModal(el.getAttribute('data-scope-type'), el.getAttribute('data-scope-value')); return; }
+  if (action === 'confirm-create-plan') {
+    var planDaysEl = document.getElementById('planDaysInput');
+    var planDays = planDaysEl ? parseInt(planDaysEl.value, 10) : NaN;
+    if (!planDays || planDays < 1) { showToast('Enter a real number of days first.'); return; }
+    createStudyPlan(el.getAttribute('data-scope-type'), el.getAttribute('data-scope-value'), planDays);
+    closeModal();
+    render();
+    showToast('Plan set.');
+    saveUserSettings();
+    return;
+  }
+  if (action === 'start-plan-session') { startPlanSession(el.getAttribute('data-plan-key')); return; }
+  if (action === 'cancel-plan') {
+    cancelStudyPlan(el.getAttribute('data-plan-key'));
+    render();
+    showToast('Plan cancelled.');
+    saveUserSettings();
+    return;
+  }
   if (action === 'toggle-fsrs-card') {
     state.fsrsCardExpanded = !state.fsrsCardExpanded;
     saveFsrsCardExpanded();
@@ -753,7 +773,7 @@ async function onClick(e){
   }
   if (action === 'confirm-new-test') {
     var pending=state.pendingStart; state.pendingStart=null; closeModal();
-    if(pending){ state.learningMode.enabled=pending.learningEnabled; startPractice(pending.ids); }
+    if(pending){ if (!pending.planKey) state.learningMode.enabled=pending.learningEnabled; startPractice(pending.ids, pending.planKey); }
     return;
   }
   if (action === 'jump-subject') {

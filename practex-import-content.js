@@ -380,6 +380,25 @@ async function attachImageToMcq(mcqId, file, field){
    <img src>, which needs no CORS handling at all (that only matters for fetching
    raw bytes, never for basic display), so there's no reason to route it through
    ImgBB or worry about the source host's CORS policy. */
+/* Plan setup modal — shown from either subject cards or book cards (see
+   renderPlanWidget in practex-render-library.js, which is the one place both
+   surfaces share). Shows the live question count for the scope right in the modal
+   so the days-input decision is made with real numbers in front of it, not blind. */
+function openPlanSetupModal(scopeType, scopeValue){
+  var scopeCount = scopeType === 'subject'
+    ? liveMcqs().filter(function(m){ return m.subject === scopeValue; }).length
+    : liveMcqs().filter(function(m){ return m.source === scopeValue; }).length;
+  var html = '<h3>Set a study plan</h3>';
+  html += '<p class="view-sub" style="margin-bottom:14px;">For "' + escapeHtml(scopeValue) + '" — ' + scopeCount + ' question' + (scopeCount===1?'':'s') + ' right now.</p>';
+  html += '<div class="form-field"><label>Finish in how many days?</label>' +
+    '<input type="number" min="1" max="365" id="planDaysInput" value="14" style="width:100px;"></div>';
+  html += '<div class="view-sub" style="margin-bottom:14px;">Recalculates itself daily as you go — falling behind or getting ahead both adjust the daily number automatically, rather than needing to be managed by hand.</div>';
+  html += '<div class="action-row" style="margin-top:0;margin-bottom:0;">' +
+    '<button class="btn btn-primary" data-action="confirm-create-plan" data-scope-type="' + escapeHtml(scopeType) + '" data-scope-value="' + escapeHtml(scopeValue) + '">Create plan</button>' +
+    '<button class="btn btn-ghost" data-action="close-modal">Cancel</button></div>';
+  showRichModal(html, 'narrow');
+}
+
 function setBookCover(sourceName){
   var existing = state.sources[sourceName] || {};
   var hasCover = !!(existing.coverImage || existing.coverImageUrl);
@@ -877,14 +896,14 @@ async function saveEditMcq(id){
 }
 
 function currentSessionSnapshot(){ return state.session ? JSON.parse(JSON.stringify(state.session)) : null; }
-function requestStartPractice(ids, learningEnabled){
+function requestStartPractice(ids, learningEnabled, planKey){
   if (state.pausedSession) {
-    state.pendingStart={ids:ids.slice(), learningEnabled:learningEnabled};
+    state.pendingStart={ids:ids.slice(), learningEnabled:learningEnabled, planKey:planKey};
     showModal('Paused test in progress','You still have an unfinished paused test. Return to it, or continue with the new test. Your previous answers and learning data are already saved.',[{label:'Back to paused test',action:'resume-paused',primary:true},{label:'Continue with new test',action:'confirm-new-test'}]);
     return;
   }
-  state.learningMode.enabled=learningEnabled;
-  startPractice(ids);
+  if (!planKey) state.learningMode.enabled=learningEnabled; /* plan sessions select their own pool regardless of the FSRS toggle (see startPractice) — don't silently flip the user's actual preference as a side effect of starting one */
+  startPractice(ids, planKey);
 }
 function requestLeavePractice(){
   showModal('Leave this test?','Choose whether to pause this test at its current question or leave without saving the test session. Answers you already revealed remain recorded.',[{label:'Pause & leave',action:'pause-and-leave',primary:true},{label:'Leave without pausing',action:'leave-without-pausing'},{label:'Cancel',action:'close-modal'}]);
