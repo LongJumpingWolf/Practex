@@ -490,6 +490,26 @@ async function onClick(e){
     return;
   }
 
+  if (action === 'rename-source') { openRenameSourceModal(el.getAttribute('data-source')); return; }
+  if (action === 'confirm-rename-source') {
+    var rsOld = el.getAttribute('data-source');
+    var rsInput = document.getElementById('renameSourceInput');
+    var rsNewName = rsInput ? rsInput.value : '';
+    if (renameSource(rsOld, rsNewName)) {
+      closeModal(); render();
+      syncInFlight = true; /* same race and same fix as the trash mutations and deck rename above */
+      state.hasUnsyncedChanges = true;
+      try {
+        await saveLibrary();
+      } finally {
+        syncInFlight = false;
+      }
+      showToast('Renamed to "' + rsNewName.trim() + '".');
+    } else {
+      showToast(rsNewName.trim() === rsOld ? 'That\'s already the name.' : 'Enter a name first.');
+    }
+    return;
+  }
   if (action === 'delete-source') {
     var srcName = el.getAttribute('data-source');
     if (!confirm('Move "' + srcName + '" and all its MCQs to Trash? Restorable for ' + TRASH_RETENTION_DAYS + ' days.')) return;
@@ -653,11 +673,17 @@ async function onClick(e){
     var rNewName = rInput ? rInput.value : '';
     if (renameDeck(rPath.split('␟'), rNewName)) {
       closeModal(); render();
+      syncInFlight = true; /* same race and same fix as the trash mutations elsewhere — a bulk rename touching many rows is exactly as vulnerable to a concurrent auto-sync pulling the pre-rename state back before this save lands */
+      state.hasUnsyncedChanges = true;
       /* Awaited — a rename/move/copy/delete is rare and high-stakes enough that
          showing "done" and letting a reload interrupt the actual save (aborting it
          mid-flight, same failure mode that lost imports) is worse than the extra
          half-second wait. Frequent taps during practice stay optimistic on purpose. */
-      await saveLibrary(); await saveSleepingSubjects();
+      try {
+        await saveLibrary(); await saveSleepingSubjects();
+      } finally {
+        syncInFlight = false;
+      }
       showToast('Renamed to "' + rNewName.trim() + '".');
     } else {
       showToast('Enter a name first.');
@@ -1382,6 +1408,22 @@ document.addEventListener('keydown', function(e){
   if(e.key==='ArrowLeft'){ e.preventDefault(); if(s.viewIndex>0){ s.viewIndex--; render(); } return; }
   if(e.key==='ArrowRight'){ e.preventDefault(); if(s.viewIndex<s.index){ s.viewIndex++; render(); } return; }
 
+  /* B (and F, kept for anyone already used to it) toggles bookmark — checked here,
+     before the isReviewing gate below, specifically so it works on whichever
+     question is currently on screen regardless of whether it's already been
+     answered or not, same reasoning as Left/Right above. Bookmarking doesn't
+     mutate answer state the way selecting/revealing does, so there's no reason
+     for it to be restricted to the frontier question only.
+     Deliberately checked BEFORE the letter-selects-an-option handler further down
+     — "B" is almost always a real option letter (virtually every 4-option MCQ has
+     one), so without this ordering, B would silently select option B instead of
+     bookmarking on the overwhelming majority of questions, making the shortcut
+     look broken for exactly the most common case. Selecting option B by keyboard
+     still works fine via the number keys (1-9) below. */
+  if(e.key==='b'||e.key==='B'||e.key==='f'||e.key==='F'){
+    e.preventDefault(); m.flagged=!m.flagged; saveLibrary(); render(); return;
+  }
+
   /* Everything below mutates answer state, so it only applies to the current frontier
      question — while reviewing a past one, selecting/revealing/advancing would
      silently act on a different (frontier) question than what's on screen otherwise. */
@@ -1396,16 +1438,12 @@ document.addEventListener('keydown', function(e){
     return;
   }
 
-  /* Letter keys (A, B, C, D...) select the option with that letter */
+  /* Letter keys (A, C, D...) select the option with that letter — B and F never
+     reach here, already consumed by the bookmark toggle above. */
   if(/^[a-zA-Z]$/.test(e.key) && !s.revealed && !m.isShortAnswer && !m.type){
     var letter=e.key.toUpperCase();
     var match=m.options.filter(function(o){ return o.letter===letter; })[0];
     if(match){ e.preventDefault(); toggleOptionSelection(m, s, letter); render(); return; }
-  }
-
-  /* F toggles bookmark */
-  if(e.key==='f'||e.key==='F'){
-    e.preventDefault(); m.flagged=!m.flagged; saveLibrary(); render(); return;
   }
 
   /* Space: before reveal, acts as Check Answer (only if something is selected);

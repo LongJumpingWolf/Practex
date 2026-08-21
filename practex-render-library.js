@@ -609,6 +609,25 @@ function renameDeck(pathArr, newName){
   }
   return true;
 }
+/* Was genuinely missing — deck rename existed, source rename never did. Mirrors
+   renameDeck()'s behavior exactly: no collision guard, so renaming into an
+   already-existing different source's name merges into it (matches how renaming
+   a deck to match a sibling's name already merges them). If the target name is
+   new, the color/cover metadata carries over under the new key; if it already
+   belongs to an existing source, that source's own metadata wins rather than
+   being overwritten by whatever was renamed into it. */
+function renameSource(oldName, newName){
+  newName = (newName || '').trim();
+  if (!newName || newName === oldName) return false;
+  state.mcqs.forEach(function(m){
+    if (m.source === oldName) m.source = newName;
+  });
+  if (state.sources[oldName] && !state.sources[newName]) {
+    state.sources[newName] = state.sources[oldName];
+  }
+  delete state.sources[oldName];
+  return true;
+}
 /* Moves the deck at pathArr to become a child of destPathArr (a full path — can be a
    bare subject, or a nested chapter), keeping its own name as the new top segment
    underneath the destination and preserving anything nested below it. */
@@ -1750,6 +1769,7 @@ function renderAddSource(){
         '<span class="chip-dot" style="background:' + colorForSource(s) + '"></span>' +
         '<span style="flex:1;">' + escapeHtml(s) + '</span>' +
         '<span class="view-sub" style="margin:0;">' + count + ' MCQs</span>' +
+        '<button class="btn btn-sm btn-ghost" data-action="rename-source" data-source="' + escapeHtml(s) + '">Rename</button>' +
         '<button class="btn btn-sm btn-danger" data-action="delete-source" data-source="' + escapeHtml(s) + '">Delete</button>' +
         '</div>';
     });

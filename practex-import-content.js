@@ -855,6 +855,18 @@ function openRenameDeckModal(pathKey){
   if (input) { input.focus(); input.select(); }
 }
 
+function openRenameSourceModal(sourceName){
+  var html = '<h3>Rename source</h3>';
+  html += '<div class="form-field"><label>New name</label><input type="text" id="renameSourceInput" value="' + escapeHtml(sourceName) + '"></div>';
+  html += '<div class="view-sub" style="margin-top:-6px;margin-bottom:10px;">Every question currently under "' + escapeHtml(sourceName) + '" moves to the new name.</div>';
+  html += '<div class="action-row" style="margin-top:0;margin-bottom:0;">' +
+    '<button class="btn btn-primary" data-action="confirm-rename-source" data-source="' + escapeHtml(sourceName) + '">Save</button>' +
+    '<button class="btn btn-ghost" data-action="close-modal">Cancel</button></div>';
+  showRichModal(html);
+  var input = document.getElementById('renameSourceInput');
+  if (input) { input.focus(); input.select(); }
+}
+
 /* Folders are otherwise entirely implied by which subject/chapterPath actual
    questions carry — there's no way to make one exist with nothing in it yet without
    this. Root call (no parentPathKey) creates a new top-level subject; called from a
@@ -1116,5 +1128,5 @@ function pendingNavTargetUrl(){
   return originUrl || 'library.html';
 }
 function bookmarkButton(m){
-  return '<button class="btn btn-ghost btn-sm bookmark-btn'+(m.flagged?' bookmarked':'')+'" data-action="bookmark-current" title="Bookmark question (F)" aria-label="'+(m.flagged?'Remove bookmark':'Bookmark question')+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4V3z"></path></svg><span>'+(m.flagged?'Bookmarked':'Bookmark')+'</span></button>';
+  return '<button class="btn btn-ghost btn-sm bookmark-btn'+(m.flagged?' bookmarked':'')+'" data-action="bookmark-current" title="Bookmark question (B)" aria-label="'+(m.flagged?'Remove bookmark':'Bookmark question')+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4V3z"></path></svg><span>'+(m.flagged?'Bookmarked':'Bookmark')+'</span></button>';
 }
