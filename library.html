@@ -591,6 +591,21 @@ textarea.ingest-area{
 .match-item.match-wrong{border-color:var(--pen-red);background:var(--pen-red-bg);}
 .seq-item.seq-correct{border-color:var(--pen-green);background:var(--pen-green-bg);}
 .seq-item.seq-wrong{border-color:var(--pen-red);background:var(--pen-red-bg);}
+/* Layout that used to be inline on every .seq-item — moved into the class itself so
+   the drag/FLIP animation JS (bindPracticeWidgets in practex-render-library.js,
+   animateSequenceToCorrect in practex-learning-practice.js) has one consistent place
+   to apply transform without fighting inline styles. transition on transform is what
+   actually makes both the live drag-reflow AND the show-correct-order reveal animate
+   smoothly instead of snapping instantly — this is the single most load-bearing line
+   for "smooth animation" specifically. */
+.seq-list{display:flex;flex-direction:column;}
+.seq-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;margin-bottom:7px;transition:transform .22s cubic-bezier(.22,.68,.36,1),border-color .15s,background .15s;will-change:transform;}
+.seq-num{min-width:18px;flex-shrink:0;}
+.seq-text{flex:1;}
+.seq-drag-handle{cursor:grab;touch-action:none;color:var(--ink-soft);display:flex;align-items:center;padding:2px;flex-shrink:0;-webkit-user-select:none;user-select:none;}
+.seq-drag-handle:active{cursor:grabbing;}
+.seq-item.seq-dragging{transition:none;z-index:20;position:relative;box-shadow:0 6px 18px rgba(0,0,0,0.18);border-color:var(--cover);background:var(--paper);}
+
 .mnem-letter{font-family:inherit;}
 #cutoffSlider{accent-color:var(--cover);height:28px;}
 #cutoffSlider::-webkit-slider-thumb{width:26px;height:26px;} /* larger touch target than the browser default — verify on an actual phone, not just resized desktop */

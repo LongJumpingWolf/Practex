@@ -793,6 +793,12 @@ async function onClick(e){
     render();
     return;
   }
+  if (action === 'seq-show-correct') {
+    var seqM = state.mcqs.find(function(x){ return x.id === state.session.ids[state.session.viewIndex]; });
+    if (!seqM || seqM.type !== 'sequence') return;
+    animateSequenceToCorrect(seqM); /* commits the correct order to state.session.selected AND animates the reflow — see the big comment on this function for why it's not just render() */
+    return;
+  }
 
   if (action === 'reveal-short') {
     var val = document.getElementById('shortAnswerInput').value.trim();

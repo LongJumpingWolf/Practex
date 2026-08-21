@@ -660,6 +660,60 @@ function qMetaAndStemHtml(m, s, stemText){
   return html;
 }
 
+/* Pure array-move helper — the actual reordering logic behind sequence drag, kept
+   separate from all the DOM/pointer-event handling so it's testable on its own
+   without a real browser layout engine. Moves the item at fromIndex to toIndex,
+   shifting everything between them by one slot, same semantics as any standard
+   sortable-list reorder. */
+function moveArrayItem(arr, fromIndex, toIndex){
+  var copy = arr.slice();
+  if (fromIndex === toIndex || fromIndex < 0 || fromIndex >= copy.length || toIndex < 0 || toIndex >= copy.length) return copy;
+  var item = copy.splice(fromIndex, 1)[0];
+  copy.splice(toIndex, 0, item);
+  return copy;
+}
+
+/* "Show correct order" — animates the CURRENT (possibly wrong) arrangement into the
+   correct one, rather than just re-rendering straight to it. Standard FLIP technique:
+   measure positions before the reorder (First), commit the state change and let a
+   normal render() lay everything out in its new order (Last), then for each item
+   apply an instant inverse transform back to where it visually WAS (Invert) and
+   immediately transition it to zero (Play) — the CSS transition on .seq-item's
+   transform (library.html/practice.html) is what makes that transition visible as
+   motion instead of an instant snap. data-step-id is what lets an item's identity
+   survive the reorder — origIdx never changes for a given step, only its position
+   does, so this is genuinely animating "this step slid from here to there", not
+   just whatever happened to occupy a DOM slot before and after. */
+function animateSequenceToCorrect(m){
+  var container = typeof document !== 'undefined' ? document.getElementById('seqList') : null;
+  var firstRects = {};
+  if (container) {
+    Array.prototype.forEach.call(container.querySelectorAll('.seq-item'), function(el){
+      var id = el.getAttribute('data-step-id');
+      if (el.getBoundingClientRect) firstRects[id] = el.getBoundingClientRect();
+    });
+  }
+
+  state.session.selected = m.steps_correct_order.map(function(_, i){ return i; }); /* the fully correct order, by definition */
+  render();
+
+  var newContainer = typeof document !== 'undefined' ? document.getElementById('seqList') : null;
+  if (!newContainer) return; /* no DOM to animate against (e.g. this environment has no real layout engine) — state is still correct, just no visible motion */
+  Array.prototype.forEach.call(newContainer.querySelectorAll('.seq-item'), function(el){
+    var id = el.getAttribute('data-step-id');
+    var first = firstRects[id];
+    if (!first || !el.getBoundingClientRect) return;
+    var last = el.getBoundingClientRect();
+    var deltaY = first.top - last.top;
+    if (!deltaY) return;
+    el.style.transition = 'none';
+    el.style.transform = 'translateY(' + deltaY + 'px)';
+    void el.offsetHeight; /* force a reflow so the browser registers the starting position before the transition below is allowed to animate toward 0 */
+    el.style.transition = '';
+    el.style.transform = '';
+  });
+}
+
 function shuffledIndices(n, seedKey){
   /* Deterministic-per-question shuffle so re-renders (which happen on every click)
      don't visually reshuffle the right-hand column mid-interaction. Seeded off the
@@ -738,18 +792,27 @@ function renderSequenceBody(m, s, isReviewing, result, viewRevealed){
     s.selected = viewSel;
   }
   var order = viewSel || [];
+  var interactive = !viewRevealed && !isReviewing;
+  var allCorrect = order.length && order.every(function(origIdx, pos){ return origIdx === pos; });
 
   var html = '<div class="card answer-sheet">';
   html += qMetaAndStemHtml(m, s, m.stem);
-  html += '<div class="multi-select-hint">' + icon('check-circle',13) + ' Use the arrows to put these in the correct order</div>';
-  html += '<div class="seq-list" style="margin-top:10px;">';
+  html += '<div class="multi-select-hint">' + icon('check-circle',13) + (interactive ? ' Drag to reorder, or use the arrows' : '') + '</div>';
+  /* data-step-id is the STABLE identity FLIP animation keys off of — origIdx never
+     changes for a given step even as its position (pos) does, which is exactly what's
+     needed to correctly animate "this specific step slid from here to there" rather
+     than accidentally animating whatever happens to occupy a DOM slot before/after. */
+  html += '<div class="seq-list" id="seqList" data-interactive="' + (interactive ? '1' : '0') + '" style="margin-top:10px;">';
   order.forEach(function(origIdx, pos){
     var isCorrectHere = viewRevealed && origIdx === pos;
     var cls = 'seq-item' + (viewRevealed ? (isCorrectHere ? ' seq-correct' : ' seq-wrong') : '');
-    html += '<div class="' + cls + '" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;margin-bottom:7px;">' +
-      '<span class="mono" style="min-width:18px;">' + (pos+1) + '</span>' +
-      '<span style="flex:1;">' + escapeHtml(m.steps_correct_order[origIdx]) + '</span>';
-    if (!viewRevealed && !isReviewing) {
+    html += '<div class="' + cls + '" data-step-id="' + origIdx + '" data-pos="' + pos + '">';
+    if (interactive) {
+      html += '<span class="seq-drag-handle" title="Drag to reorder">' + icon('menu',15) + '</span>';
+    }
+    html += '<span class="mono seq-num">' + (pos+1) + '</span>' +
+      '<span class="seq-text">' + escapeHtml(m.steps_correct_order[origIdx]) + '</span>';
+    if (interactive) {
       html += '<button class="btn btn-ghost btn-sm" data-action="seq-move-up" data-pos="' + pos + '"' + (pos===0?' disabled':'') + ' title="Move up">' + icon('chevron-left',14) + '</button>' +
         '<button class="btn btn-ghost btn-sm" data-action="seq-move-down" data-pos="' + pos + '"' + (pos===order.length-1?' disabled':'') + ' title="Move down">' + icon('chevron-right',14) + '</button>';
     }
@@ -760,6 +823,17 @@ function renderSequenceBody(m, s, isReviewing, result, viewRevealed){
   if (!viewRevealed) {
     html += '<div class="answer-footer" style="justify-content:flex-end;">' +
       '<button class="btn btn-primary" data-action="reveal-mcq">Check answer</button></div>';
+  } else if (!allCorrect && !isReviewing) {
+    /* Wrong on the first check — offer to watch it animate into the correct order,
+       rather than only showing static red/green coloring on whatever order they left
+       it in. Deliberately doesn't auto-advance to "Next question" yet — seeing the
+       correct order animate into place IS the answer reveal for this question type. */
+    html += '<div class="reveal-panel">';
+    html += '<div class="reveal-verdict wrong">Not quite</div>';
+    html += renderNotesSection(m);
+    html += '<div class="answer-footer" style="justify-content:flex-end;">' +
+      '<button class="btn btn-primary" data-action="seq-show-correct">' + icon('corner-up-right',14) + ' Show correct order</button></div>';
+    html += '</div>';
   } else {
     html += renderRevealFooter(m, s, isReviewing);
   }

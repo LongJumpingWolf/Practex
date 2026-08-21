@@ -646,17 +646,24 @@ function render(){
   if (state.activeModal === 'settings') renderSettingsModalContent();
 }
 
-/* The cutoff slider needs a live-updating label as the user drags, but calling the
-   normal render() on every 'input' tick would replace the DOM mid-drag and kill the
-   browser's active pointer capture on the slider. So this updates the label directly
-   and only writes to state.session.selected — no render() — until "Check answer" is
-   clicked via the existing generic reveal-mcq action. */
+/* Post-render hook for widgets that need real DOM/pointer wiring beyond what the
+   plain HTML string render() produces — the cutoff slider's live-updating label, and
+   sequence's drag-to-reorder. Both share one constraint: never call the normal
+   render() mid-interaction, since it rebuilds #appRoot's entire innerHTML and would
+   kill the browser's active pointer capture. Each binds only to its own question
+   type and no-ops otherwise, so this is safe to call unconditionally after every
+   render(). */
 function bindPracticeWidgets(){
   if (state.view !== 'practice' || !state.session) return;
   var s = state.session;
   if (s.viewIndex < s.index) return; /* reviewing an already-answered question — slider is disabled, nothing to bind */
   var m = state.mcqs.find(function(x){ return x.id === s.ids[s.viewIndex]; });
-  if (!m || m.type !== 'cutoff') return;
+  if (!m) return;
+  if (m.type === 'cutoff') bindCutoffSlider(m);
+  if (m.type === 'sequence') bindSequenceDrag(m);
+}
+
+function bindCutoffSlider(m){
   var slider = document.getElementById('cutoffSlider');
   var label = document.getElementById('cutoffVal');
   if (!slider || slider.dataset.bound) return; /* already bound this render pass */
@@ -664,7 +671,89 @@ function bindPracticeWidgets(){
   slider.addEventListener('input', function(){
     var val = parseFloat(slider.value);
     if (label) label.textContent = val.toFixed(m.range[2] < 1 ? 1 : 0);
-    if (!s.revealed) s.selected = val;
+    if (!state.session.revealed) state.session.selected = val;
+  });
+}
+
+/* Sequence drag-to-reorder. Deliberately built on pointer events (pointerdown/move/up),
+   not the native HTML5 Drag and Drop API — that API is mouse-first and has a long,
+   well-documented history of being unreliable on mobile touch (no real drag image,
+   inconsistent touch-to-drag gesture recognition across browsers), which is exactly
+   why this project already avoided it for the arrow-button version. Pointer events
+   work uniformly across mouse and touch.
+
+   Critical constraint carried over from the cutoff slider above: render() rebuilds
+   the ENTIRE #appRoot innerHTML from scratch, which would destroy the dragged
+   element's pointer capture mid-gesture. So nothing here calls render() until the
+   drag actually ends — the live reflow while dragging works by shifting the OTHER
+   items with a CSS transform (opening a gap where the dragged item would land), while
+   the dragged item itself just follows the pointer. Only on drop does the real order
+   get written to state.session.selected and a normal render() run to settle
+   everything cleanly. */
+function bindSequenceDrag(m){
+  var container = document.getElementById('seqList');
+  if (!container || container.dataset.bound) return;
+  container.dataset.bound = '1';
+  if (container.getAttribute('data-interactive') !== '1') return; /* revealed or reviewing — arrows/handles aren't even rendered, nothing to bind */
+
+  container.addEventListener('pointerdown', function(e){
+    var handle = e.target && e.target.closest ? e.target.closest('.seq-drag-handle') : null;
+    if (!handle) return;
+    var itemEl = handle.closest('.seq-item');
+    if (!itemEl) return;
+    e.preventDefault();
+
+    var items = Array.prototype.slice.call(container.querySelectorAll('.seq-item'));
+    var startIndex = items.indexOf(itemEl);
+    if (startIndex === -1) return;
+    var itemHeight = itemEl.getBoundingClientRect().height || 44; /* fallback for an environment with no real layout (shouldn't happen live, guards a divide against 0 elsewhere) */
+
+    var drag = { itemEl: itemEl, startIndex: startIndex, currentIndex: startIndex, startY: e.clientY, itemHeight: itemHeight, pointerId: e.pointerId };
+    itemEl.setPointerCapture(e.pointerId);
+    itemEl.classList.add('seq-dragging');
+
+    function applyGapShift(){
+      /* Every item EXCEPT the one being dragged either sits at its natural resting
+         transform (0) or shifts by exactly one slot height to open a visual gap at
+         wherever the pointer currently implies the dragged item would land. */
+      var others = Array.prototype.slice.call(container.querySelectorAll('.seq-item:not(.seq-dragging)'));
+      others.forEach(function(el, i){
+        var naturalPos = i < drag.startIndex ? i : i + 1; /* this item's index in the FULL list, skipping over the dragged item's own original slot */
+        var shift = 0;
+        if (drag.startIndex < drag.currentIndex && naturalPos > drag.startIndex && naturalPos <= drag.currentIndex) shift = -1;
+        else if (drag.startIndex > drag.currentIndex && naturalPos >= drag.currentIndex && naturalPos < drag.startIndex) shift = 1;
+        el.style.transform = shift ? 'translateY(' + (shift * drag.itemHeight) + 'px)' : '';
+      });
+    }
+
+    function onMove(ev){
+      var deltaY = ev.clientY - drag.startY;
+      drag.itemEl.style.transform = 'translateY(' + deltaY + 'px)';
+      var rawOffset = Math.round(deltaY / drag.itemHeight);
+      var newIndex = Math.max(0, Math.min(items.length - 1, drag.startIndex + rawOffset));
+      if (newIndex !== drag.currentIndex) {
+        drag.currentIndex = newIndex;
+        applyGapShift();
+      }
+    }
+
+    function onUp(){
+      itemEl.releasePointerCapture(drag.pointerId);
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+      /* Commit the real reorder now, then let a full clean render() take over —
+         everything above was visual-only (transforms on the live DOM), nothing
+         touched state.session.selected until this point. */
+      if (drag.currentIndex !== drag.startIndex) {
+        state.session.selected = moveArrayItem(state.session.selected, drag.startIndex, drag.currentIndex);
+      }
+      render();
+    }
+
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
   });
 }
 
