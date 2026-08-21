@@ -160,6 +160,116 @@ function loadPausedSessionSync(){
     return payload.pausedSession || null;
   } catch(err) { return null; }
 }
+/* Chapter 4 bugfix: startPractice() writes a fresh session into this key as its
+   hand-off mechanism when navigating to practice.html (see startPractice() in
+   practex-learning-practice.js). Once practice.html adopts it into a live
+   state.session, that write becomes stale — but nothing was clearing it. The next
+   reconciliation in loadLibrary() would find it still sitting there with its own
+   pausedAt timestamp and re-adopt it as a genuine pause, even after the person
+   explicitly chose "Leave without pausing." This must be called everywhere
+   state.pausedSession is deliberately resolved to null — adopted into a live
+   session, discarded as corrupted, or explicitly declined. */
+function clearPausedSessionSync(){
+  try { localStorage.removeItem(PAUSED_SESSION_SYNC_KEY); } catch(err) {}
+}
+
+/* ================= Chapter 4 bugfix: same-tab session cache =================
+   MPA means every library.html<->practice.html hop is a full document reload —
+   which means loadLibrary() (a full Supabase fetch of the whole question library
+   plus settings) was firing on EVERY navigation, not just once per session like it
+   did as an SPA. Two real, reported symptoms of this: (1) a loading screen on every
+   single hop instead of just the first, and (2) toggling FSRS mode then quickly
+   starting a session could show it flip back — the fresh fetch on practice.html's
+   reload could win a race against the (fire-and-forget) settings save from the
+   toggle, silently overwriting the in-memory change with the stale pre-toggle value
+   still on the server.
+
+   sessionStorage (not localStorage) is the right tool here specifically because it's
+   scoped to the tab's lifetime — same-tab navigation between our own two pages sees
+   it, a genuinely new session (new tab, or the browser reopening) correctly does not
+   and falls through to a real fresh load, exactly matching this app's existing
+   documented "one full correct load, not a stale-then-fresh flicker" philosophy for
+   any GENUINELY new session — this only skips the reload for hops within one that's
+   already loaded.
+   =============================================================================== */
+var SESSION_CACHE_KEY = 'practex_session_cache_v1';
+function persistSessionCache(){
+  if (!state.currentUser) return;
+  try {
+    sessionStorage.setItem(SESSION_CACHE_KEY, JSON.stringify({
+      userId: state.currentUser.id,
+      mcqs: state.mcqs,
+      sources: state.sources,
+      learningModeEnabled: state.learningMode ? state.learningMode.enabled : false,
+      darkMode: state.darkMode,
+      streak: state.streak,
+      fsrsCardExpanded: state.fsrsCardExpanded,
+      sleepingSubjects: state.sleepingSubjects,
+      autoSleepEnabled: state.autoSleepEnabled,
+      autoSleepStreak: state.autoSleepStreak,
+      emptyFolders: state.emptyFolders,
+    }));
+  } catch(err) { console.warn('Session cache save failed (falls back to a full reload next navigation, nothing lost):', err); }
+}
+function loadSessionCache(){
+  try {
+    var raw = sessionStorage.getItem(SESSION_CACHE_KEY);
+    if (!raw) return null;
+    var payload = JSON.parse(raw);
+    if (!state.currentUser || payload.userId !== state.currentUser.id) return null;
+    return payload;
+  } catch(err) { return null; }
+}
+function applySessionCache(cache){
+  state.mcqs = cache.mcqs || [];
+  state.sources = cache.sources || {};
+  state.learningMode.enabled = !!cache.learningModeEnabled;
+  state.darkMode = !!cache.darkMode;
+  state.streak = cache.streak || { count: 0, lastDate: null };
+  state.fsrsCardExpanded = cache.fsrsCardExpanded !== false;
+  state.sleepingSubjects = cache.sleepingSubjects || {};
+  state.autoSleepEnabled = cache.autoSleepEnabled !== false;
+  state.autoSleepStreak = cache.autoSleepStreak || 4;
+  state.emptyFolders = cache.emptyFolders || [];
+}
+/* The pausedSession reconciliation piece of loadLibrary() is deliberately NOT part of
+   the cache above and always runs fresh on every page load, cached or not — unlike
+   the question library and settings (which only this tab can change, so this tab's
+   own cache is authoritative), a resumable session can appear from another device or
+   from an ungraceful exit at any moment, so checking it fresh every time is the
+   actual correct behavior, not something to skip for speed. Extracted out of
+   loadLibrary() so the session-cache fast path in showApp() can run just this cheap
+   part without the expensive full mcqs fetch. */
+async function reconcilePausedSession(){
+  if (!state.currentUser || !supabaseClient) return;
+  try {
+    var setRes = await supabaseClient.from('user_settings').select('sources,paused_session').eq('user_id', state.currentUser.id).maybeSingle();
+    if (setRes.error) throw setRes.error;
+    var row = setRes.data;
+    state.pausedSession = (row && row.paused_session) || null;
+    var mirrorForPause = await loadLocalMirror();
+    var syncPaused = loadPausedSessionSync();
+    var liveSync = loadLiveSessionSync();
+    var cloudPausedAt = state.pausedSession ? (state.pausedSession.pausedAt || 0) : 0;
+    var mirrorPausedAt = mirrorForPause && mirrorForPause.pausedSession ? (mirrorForPause.pausedSession.pausedAt || 0) : 0;
+    var syncPausedAt = syncPaused ? (syncPaused.pausedAt || 0) : 0;
+    var liveSyncAt = liveSync ? (liveSync.savedAt || 0) : 0;
+    var bestPausedAt = Math.max(cloudPausedAt, mirrorPausedAt, syncPausedAt, liveSyncAt);
+    if (bestPausedAt > cloudPausedAt) {
+      if (liveSyncAt === bestPausedAt) {
+        state.pausedSession = liveSync.session;
+        state.pausedSession.pausedAt = liveSync.savedAt;
+        state.pausedSession.recoveredFromCrash = true;
+      } else {
+        state.pausedSession = (syncPausedAt === bestPausedAt) ? syncPaused : mirrorForPause.pausedSession;
+      }
+      saveUserSettings();
+    }
+    clearLiveSessionSync();
+  } catch(e) {
+    console.error('reconcilePausedSession:', e);
+  }
+}
 
 /* ================= Chapter 3: continuous live-session persistence =================
    The functions above only ever wrote a snapshot at the MOMENT of an explicit pause,
@@ -607,11 +717,13 @@ async function loadLibrary(onProgress){
   } else {
     persistLocalMirror(); /* refresh the offline-fallback cache with this known-correct load — otherwise it could keep holding a stale/incomplete snapshot from before the pagination fix indefinitely, until something else happened to trigger a save */
   }
+  persistSessionCache(); /* Chapter 4 — seeds the same-tab fast path so the NEXT library.html<->practice.html hop in this tab doesn't need a full reload; see the big comment above persistSessionCache() */
 }
 /* All the small per-user preferences live in one row so toggling any of them is a
    single upsert rather than a separate table/network round trip each. */
 async function saveUserSettings(){
   persistLocalMirror(); /* local-first, unconditional, before any network attempt */
+  persistSessionCache(); /* Chapter 4 bugfix — keeps the same-tab fast path current the instant a toggle changes (FSRS, dark mode, etc), synchronously, with no dependency on the async Supabase write below landing before a navigation happens. This is what closes the "toggle FSRS then quickly start a session and it silently reverts" race — the next page's fast-path read now sees this change immediately, not whatever was last confirmed by the network. */
   state.lastSaveHadPermanentConflict = false; /* this table is keyed by user_id only, so it can't hit the cross-account collision saveLibrary() can — reset here anyway so a stale value from an earlier saveLibrary() call can't mislead a caller checking this flag after just calling this function alone */
   if (!state.currentUser || !supabaseClient) return;
   try {
@@ -737,6 +849,7 @@ async function manualSync(){
    Note: this does NOT delete rows that were removed locally — see deleteMcqRows(). */
 async function saveLibrary(){
   persistLocalMirror(); /* local-first, unconditional, before any network attempt */
+  persistSessionCache(); /* Chapter 4 bugfix — same reasoning as saveUserSettings(): keeps this tab's fast-path copy of the library current the instant it changes in memory, independent of the async Supabase upsert below */
   state.lastSaveHadPermanentConflict = false;
   if (!state.currentUser || !supabaseClient) return;
   if (!state.mcqs.length) return;

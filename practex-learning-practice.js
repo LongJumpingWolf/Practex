@@ -419,6 +419,7 @@ function goToPracticeIfSessionPending(){
     state.pausedSession = null;
     savePausedSession();
     clearLiveSessionSync();
+    clearPausedSessionSync(); /* bugfix — see the comment above this function's definition in practex-data-core.js */
     window.location.href = 'library.html';
     return false;
   }
@@ -426,6 +427,7 @@ function goToPracticeIfSessionPending(){
   state.pausedSession = null;
   state.view = 'practice';
   savePausedSession(); /* clears the paused_session column now that it's live again, so a stale copy can't linger and get re-offered */
+  clearPausedSessionSync(); /* bugfix — the sync copy that got us HERE is now stale the moment it's adopted; leaving it would let it resurface later even after an explicit "leave without pausing" */
   return true;
 }
 

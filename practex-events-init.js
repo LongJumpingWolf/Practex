@@ -647,6 +647,7 @@ async function onClick(e){
     var targetUrl2 = pendingNavTargetUrl();
     state.session=null; closeModal(); render();
     clearLiveSessionSync(); /* explicit "don't save this" — an ungraceful-exit leftover from earlier in this session shouldn't override that choice next load */
+    clearPausedSessionSync(); /* bugfix — startPractice()'s hand-off write to this same key, from however this session originally got started, would otherwise still be sitting on disk and get mistaken for a real pause on the next load */
     window.location.href = targetUrl2;
     return;
   }
@@ -662,7 +663,7 @@ async function onClick(e){
     var check = normalizePausedSessionForResume(state.pausedSession);
     if (!check.ids.length) {
       showToast('That paused test looks corrupted and can\'t be resumed — sorry about that. Starting fresh is the safest option.');
-      state.pausedSession = null; closeModal(); render(); savePausedSession(); clearLiveSessionSync(); return;
+      state.pausedSession = null; closeModal(); render(); savePausedSession(); clearLiveSessionSync(); clearPausedSessionSync(); return;
     }
     closeModal();
     window.location.href = 'practice.html';
@@ -853,9 +854,29 @@ function showAuthGate(){
 }
 async function showApp(){
   document.getElementById('authGate').style.display = 'none';
-  /* Always a single, complete load before anything renders — no more painting from
-     the local cache first and swapping in real data a few seconds later. That
-     two-stage flow is exactly what made a truncated fetch look like data
+
+  /* Chapter 4 bugfix — same-tab fast path. See the big comment above
+     persistSessionCache() in practex-data-core.js for the full reasoning: this skips
+     the loading screen AND the full network fetch entirely when this tab already has
+     a known-good copy from an earlier page in the SAME tab (i.e. this is a
+     library.html<->practice.html hop, not a genuinely new session). The pausedSession
+     check still always runs fresh via reconcilePausedSession() — that part is never
+     cached, on purpose, since a resumable session can appear from another device or
+     an ungraceful exit at any moment. */
+  var cache = loadSessionCache();
+  if (cache) {
+    applySessionCache(cache);
+    document.getElementById('loadingScreen').style.display = 'none';
+    document.getElementById('appRoot').style.display = 'grid';
+    await reconcilePausedSession();
+    bootCurrentPage();
+    return;
+  }
+
+  /* No same-tab cache — this is a genuinely fresh session (new tab, browser reopened,
+     or first load ever). Always a single, complete load before anything renders — no
+     painting from a stale cache first and swapping in real data a few seconds later.
+     That two-stage flow is exactly what made a truncated fetch look like data
      disappearing before, and even now that the fetch itself is fixed, showing
      something and then changing it is the wrong feeling to give someone who just
      went through that. One full, correct load, then render once. Image URLs load
@@ -900,11 +921,14 @@ async function showApp(){
 
   document.getElementById('loadingScreen').style.display = 'none';
   document.getElementById('appRoot').style.display = 'grid';
+  bootCurrentPage();
+}
 
-  /* Chapter 4 (MPA) — page-specific boot, now that loadLibrary() above has already
-     reconciled state.pausedSession from every source (cloud/mirror/sync-key/live
-     crash-recovery — see loadLibrary() in practex-data-core.js). This runs once,
-     right before the very first render() on whichever page we're actually on. */
+/* Chapter 4 (MPA) — page-specific boot, shared by both the fast (cached) and full
+   (fresh) paths above, now that state.pausedSession has been reconciled from every
+   source one way or another (cloud/mirror/sync-key/live crash-recovery). Runs once,
+   right before the very first render() on whichever page we're actually on. */
+function bootCurrentPage(){
   var onPracticePage = /practice\.html/.test(window.location.pathname);
   if (onPracticePage) {
     var hasSession = goToPracticeIfSessionPending(); /* navigates away itself if there's nothing to resume — see practex-learning-practice.js */
