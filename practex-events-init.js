@@ -855,16 +855,19 @@ function showAuthGate(){
 async function showApp(){
   document.getElementById('authGate').style.display = 'none';
 
-  /* Chapter 4 bugfix — same-tab fast path. See the big comment above
-     persistSessionCache() in practex-data-core.js for the full reasoning: this skips
-     the loading screen AND the full network fetch entirely when this tab already has
-     a known-good copy from an earlier page in the SAME tab (i.e. this is a
-     library.html<->practice.html hop, not a genuinely new session). The pausedSession
+  /* Chapter 4 bugfix — same-tab fast path, revised after a real QuotaExceededError
+     report to split settings (tiny, sessionStorage, synchronous) from the library
+     itself (large, sourced from the existing IndexedDB mirror instead — see the big
+     comment above persistSessionCache() in practex-data-core.js for the full
+     reasoning). Both need to succeed for the fast path to engage; if the mirror
+     isn't there yet (brand new account/browser), fall through to a real full load
+     rather than showing a library with settings but no questions. The pausedSession
      check still always runs fresh via reconcilePausedSession() — that part is never
      cached, on purpose, since a resumable session can appear from another device or
      an ungraceful exit at any moment. */
   var cache = loadSessionCache();
-  if (cache) {
+  var gotMirror = cache ? await applyMirrorAsLibraryFastPath() : false;
+  if (cache && gotMirror) {
     applySessionCache(cache);
     document.getElementById('loadingScreen').style.display = 'none';
     document.getElementById('appRoot').style.display = 'grid';

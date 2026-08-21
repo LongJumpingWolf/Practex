@@ -173,7 +173,7 @@ function clearPausedSessionSync(){
   try { localStorage.removeItem(PAUSED_SESSION_SYNC_KEY); } catch(err) {}
 }
 
-/* ================= Chapter 4 bugfix: same-tab session cache =================
+/* ================= Chapter 4 bugfix: same-tab fast-boot path =================
    MPA means every library.html<->practice.html hop is a full document reload —
    which means loadLibrary() (a full Supabase fetch of the whole question library
    plus settings) was firing on EVERY navigation, not just once per session like it
@@ -184,13 +184,28 @@ function clearPausedSessionSync(){
    toggle, silently overwriting the in-memory change with the stale pre-toggle value
    still on the server.
 
-   sessionStorage (not localStorage) is the right tool here specifically because it's
-   scoped to the tab's lifetime — same-tab navigation between our own two pages sees
-   it, a genuinely new session (new tab, or the browser reopening) correctly does not
-   and falls through to a real fresh load, exactly matching this app's existing
-   documented "one full correct load, not a stale-then-fresh flicker" philosophy for
-   any GENUINELY new session — this only skips the reload for hops within one that's
-   already loaded.
+   Split into two tiers, deliberately:
+
+   1. SETTINGS — tiny (a few hundred bytes), sessionStorage, synchronous. This is
+      what actually closes the FSRS race: the toggle updates it INSTANTLY, with zero
+      dependency on the async Supabase write landing before a navigation happens.
+      Scoped to the tab's lifetime on purpose — same-tab navigation between our own
+      two pages sees it, a genuinely new session (new tab, browser reopening)
+      correctly does not, matching this app's existing "one full correct load, not a
+      stale-then-fresh flicker" philosophy for any real new session.
+
+   2. LIBRARY (mcqs + sources) — this used to also live in the same sessionStorage
+      entry, which was the wrong call: with 6,000+ rich question objects that easily
+      exceeds sessionStorage's ~5-10MB per-origin quota (confirmed happening in
+      practice) and threw QuotaExceededError. The fix reuses the EXISTING local
+      IndexedDB mirror (persistLocalMirror()/loadLocalMirror()) instead — it already
+      has a much higher quota ceiling, and is ALREADY kept in sync on every single
+      save (persistLocalMirror() runs unconditionally at the top of both
+      saveUserSettings() and saveLibrary() — "local-first, before any network
+      attempt" — so no new hook was even needed for this part). It's async
+      (IndexedDB, not sessionStorage) but still entirely local — no network round
+      trip — so it's just as effective at skipping the loading screen, just not
+      quite as instant as a synchronous sessionStorage read would be.
    =============================================================================== */
 var SESSION_CACHE_KEY = 'practex_session_cache_v1';
 function persistSessionCache(){
@@ -198,8 +213,6 @@ function persistSessionCache(){
   try {
     sessionStorage.setItem(SESSION_CACHE_KEY, JSON.stringify({
       userId: state.currentUser.id,
-      mcqs: state.mcqs,
-      sources: state.sources,
       learningModeEnabled: state.learningMode ? state.learningMode.enabled : false,
       darkMode: state.darkMode,
       streak: state.streak,
@@ -209,7 +222,14 @@ function persistSessionCache(){
       autoSleepStreak: state.autoSleepStreak,
       emptyFolders: state.emptyFolders,
     }));
-  } catch(err) { console.warn('Session cache save failed (falls back to a full reload next navigation, nothing lost):', err); }
+  } catch(err) {
+    /* This entry is now deliberately tiny (settings only, no question data) — should
+       never realistically hit a quota. If it somehow still does, the only
+       consequence is the FSRS-race fix and instant-settings part of the fast path
+       stop engaging; the mcqs/sources fast path (via the IndexedDB mirror below) is
+       entirely unaffected, since it doesn't depend on this key at all. */
+    console.warn('Settings cache save failed (falls back to fresh settings next navigation, nothing lost):', err);
+  }
 }
 function loadSessionCache(){
   try {
@@ -221,8 +241,6 @@ function loadSessionCache(){
   } catch(err) { return null; }
 }
 function applySessionCache(cache){
-  state.mcqs = cache.mcqs || [];
-  state.sources = cache.sources || {};
   state.learningMode.enabled = !!cache.learningModeEnabled;
   state.darkMode = !!cache.darkMode;
   state.streak = cache.streak || { count: 0, lastDate: null };
@@ -231,6 +249,23 @@ function applySessionCache(cache){
   state.autoSleepEnabled = cache.autoSleepEnabled !== false;
   state.autoSleepStreak = cache.autoSleepStreak || 4;
   state.emptyFolders = cache.emptyFolders || [];
+}
+/* The mcqs/sources half of the fast path — reads the EXISTING IndexedDB mirror
+   directly rather than anything sessionStorage-based (see the big comment above).
+   Returns true if it successfully hydrated state.mcqs/state.sources from a mirror
+   matching the current user, false if there's no usable mirror yet (brand new
+   account, or a browser that's never loaded this app before) — in which case the
+   caller should fall through to a real full loadLibrary().  */
+async function applyMirrorAsLibraryFastPath(){
+  try {
+    var mirror = await loadLocalMirror();
+    if (!mirror || !Array.isArray(mirror.mcqs)) return false;
+    state.mcqs = mirror.mcqs;
+    state.sources = mirror.sources || {};
+    return true;
+  } catch(err) {
+    return false;
+  }
 }
 /* The pausedSession reconciliation piece of loadLibrary() is deliberately NOT part of
    the cache above and always runs fresh on every page load, cached or not — unlike
