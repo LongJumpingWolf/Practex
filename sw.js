@@ -12,7 +12,7 @@
 // stays the source of truth when you have signal, the local mirror is the
 // fallback when you don't.
 
-const CACHE_NAME = 'practex-shell-v5';
+const CACHE_NAME = 'practex-shell-v6';
 const SHELL_URLS = ['index.html', 'library.html', 'practice.html', 'config.js', 'loading.css',
   'practex-data-core.js', 'practex-import-content.js', 'practex-render-library.js',
   'practex-learning-practice.js', 'practex-events-init.js'];
