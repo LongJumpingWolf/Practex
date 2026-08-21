@@ -537,6 +537,21 @@ function deleteDeck(pathArr){
      the 30-day retention window elapses — see TRASH_RETENTION_DAYS. */
   var now = Date.now();
   removed.forEach(function(m){ m.trashedAt = now; });
+
+  /* Real bug found via a live report: an EMPTY folder/subject (created via "New
+     subject"/"New folder" with zero questions ever added to it) is tracked entirely
+     in state.emptyFolders, completely separate from state.mcqs — deleteDeck() only
+     ever operated on state.mcqs, so deleting an empty folder found zero matching
+     questions, did nothing, and the folder stayed visible forever with no way to
+     actually remove it. Empty folders have no content to trash/restore, so this is
+     a real, permanent removal for them specifically, not a soft delete — there's
+     nothing meaningful to keep for 30 days when there was never anything in it. */
+  state.emptyFolders = (state.emptyFolders || []).filter(function(ef){
+    if (ef.length < pathArr.length) return true; // shorter path can't be this deck or a descendant of it — keep
+    for (var i = 0; i < pathArr.length; i++) { if (ef[i] !== pathArr[i]) return true; } // diverges somewhere — not this deck or a descendant — keep
+    return false; // exact match or a descendant of the deleted path — remove
+  });
+
   return removed; /* full mcq objects — the trash view needs the real content to show/restore them */
 }
 

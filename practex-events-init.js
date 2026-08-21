@@ -647,8 +647,9 @@ async function onClick(e){
         state.selectedPath = null; state.forceList = false;
       }
       closeModal(); render();
-      showToast('Moved ' + removedMcqs.length + ' question' + (removedMcqs.length===1?'':'s') + ' to Trash — restorable for ' + TRASH_RETENTION_DAYS + ' days.');
+      showToast(removedMcqs.length ? ('Moved ' + removedMcqs.length + ' question' + (removedMcqs.length===1?'':'s') + ' to Trash — restorable for ' + TRASH_RETENTION_DAYS + ' days.') : 'Folder deleted.');
       await saveLibrary(); /* normal upsert — trashedAt is just another field on the same rows, no explicit delete call needed since nothing is actually gone yet */
+      await saveUserSettings(); /* emptyFolders lives in a separate settings column, not state.mcqs — deleting an empty folder only touches THIS, and without saving it too the folder would silently reappear on next sync from another device even though it looked deleted locally */
     } else {
       closeModal();
     }
