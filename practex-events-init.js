@@ -539,7 +539,7 @@ async function onClick(e){
   }
 
   if (action === 'close-modal') { state.pendingNav = null; closeModal(); return; }
-  if (action === 'modal-backdrop-close') { if (e.target === el) { state.pendingNav = null; closeModal(); } return; }
+  if (action === 'modal-backdrop-close') { if (e.target === el && lastMouseDownOnBackdrop) { state.pendingNav = null; closeModal(); } return; }
   if (action === 'view-history') { openHistoryModal(el.getAttribute('data-id')); return; }
   if (action === 'edit-mcq') { openEditModal(el.getAttribute('data-id')); return; }
   if (action === 'save-edit-mcq') { saveEditMcq(el.getAttribute('data-id')); return; }
@@ -1124,6 +1124,28 @@ function bootCurrentPage(){
 }
 
 /* ---------------- Init ---------------- */
+/* Fix for a real, reported bug: drag-selecting text inside a modal (e.g. the days
+   input in the study plan setup) closed the modal instead of just selecting text.
+   Root cause — this is the textbook version of a well-known browser behavior, not
+   specific to this app: when mousedown and the eventual click/mouseup land on
+   DIFFERENT elements (exactly what a text-selection drag does — mousedown on the
+   input, mouseup wherever the drag ends), the browser fires `click` on the NEAREST
+   COMMON ANCESTOR of the two, not on either original element. Drag-selecting the
+   text in a small input inside a narrow modal easily lets that final mouseup
+   position land outside the modal card's bounds, so the computed click target
+   becomes the backdrop itself — even though the gesture never actually intended to
+   click the backdrop at all. The existing modal-backdrop-close handler only checked
+   the click's resolved target, which is exactly the check this quirk defeats.
+   The fix: track where mousedown ITSELF happened, and only treat it as a genuine
+   "click to close" if mousedown ALSO started directly on the backdrop — a real
+   backdrop click always satisfies both; a text-selection drag that merely
+   resolves to the backdrop by the common-ancestor rule never does, since it
+   started on the input. */
+var lastMouseDownOnBackdrop = false;
+document.addEventListener('mousedown', function(e){
+  lastMouseDownOnBackdrop = !!(e.target && e.target.getAttribute && e.target.getAttribute('data-action') === 'modal-backdrop-close');
+});
+
 async function init(){
   document.body.addEventListener('click', onClick); /* bound once — delegates for both #appRoot, #authGate, and #modalRoot */
   var importInput = document.getElementById('importFileInput');
