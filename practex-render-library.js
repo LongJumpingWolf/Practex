@@ -978,10 +978,17 @@ function renderBookshelf(){
      doesn't need its own separate patch for the same problem — trusting the registry
      is what actually keeps both views in permanent agreement, rather than each one
      tolerating a different subset of drift. */
-  var sourceNames = Object.keys(state.sources).sort();
   var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
   var countBySource = {};
   liveMcqs().forEach(function(m){ countBySource[m.source] = (countBySource[m.source]||0) + 1; });
+  /* A source with zero live questions doesn't stay on the shelf — unlike a folder,
+     which can meaningfully exist empty (you're still building it out), a source IS
+     its questions. Once every one of them is trashed, the book itself has nothing
+     left to represent. state.sources[name] still stays registered underneath (name/
+     color/cover survive) purely so a restore from Trash brings the book back
+     automatically the moment it has a live question again — this only affects what
+     shows up here, not what's remembered. */
+  var sourceNames = Object.keys(state.sources).filter(function(name){ return (countBySource[name] || 0) > 0; }).sort();
 
   var html = '<div class="view-head"><div class="view-title serif">Book Shelf</div>' +
     '<div class="view-sub">' + sourceNames.length + ' source' + (sourceNames.length===1?'':'s') + ' — click one to see its chapters, or set a cover.</div></div>';
