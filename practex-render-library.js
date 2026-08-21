@@ -549,7 +549,7 @@ function passesFilters(m){
   var q = (state.filters.search || '').trim().toLowerCase();
   if (q) {
     var hay = [
-      m.question,
+      questionDisplayText(m), /* m.question for standard types, m.stem for match/sequence/cutoff/mnemonic — without this, search silently couldn't find the new types by their content at all (no crash, just never matched) */
       m.explanation,
       m.subject,
       m.source,
@@ -1151,10 +1151,11 @@ function renderQuestionList(tree, node, searchAll){
     html += '<div class="mcq-list">';
     list.slice(0, 200).forEach(function(m){
       var statusClass = m.flagged ? 'flagged' : (m.learning.history.length === 0 ? '' : (getLearningState(m) === 'mastered' ? 'correct' : 'wrong'));
-      var snippet = m.question.replace(/\n/g,' ').slice(0, 140);
+      var qText = questionDisplayText(m);
+      var snippet = qText.replace(/\n/g,' ').slice(0, 140);
       html += '<div class="card mcq-row' + (m.asleep ? ' mcq-asleep' : '') + '" data-action="preview-mcq" data-id="' + m.id + '">' +
         '<div class="mcq-status-dot ' + statusClass + '"></div>' +
-        '<div class="mcq-row-text">' + escapeHtml(snippet) + (m.question.length > 140 ? '…' : '') + (m.asleep ? ' <span class="sleep-badge">Asleep</span>' : '') +
+        '<div class="mcq-row-text">' + escapeHtml(snippet) + (qText.length > 140 ? '…' : '') + (m.asleep ? ' <span class="sleep-badge">Asleep</span>' : '') +
         '<div class="mcq-row-meta">' +
         '<span class="source-pill" style="background:' + colorForSource(m.source) + '">' + escapeHtml(m.source) + '</span>' +
         (m.images && m.images.length ? '<span class="tag-pill icon-inline" title="' + m.images.length + ' image' + (m.images.length===1?'':'s') + ' attached">' + icon('image',11) + ' ' + m.images.length + '</span>' : '') +

@@ -16,6 +16,18 @@ function recomputeAllDueDates(){
   return changed;
 }
 
+/* Real bug found via a live import: the question list, CSV export, "Add a note"
+   modal, and "Review history" modal all read m.question unconditionally — the
+   field name standard MCQ types use. The 4 newer types (match/sequence/cutoff/
+   mnemonic) use m.stem instead, so m.question is undefined for them, and calling
+   .replace()/.length on undefined throws — which crashed the ENTIRE list/modal the
+   moment it tried to render a row containing one of these types, not just that row.
+   One shared helper, used everywhere a short preview of "what does this question
+   say" is needed, so this can't drift out of sync across the 5 places it's used. */
+function questionDisplayText(m){
+  return (m.type && m.stem !== undefined) ? m.stem : (m.question || '');
+}
+
 function csvEscape(s){
   s = String(s == null ? '' : s);
   if (/[",\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
@@ -28,7 +40,7 @@ function downloadIdSheet(){
   if (!rows.length) { showToast('No questions match that source.'); return; }
   var lines = ['id,question,subject,chapter,source'];
   rows.forEach(function(m){
-    var snippet = m.question.replace(/\s+/g,' ').trim().slice(0, 120);
+    var snippet = questionDisplayText(m).replace(/\s+/g,' ').trim().slice(0, 120);
     lines.push([m.id, snippet, m.subject, (m.chapterPath||[]).join(' > '), m.source].map(csvEscape).join(','));
   });
   var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
@@ -406,7 +418,8 @@ function openAddNoteModal(mcqId){
   if (!m) return;
   state.pendingNoteDraft = { mcqId: mcqId, images: [] };
   var html = '<h3>Add a note</h3>';
-  html += '<p class="view-sub" style="margin-bottom:12px;">' + escapeHtml(m.question.replace(/\n/g,' ').slice(0,100)) + (m.question.length > 100 ? '…' : '') + '</p>';
+  var noteQText = questionDisplayText(m);
+  html += '<p class="view-sub" style="margin-bottom:12px;">' + escapeHtml(noteQText.replace(/\n/g,' ').slice(0,100)) + (noteQText.length > 100 ? '…' : '') + '</p>';
   html += '<div class="form-field"><textarea id="noteTextInput" rows="4" placeholder="A mnemonic, a correction, a clearer explanation than the one given — anything you want next time."></textarea></div>';
   html += '<div class="form-field"><label>Images (optional)</label>' +
     '<div class="mcq-image-grid" id="noteImageGrid"></div>' +
@@ -532,7 +545,8 @@ function openHistoryModal(id){
   if (!m) return;
   var fs = (m.learning && m.learning.fsrs) || null;
   var cls = getLearningState(m);
-  var snippet = m.question.replace(/\n/g,' ').slice(0, 140) + (m.question.length > 140 ? '…' : '');
+  var histQText = questionDisplayText(m);
+  var snippet = histQText.replace(/\n/g,' ').slice(0, 140) + (histQText.length > 140 ? '…' : '');
 
   var html = '<h3>Review history</h3>';
   html += '<p style="margin-bottom:14px;">' + escapeHtml(snippet) + (m.asleep ? ' <span class="sleep-badge">Asleep</span>' : '') + '</p>';
@@ -682,6 +696,20 @@ function openDeleteDeckModal(pathKey){
 function openEditModal(id){
   var m = state.mcqs.find(function(x){ return x.id === id; });
   if (!m) return;
+  /* This modal was built for the standard question shape (question/options/answer) and
+     has no fields for pairs/steps/range/letters — editing one of the 4 newer types here
+     would show an empty "Question" box (m.question is genuinely undefined for these —
+     they use m.stem) and, worse, SAVING would silently write a stray m.question field
+     onto the object while never touching the real content (m.pairs, m.steps_correct_order,
+     etc), corrupting nothing visibly but fixing nothing either. Honest "not supported
+     yet" beats a form that looks like it works and doesn't. */
+  if (m.type === 'match' || m.type === 'sequence' || m.type === 'cutoff' || m.type === 'mnemonic') {
+    var html2 = '<h3>Edit question</h3>';
+    html2 += '<p class="view-sub" style="margin-bottom:14px;">Editing ' + escapeHtml(m.type) + ' questions isn\'t supported in this view yet — this editor only knows the standard question/options/answer shape. For now, delete this question and re-paste a corrected version through Add Source.</p>';
+    html2 += '<div class="action-row" style="margin-bottom:0;"><button class="btn btn-ghost" data-action="close-modal">Close</button></div>';
+    showRichModal(html2, 'narrow');
+    return;
+  }
   var html = '<h3>Edit question</h3>';
   html += '<div class="form-field"><label>Question</label><textarea id="editQuestion" rows="4">' + escapeHtml(m.question) + '</textarea></div>';
   if (m.passage) {
