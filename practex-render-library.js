@@ -62,6 +62,147 @@ function parseLibraryText(raw, sourceOverride){
       i++;
       continue;
     }
+    /* ---------------- New question types (match/sequence/cutoff/mnemonic) ----------------
+       A block starting with #TYPE: is one of the 4 newer, non-MCQ question types added
+       alongside the existing bubble-MCQ/short-answer format above. Everything else in
+       this file (source/subject/chapter headers, #Q-first blocks with no #TYPE:, images,
+       tags) is completely untouched — this is purely additive. Uses this file's own
+       existing conventions (colon-terminated tags, comma-separated #TAGS:) rather than
+       inventing a second syntax, so both formats can appear in the same pasted file. */
+    if (t.indexOf('#TYPE:') === 0) {
+      var newType = t.slice(6).trim().toLowerCase();
+      var typeStartLine = i + 1;
+      i++;
+
+      function readColonLine(tag){
+        if (i < lines.length && lines[i].trim().indexOf(tag) === 0) {
+          var raw2 = lines[i].trim();
+          var val = raw2.slice(raw2.indexOf(':') + 1).trim();
+          i++;
+          return val;
+        }
+        return null;
+      }
+      function readMultilineUntil(stopTags){
+        var buf = [];
+        while (i < lines.length) {
+          var lt = lines[i].trim();
+          if (stopTags.some(function(st){ return lt.indexOf(st) === 0; })) break;
+          buf.push(lines[i]);
+          i++;
+        }
+        return buf;
+      }
+
+      if (t.indexOf('#Q') !== 0 && lines[i] && lines[i].trim().indexOf('#Q') !== 0) {
+        errors.push({ line: typeStartLine, message: '#TYPE: ' + newType + ' near line ' + typeStartLine + ' is missing #Q' });
+        continue;
+      }
+      var qLine = lines[i].trim();
+      var qStem = qLine.indexOf('#Q') === 0 ? qLine.slice(2).trim() : '';
+      i++;
+      var qImages = [];
+      // Optional #IMAGE_Q: line, same convention as the standard MCQ format above
+      if (i < lines.length && lines[i].trim().indexOf('#IMAGE_Q:') === 0) {
+        var imgLine = lines[i].trim();
+        var imgUrl = imgLine.slice(9).trim();
+        if (/^https?:\/\//i.test(imgUrl)) qImages.push(imgUrl);
+        else errors.push({ line: i + 1, message: '#IMAGE_Q: near line ' + (i+1) + ' doesn\'t look like a real http(s) link — skipped.' });
+        i++;
+      }
+
+      var newQ = null;
+
+      if (newType === 'match') {
+        if (i < lines.length && lines[i].trim().indexOf('#PAIRS') === 0) i++;
+        var pairs = [];
+        while (i < lines.length && /^\d+\.\s/.test(lines[i].trim())) {
+          var pm = lines[i].trim().match(/^\d+\.\s*(.+?)\s*=\s*(.+)$/);
+          if (pm) pairs.push({ left: pm[1].trim(), right: pm[2].trim() });
+          else errors.push({ line: i + 1, message: 'Malformed #PAIRS line near ' + (i+1) + ' — expected "N. left = right"' });
+          i++;
+        }
+        if (pairs.length < 3) errors.push({ line: typeStartLine, message: 'match block near line ' + typeStartLine + ' needs at least 3 #PAIRS, found ' + pairs.length });
+        newQ = { type: 'match', stem: qStem, pairs: pairs, images: qImages };
+      } else if (newType === 'sequence') {
+        if (i < lines.length && lines[i].trim().indexOf('#STEPS') === 0) i++;
+        var steps = [];
+        while (i < lines.length && /^\d+\.\s/.test(lines[i].trim())) {
+          var sm = lines[i].trim().match(/^\d+\.\s*(.+)$/);
+          if (sm) steps.push(sm[1].trim());
+          i++;
+        }
+        if (steps.length < 2) errors.push({ line: typeStartLine, message: 'sequence block near line ' + typeStartLine + ' needs at least 2 #STEPS, found ' + steps.length });
+        newQ = { type: 'sequence', stem: qStem, steps_correct_order: steps, images: qImages };
+      } else if (newType === 'cutoff') {
+        var rangeRaw = readColonLine('#RANGE:');
+        var thresholdRaw = readColonLine('#THRESHOLD:');
+        var testValueRaw = readColonLine('#TESTVALUE:');
+        var belowRaw = readColonLine('#BELOW:');
+        var aboveRaw = readColonLine('#ABOVE:');
+        var rangeParts = rangeRaw ? rangeRaw.split(/\s+/).map(Number) : null;
+        var threshold = thresholdRaw !== null ? Number(thresholdRaw) : null;
+        var testValue = testValueRaw !== null ? Number(testValueRaw) : null;
+        if (!rangeRaw || !rangeParts || rangeParts.length !== 3 || rangeParts.some(isNaN)) {
+          errors.push({ line: typeStartLine, message: 'cutoff block near line ' + typeStartLine + ': #RANGE: needs "min max step"' });
+        }
+        if (threshold === null || isNaN(threshold)) errors.push({ line: typeStartLine, message: 'cutoff block near line ' + typeStartLine + ' missing/invalid #THRESHOLD:' });
+        if (testValue === null || isNaN(testValue)) errors.push({ line: typeStartLine, message: 'cutoff block near line ' + typeStartLine + ' missing/invalid #TESTVALUE: — required, evaluateCorrect() can\'t grade a cutoff question without it' });
+        if (!belowRaw) errors.push({ line: typeStartLine, message: 'cutoff block near line ' + typeStartLine + ' missing #BELOW:' });
+        if (!aboveRaw) errors.push({ line: typeStartLine, message: 'cutoff block near line ' + typeStartLine + ' missing #ABOVE:' });
+        newQ = { type: 'cutoff', stem: qStem, range: rangeParts, threshold: threshold, testValue: testValue, below: belowRaw, above: aboveRaw, images: qImages };
+      } else if (newType === 'mnemonic') {
+        if (i < lines.length && lines[i].trim().indexOf('#LETTERS') === 0) i++;
+        var letters = [];
+        while (i < lines.length && /=/.test(lines[i].trim()) && lines[i].trim().indexOf('#') !== 0) {
+          var lm = lines[i].trim().match(/^(.+?)\s*=\s*(.+)$/);
+          if (lm) letters.push({ letter: lm[1].trim(), meaning: lm[2].trim() });
+          i++;
+        }
+        if (letters.length < 2) errors.push({ line: typeStartLine, message: 'mnemonic block near line ' + typeStartLine + ' needs at least 2 #LETTERS, found ' + letters.length });
+        var testLetterRaw = null;
+        if (i < lines.length && lines[i].trim().indexOf('#TESTLETTER:') === 0) {
+          testLetterRaw = readColonLine('#TESTLETTER:');
+        }
+        var testIndex = 0;
+        if (testLetterRaw) {
+          var foundIdx = -1;
+          for (var li = 0; li < letters.length; li++) { if (letters[li].letter.toLowerCase() === testLetterRaw.toLowerCase()) { foundIdx = li; break; } }
+          if (foundIdx === -1) errors.push({ line: typeStartLine, message: 'mnemonic block near line ' + typeStartLine + ': #TESTLETTER: "' + testLetterRaw + '" does not match any #LETTERS entry' });
+          testIndex = foundIdx === -1 ? 0 : foundIdx;
+        } else {
+          testIndex = letters.length ? Math.floor(Math.random() * letters.length) : 0;
+        }
+        newQ = { type: 'mnemonic', stem: qStem, letters: letters, testIndex: testIndex, images: qImages };
+      } else {
+        errors.push({ line: typeStartLine, message: 'Unknown #TYPE: "' + newType + '" near line ' + typeStartLine + ' (expected match, sequence, cutoff, or mnemonic)' });
+      }
+
+      var newTags = [];
+      if (i < lines.length && lines[i].trim().indexOf('#TAGS:') === 0) {
+        var ntl = lines[i].trim();
+        newTags = ntl.slice(ntl.indexOf(':') + 1).split(',').map(function(s){return s.trim();}).filter(Boolean);
+        i++;
+      }
+      if (i < lines.length && lines[i].trim().indexOf('#END') === 0) { i++; }
+
+      if (newQ) {
+        mcqs.push(Object.assign(newQ, {
+          id: uid(),
+          source: source || 'Unlabeled source',
+          subject: subject || 'Unsorted',
+          chapterPath: chapterPath.length ? chapterPath.slice() : ['Unsorted'],
+          tags: newTags,
+          flagged: false,
+          answerImages: [],
+          notes: [],
+          asleep: false,
+          addedAt: Date.now(),
+          learning: { due: Date.now(), interval: 0, history: [], lastReviewed: null, fsrs: null }
+        }));
+      }
+      continue;
+    }
     if (t.indexOf('#Q') === 0) {
       var startLine = i + 1;
       var pmatch = t.match(/\[PASSAGE:(\S+)\]/);
@@ -1089,7 +1230,7 @@ function renderFilters(){
 
 /* ---------------- Add source view ---------------- */
 var MASTER_PROMPT = "PRACTEX MCQ STANDARDIZATION PROMPT\n\n" +
-"You will be given raw, messy OCR text extracted from a medical review or self-assessment book containing multiple-choice questions. Convert it into the exact Practex Standard MCQ Format below. Output ONLY the converted text in this format - no commentary, no markdown code fences, nothing before or after.\n\n" +
+"You will be given raw, messy OCR text extracted from a medical review or self-assessment book containing multiple-choice questions (and, where the source material suits it, match-the-following, ordered-sequence, numeric-cutoff, or lettered-mnemonic content — see types 12-15 below). Convert it into the exact Practex Standard Format below. Output ONLY the converted text in this format - no commentary, no markdown code fences, nothing before or after.\n\n" +
 "=== FILE HEADER (once, at the very top) ===\n" +
 "#SOURCE: <Full book title, author, edition - as accurately as you can tell from the text or context given>\n\n" +
 "=== SECTION HEADERS (repeat only when subject or chapter changes) ===\n" +
@@ -1134,6 +1275,48 @@ var MASTER_PROMPT = "PRACTEX MCQ STANDARDIZATION PROMPT\n\n" +
 "10. Questions referencing an image/photo/diagram that OCR cannot capture - insert a line inside the #Q body: #IMAGE: [brief description inferred from the surrounding text/caption]. Never invent findings that aren't stated nearby - if you cannot tell what the image shows, write #IMAGE: [image - description unavailable].\n\n" +
 "10b. If the source material actually gives you a REAL, working image URL (e.g. converting from a webpage or a digital document where images are already hosted somewhere, not a scanned/photographed page) - use #IMAGE_Q: <url> instead, on its own line inside the #Q body, for an image that belongs with the question itself. For an image that belongs with the answer/explanation, use #IMAGE_A: <url> on its own line inside the #EXPLANATION body specifically (it will not be recognized anywhere else). Only ever use these two for a URL you can actually see verbatim in the source - NEVER invent, guess, or construct a plausible-looking URL. If you are not looking at a real link, use #IMAGE: [description] from rule 10 instead. A question can have #IMAGE_Q:/#IMAGE_A: and the plain #IMAGE: placeholder together if some images have real links and others don't.\n\n" +
 "11. Questions with no visible answer key anywhere in the source - still create the full block, options included, and set #ANSWER: UNKNOWN.\n\n" +
+"12. Match-the-following as its OWN question type (not the #OPTIONS-based combination style in rule 4 - use this instead when the source is asking the reader to pair items directly, not pick a lettered combination): \n" +
+"#TYPE: match\n" +
+"#Q <what the pairing task is asking>\n" +
+"#PAIRS\n" +
+"1. <left item> = <right item>\n" +
+"2. <left item> = <right item>\n" +
+"3. <left item> = <right item>\n" +
+"(at least 3 pairs - use rule 4's #OPTIONS-based style instead if the source only gives 1-2 genuine pairs)\n" +
+"#TAGS: <comma-separated>\n" +
+"#END\n\n" +
+"13. A staged test or ordered protocol where the ORDER ITSELF is the fact being tested (e.g. \"list these steps in the order they occur\"), not a simple numbered list of facts:\n" +
+"#TYPE: sequence\n" +
+"#Q <what's being ordered>\n" +
+"#STEPS\n" +
+"1. <step, written in the CORRECT order - Practex shuffles it for display, never write it pre-shuffled>\n" +
+"2. <step>\n" +
+"(at least 2 steps)\n" +
+"#TAGS: <comma-separated>\n" +
+"#END\n\n" +
+"14. A lab value or numeric threshold with real diagnostic weight, where the source gives (or implies) both a cutoff number AND what a value on each side of it means:\n" +
+"#TYPE: cutoff\n" +
+"#Q <what's being classified>\n" +
+"#RANGE: <min> <max> <step>\n" +
+"#THRESHOLD: <the boundary value>\n" +
+"#TESTVALUE: <a specific value clearly on one side of the threshold, not sitting exactly on it - required, this is what actually gets graded>\n" +
+"#BELOW: <what a value below the threshold means>\n" +
+"#ABOVE: <what a value above the threshold means>\n" +
+"#TAGS: <comma-separated>\n" +
+"#END\n" +
+"Pick #RANGE and #TESTVALUE so the value is unambiguously on one side - never place #TESTVALUE exactly at #THRESHOLD.\n\n" +
+"15. An existing lettered mnemonic in the source (e.g. \"CAFFFI\", \"HAFSA\") - only use this for a mnemonic that's ALREADY spelled out with a meaning per letter in the source text, never invent one that isn't there:\n" +
+"#TYPE: mnemonic\n" +
+"#Q <what the mnemonic stands for>\n" +
+"#LETTERS\n" +
+"<Letter> = <meaning>\n" +
+"<Letter> = <meaning>\n" +
+"(at least 2 letters, one line per letter of the mnemonic, in order)\n" +
+"#TESTLETTER: <one specific letter to quiz - optional, Practex picks one at random if omitted, but prefer being explicit>\n" +
+"#TAGS: <comma-separated>\n" +
+"#END\n" +
+"If converting a whole chapter with several mnemonics, and time/space allows, create multiple #TYPE: mnemonic blocks for the SAME mnemonic with different #TESTLETTER: values (one block per letter worth testing) rather than just one block per mnemonic - this is what lets the letter being quizzed rotate across review sessions instead of always testing the same one.\n\n" +
+"Types 12-15 do NOT use #OPTIONS, #ANSWER, or #EXPLANATION at all - grading is built into the shape of the data itself (pairs must all link correctly, steps must be in the stated order, the slider must land on the correct side of the threshold, the self-graded mnemonic answer is checked against #LETTERS). They still support #IMAGE_Q: exactly like rule 10b, on its own line right after #Q, but never #IMAGE_A: (there's no #EXPLANATION block for these types to put an answer-side image in).\n\n" +
 "=== TABLE RULES ===\n" +
 "Use standard markdown pipe tables only, inside a #Q or #EXPLANATION body:\n" +
 "| Header 1 | Header 2 |\n" +
