@@ -1221,13 +1221,32 @@ async function init(){
      bound once here rather than per modal-open, same reasoning as the click delegation
      above: re-binding on every openEditModal() call would stack duplicate listeners. */
   document.addEventListener('paste', function(e){
-    if (!state.editingMcqId) return;
-    var items = (e.clipboardData && e.clipboardData.items) || [];
-    for (var i = 0; i < items.length; i++) {
-      if (items[i].type && items[i].type.indexOf('image/') === 0) {
-        var file = items[i].getAsFile();
-        if (file) { e.preventDefault(); attachImageToMcq(state.editingMcqId, file); }
-        break;
+    if (state.editingMcqId) {
+      var items = (e.clipboardData && e.clipboardData.items) || [];
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].type && items[i].type.indexOf('image/') === 0) {
+          var file = items[i].getAsFile();
+          if (file) { e.preventDefault(); attachImageToMcq(state.editingMcqId, file); }
+          return;
+        }
+      }
+      return;
+    }
+    /* Real friction reported: raw MCQ text pasted from PDFs often has an
+       accompanying screenshot/diagram (histology, gross pathology) that until now
+       had to be uploaded separately (e.g. via ClipMonkey) and its resulting link
+       manually copied back in as #IMAGE_Q:/#IMAGE_A:. Pasting the image directly
+       into the ingest textarea now does that whole round trip itself — same
+       ImgBB pipeline as a real file upload, genuinely "as if uploaded from
+       device," just triggered by paste instead of a file picker. */
+    if (e.target && e.target.id === 'ingestArea') {
+      var ingestItems = (e.clipboardData && e.clipboardData.items) || [];
+      for (var j = 0; j < ingestItems.length; j++) {
+        if (ingestItems[j].type && ingestItems[j].type.indexOf('image/') === 0) {
+          var imgFile = ingestItems[j].getAsFile();
+          if (imgFile) { e.preventDefault(); pasteImageIntoIngestArea(imgFile); }
+          return;
+        }
       }
     }
   });

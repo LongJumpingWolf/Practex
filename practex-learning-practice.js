@@ -83,8 +83,12 @@ const LearningEngine={
   SLOW_EXPLANATION_MS: 20000,  // spent more than 20s on the explanation — treated as "actually studying it", not skimming
 
   /* timeToAnswerMs/timeOnExplanationMs are optional — pass null if unavailable (e.g.
-     undo doesn't have a clean re-measurement) rather than guessing. */
-  record(mcq,picked,correct,timeToAnswerMs,timeOnExplanationMs){
+     undo doesn't have a clean re-measurement) rather than guessing.
+     resolvedMnemonicIndex (optional, 6th param): for mnemonic questions, which
+     letter was actually tested THIS encounter — passed in explicitly rather than
+     re-derived here, since re-deriving would pick a NEW random letter and record
+     the wrong "expected" answer for what was actually asked. */
+  record(mcq,picked,correct,timeToAnswerMs,timeOnExplanationMs,resolvedMnemonicIndex){
 
     if(!mcq.learning){
       mcq.learning={
@@ -103,7 +107,7 @@ const LearningEngine={
       correct,
       picked,
       rating:null,
-      expected: expectedAnswerStrFor(mcq), /* was mcq.answer[0] unconditionally — threw for any type without m.answer set, killing advanceAfterReveal() mid-execution. See the big comment above expectedAnswerStrFor(). */
+      expected: expectedAnswerStrFor(mcq, resolvedMnemonicIndex), /* was mcq.answer[0] unconditionally — threw for any type without m.answer set, killing advanceAfterReveal() mid-execution. See the big comment above expectedAnswerStrFor(). */
       ts:Date.now(),
       timeToAnswerMs: (typeof timeToAnswerMs === 'number') ? timeToAnswerMs : null,
       timeOnExplanationMs: (typeof timeOnExplanationMs === 'number') ? timeOnExplanationMs : null,
@@ -950,16 +954,39 @@ function renderCutoffBody(m, s, isReviewing, result, viewRevealed){
   return html;
 }
 
+/* Resolves which mnemonic letter is actually being tested THIS encounter. A fresh
+   random pick per session (cached for the duration of that one encounter, via
+   s.mnemonicPicks) rather than a single pick baked in at import time — that's what
+   makes #TESTLETTER's rotation real: reviewing the same mnemonic across different
+   sessions can land on a different letter each time, actually covering the whole
+   thing over repeated study, instead of only ever testing whatever got picked once
+   when the file was first parsed. Falls back to the legacy single m.testIndex field
+   for any already-imported content from before this change (that data has
+   testIndex but not testIndices). */
+function resolveMnemonicTestIndex(m, s){
+  if (m.type !== 'mnemonic') return undefined;
+  var candidates = (m.testIndices && m.testIndices.length) ? m.testIndices
+    : (typeof m.testIndex === 'number') ? [m.testIndex]
+    : (m.letters ? m.letters.map(function(_, li){ return li; }) : [0]);
+  if (s) {
+    if (!s.mnemonicPicks) s.mnemonicPicks = {};
+    if (s.mnemonicPicks[m.id] === undefined) s.mnemonicPicks[m.id] = candidates[Math.floor(Math.random() * candidates.length)];
+    return s.mnemonicPicks[m.id];
+  }
+  return candidates[Math.floor(Math.random() * candidates.length)]; // no session context (e.g. a preview outside practice) — a fresh pick each call is fine there, nothing needs to stay stable across renders
+}
+
 /* ---------------- MNEMONIC ---------------- */
 function renderMnemonicBody(m, s, isReviewing, result, viewRevealed){
   var viewSel = isReviewing ? (result ? result.selected : null) : s.selected;
-  var testLetter = m.letters[m.testIndex];
+  var resolvedIdx = (isReviewing && result && typeof result.resolvedMnemonicIndex === 'number') ? result.resolvedMnemonicIndex : resolveMnemonicTestIndex(m, s);
+  var testLetter = m.letters[resolvedIdx];
 
   var html = '<div class="card answer-sheet">';
   html += qMetaAndStemHtml(m, s, m.stem);
   html += '<div class="mnem-grid" style="display:flex;flex-wrap:wrap;gap:9px;margin:14px 0;">';
   m.letters.forEach(function(l, i){
-    var isTested = i === m.testIndex;
+    var isTested = i === resolvedIdx;
     html += '<div class="mnem-letter" style="width:42px;height:42px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-weight:600;' +
       (isTested ? 'background:var(--emerald-700,#1F5C4A);color:#fff;' : 'border:1px solid var(--line,#ccc);') + '">' + escapeHtml(l.letter) + '</div>';
   });
@@ -1109,10 +1136,13 @@ function pickedStrFor(m, selected){
    nothing at all: the click handler started running and silently died partway through.
    Mirrors pickedStrFor() above — same per-type shape, but describing the CORRECT
    answer for the review-history "expected:" field, not what the person picked. */
-function expectedAnswerStrFor(m){
+function expectedAnswerStrFor(m, resolvedMnemonicIndex){
   if (m.type === 'card') return ''; /* nothing to grade against — see the skip in advanceAfterReveal() below, this shouldn't even be called for cards, but returning cleanly here rather than falling into a type this function doesn't recognize */
   if (m.isShortAnswer || m.type === 'mnemonic') {
-    if (m.type === 'mnemonic' && m.letters && m.letters[m.testIndex]) return m.letters[m.testIndex].meaning;
+    if (m.type === 'mnemonic' && m.letters) {
+      var idx = (typeof resolvedMnemonicIndex === 'number') ? resolvedMnemonicIndex : resolveMnemonicTestIndex(m, null);
+      if (m.letters[idx]) return m.letters[idx].meaning;
+    }
     return (m.answer && m.answer[0]) || '';
   }
   if (m.type === 'match') {
@@ -1156,7 +1186,7 @@ async function advanceAfterReveal(){
   });
 
   if (m.type !== 'card') {
-    LearningEngine.record(m, pickedStr, correct, timeToAnswerMs, timeOnExplanationMs); /* rating is auto-derived inside, from this question's own history and how long it took */
+    LearningEngine.record(m, pickedStr, correct, timeToAnswerMs, timeOnExplanationMs, m.type === 'mnemonic' ? resolveMnemonicTestIndex(m, s) : undefined); /* rating is auto-derived inside, from this question's own history and how long it took */
   }
   /* Card is deliberately excluded from LearningEngine.record() entirely — not "always
      pass," genuinely skipped. It was never answered, so it shouldn't get an attempt
@@ -1170,7 +1200,7 @@ async function advanceAfterReveal(){
   if (correct === true) s.stats.correct++;
   if (correct === false) s.stats.wrong++;
 
-  s.results.push({ id: m.id, correct: correct, selected: scoringSelected }); /* same reasoning — reviewing this question later should show what was actually chosen, not the correct-order display left behind by "Show correct order" */
+  s.results.push({ id: m.id, correct: correct, selected: scoringSelected, resolvedMnemonicIndex: (m.type === 'mnemonic' ? resolveMnemonicTestIndex(m, s) : undefined) }); /* same reasoning — reviewing this question later should show what was actually chosen (and for mnemonic, which letter was actually tested at the time), not something re-derived fresh */
   bumpStreak();
 
   /* Plan progress — credited once per question actually advanced past, matching

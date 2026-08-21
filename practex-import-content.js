@@ -368,6 +368,75 @@ async function attachImageToMcq(mcqId, file, field){
     showToast('Could not add that image.');
   }
 }
+
+/* Which #IMAGE_Q:/#IMAGE_A: an image pasted at this cursor position should become
+   — based on whether the most recent #EXPLANATION marker before the cursor is
+   more recent than the most recent #Q marker. Mirrors exactly how the parser
+   itself decides which block an #IMAGE_Q:/#IMAGE_A: line belongs to (by literal
+   text position), so a pasted image lands in the same place a manually-typed one
+   would. */
+function detectIngestImageContext(text, cursorPos){
+  var before = text.slice(0, cursorPos);
+  var lastQ = before.lastIndexOf('#Q');
+  var lastExplanation = before.lastIndexOf('#EXPLANATION');
+  return (lastExplanation !== -1 && lastExplanation > lastQ) ? 'A' : 'Q';
+}
+
+/* Pasting an image straight into the ingest textarea — real friction reported:
+   raw MCQ text pulled from a PDF often has an accompanying image (histology,
+   gross pathology, a diagram) that previously meant a separate round trip
+   through something like ClipMonkey and manually pasting the resulting link
+   back in. This does that whole round trip itself on paste — same ImgBB
+   pipeline a real file upload uses (storeImageFromFileAwaitingUrl), genuinely
+   producing the same kind of #IMAGE_Q:/#IMAGE_A: link a manual upload+paste
+   would have. A placeholder holds the image's place in the text while the
+   upload is in flight (uploads take a moment, typing shouldn't have to
+   wait) and gets swapped for the real reference by searching for the
+   placeholder's actual current position — not the original cursor index, which
+   could be stale if the person kept typing elsewhere while the upload ran. */
+async function pasteImageIntoIngestArea(file){
+  var textarea = document.getElementById('ingestArea');
+  if (!textarea) return;
+  if (!file || !file.type || file.type.indexOf('image/') !== 0) { showToast('That paste doesn\'t look like an image.'); return; }
+
+  var cursorPos = typeof textarea.selectionStart === 'number' ? textarea.selectionStart : textarea.value.length;
+  var context = detectIngestImageContext(textarea.value, cursorPos);
+  var placeholder = '\n[uploading pasted image\u2026]\n';
+  var before = textarea.value.slice(0, cursorPos);
+  var after = textarea.value.slice(cursorPos);
+  textarea.value = before + placeholder + after;
+  var afterPlaceholderPos = cursorPos + placeholder.length;
+  textarea.focus();
+  textarea.setSelectionRange(afterPlaceholderPos, afterPlaceholderPos);
+  showToast('Uploading pasted image\u2026');
+
+  try {
+    var result = await storeImageFromFileAwaitingUrl(file);
+    if (!result || !result.url) throw new Error('Upload did not return a URL');
+    var tag = '\n' + (context === 'A' ? '#IMAGE_A: ' : '#IMAGE_Q: ') + result.url + '\n';
+    var currentVal = textarea.value;
+    var idx = currentVal.indexOf(placeholder);
+    if (idx === -1) {
+      // Placeholder no longer found verbatim — the person edited around it while
+      // the upload was in flight. Append rather than guess at a wrong position.
+      textarea.value = currentVal + tag;
+      showToast('Image uploaded — added at the end (the paste spot had changed since).');
+    } else {
+      textarea.value = currentVal.slice(0, idx) + tag + currentVal.slice(idx + placeholder.length);
+      var newCursor = idx + tag.length;
+      textarea.focus();
+      textarea.setSelectionRange(newCursor, newCursor);
+      showToast('Image uploaded and inserted.');
+    }
+  } catch (err) {
+    console.error('pasteImageIntoIngestArea:', err);
+    var currentVal2 = textarea.value;
+    var idx2 = currentVal2.indexOf(placeholder);
+    if (idx2 !== -1) textarea.value = currentVal2.slice(0, idx2) + currentVal2.slice(idx2 + placeholder.length);
+    showToast('Couldn\'t upload that pasted image — try again, or upload separately and paste the link as #IMAGE_Q:/#IMAGE_A:.');
+  }
+}
+
 /* Book shelf cover images — a one-off file pick doesn't need a persistent hidden
    input in the page markup like the Edit modal's image sections do (those get
    reopened repeatedly for the same question); a temporary input created, clicked,

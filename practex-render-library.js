@@ -14,6 +14,7 @@ function parseLibraryText(raw, sourceOverride){
   var subject = '';
   var chapterPath = [];
   var i = 0;
+  var letterBalanceCounter = 0; /* persists across the WHOLE file, not per-question — this is what makes the round-robin actually balance across a full set instead of resetting each time. See the #ANSWER content-matching path below. */
 
   while (i < lines.length) {
     var line = lines[i];
@@ -164,16 +165,29 @@ function parseLibraryText(raw, sourceOverride){
         if (i < lines.length && lines[i].trim().indexOf('#TESTLETTER:') === 0) {
           testLetterRaw = readColonLine('#TESTLETTER:');
         }
-        var testIndex = 0;
+        /* Real friction reported from actually using this: #TESTLETTER used to be a
+           single letter, so testing every letter of a long mnemonic (e.g. 9-letter
+           SOFT PAINS) meant duplicating the ENTIRE #LETTERS block once per letter —
+           ~8x the file for one mnemonic, changing only which letter was tested.
+           #TESTLETTER now takes a comma-separated list, or can be omitted entirely
+           to mean "any letter is a fair candidate" — either way, ONE block. Which
+           specific letter actually gets tested is no longer decided here at parse
+           time at all; it's picked fresh per review session (see
+           resolveMnemonicTestIndex() in practex-learning-practice.js), which is what
+           makes this genuinely rotate across repeated study rather than only ever
+           testing whatever got picked once at import. */
+        var testIndices = [];
         if (testLetterRaw) {
-          var foundIdx = -1;
-          for (var li = 0; li < letters.length; li++) { if (letters[li].letter.toLowerCase() === testLetterRaw.toLowerCase()) { foundIdx = li; break; } }
-          if (foundIdx === -1) errors.push({ line: typeStartLine, message: 'mnemonic block near line ' + typeStartLine + ': #TESTLETTER: "' + testLetterRaw + '" does not match any #LETTERS entry' });
-          testIndex = foundIdx === -1 ? 0 : foundIdx;
-        } else {
-          testIndex = letters.length ? Math.floor(Math.random() * letters.length) : 0;
+          var rawParts = testLetterRaw.split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+          rawParts.forEach(function(part){
+            var foundIdx = -1;
+            for (var li = 0; li < letters.length; li++) { if (letters[li].letter.toLowerCase() === part.toLowerCase()) { foundIdx = li; break; } }
+            if (foundIdx === -1) errors.push({ line: typeStartLine, message: 'mnemonic block near line ' + typeStartLine + ': #TESTLETTER: "' + part + '" does not match any #LETTERS entry' });
+            else testIndices.push(foundIdx);
+          });
         }
-        newQ = { type: 'mnemonic', stem: qStem, letters: letters, testIndex: testIndex, images: qImages };
+        if (!testIndices.length) testIndices = letters.map(function(_, li){ return li; }); /* omitted entirely (or every listed letter failed to match) — every letter is a fair candidate */
+        newQ = { type: 'mnemonic', stem: qStem, letters: letters, testIndices: testIndices, images: qImages };
       } else if (newType === 'card') {
         /* Pure-reading flashcard — front is qStem (from #Q), back is a multiline
            block under #BACK. No #OPTIONS/#ANSWER/#EXPLANATION at all — there's
@@ -265,6 +279,7 @@ function parseLibraryText(raw, sourceOverride){
       }
 
       var isShortAnswer = options.length === 0;
+      var pendingLetterRemap = null; /* set only when #ANSWER used the content-matching path above and reletttered options — applied to the explanation text once it's assembled below */
       var answer = [];
       if (i < lines.length && lines[i].trim().indexOf('#ANSWER') === 0) {
         var aline = lines[i].trim();
@@ -273,6 +288,59 @@ function parseLibraryText(raw, sourceOverride){
           answer = [aval];
         } else if (/^unknown$/i.test(aval)) {
           answer = ['UNKNOWN'];
+        } else if (!/^[A-H](\s*,\s*[A-H])*$/i.test(aval)) {
+          /* Real friction reported from actually using this: writers naturally draft
+             the correct option first and distractors after, so #ANSWER: A ends up
+             wildly overrepresented across a set (42/48 in one real case) — a failure
+             that isn't visible until a validation script catches it after the fact.
+             If #ANSWER isn't a bare letter (or letter list), it's treated as the
+             CONTENT of the correct option instead — the writer never has to think
+             about which position is correct at all. The parser finds the matching
+             option and reassigns ALL FOUR options' final letters via a deterministic
+             round-robin cycle across the whole file, exactly the same technique
+             already used in the Python generation scripts — so balance is structural
+             (built into parsing), not something applied after the fact. This never
+             touches how the app stores or renders options after parsing — an
+             already-relettered #Q with #ANSWER: A works exactly as it always has. */
+          var matchIdx = -1;
+          var avalNorm = aval.trim().toLowerCase();
+          for (var oi = 0; oi < options.length; oi++) {
+            if (options[oi].text.trim().toLowerCase() === avalNorm) { matchIdx = oi; break; }
+          }
+          if (matchIdx === -1) {
+            // no exact match — fall back to "one option contains the other" in case of minor punctuation/whitespace differences
+            for (var oi2 = 0; oi2 < options.length; oi2++) {
+              var ot2 = options[oi2].text.trim().toLowerCase();
+              if (ot2 && (ot2.indexOf(avalNorm) !== -1 || avalNorm.indexOf(ot2) !== -1)) { matchIdx = oi2; break; }
+            }
+          }
+          if (matchIdx === -1) {
+            errors.push({ line: startLine, message: '#ANSWER text near line ' + startLine + ' doesn\'t match the text of any of this question\'s options — check for a typo, or use a bare letter (e.g. #ANSWER: B) instead.' });
+            answer = ['UNKNOWN'];
+          } else {
+            var LETTER_CYCLE = ['A','B','C','D','E','F','G','H'];
+            var targetLetter = LETTER_CYCLE[letterBalanceCounter % Math.min(options.length, LETTER_CYCLE.length)];
+            letterBalanceCounter++;
+            var correctOpt = options[matchIdx];
+            var distractorOpts = options.filter(function(_, oidx){ return oidx !== matchIdx; });
+            var reletteredOptions = [];
+            var letterRemap = {}; /* old (as-written) letter -> new (rebalanced) letter — the explanation text below was authored against the OLD letters, so it needs the same remap applied or its "- A) ✓ ..." lines would point at the wrong option after relettering */
+            var distractorCursor = 0;
+            for (var li3 = 0; li3 < options.length; li3++) {
+              var thisLetter = LETTER_CYCLE[li3];
+              if (thisLetter === targetLetter) {
+                reletteredOptions.push({ letter: thisLetter, text: correctOpt.text });
+                letterRemap[correctOpt.letter] = thisLetter;
+              } else {
+                reletteredOptions.push({ letter: thisLetter, text: distractorOpts[distractorCursor].text });
+                letterRemap[distractorOpts[distractorCursor].letter] = thisLetter;
+                distractorCursor++;
+              }
+            }
+            options = reletteredOptions;
+            answer = [targetLetter];
+            pendingLetterRemap = letterRemap;
+          }
         } else {
           answer = aval.split(',').map(function(s){return s.trim().toUpperCase();}).filter(Boolean);
         }
@@ -298,7 +366,43 @@ function parseLibraryText(raw, sourceOverride){
           i++;
         }
         explanation = ebuf.join('\n').trim();
+        if (pendingLetterRemap) {
+          /* Remap each "- <letter>)" line to its new, rebalanced letter — the
+             explanation was authored against the ORIGINAL as-written letters,
+             which no longer match the relettered options above without this. Uses
+             a placeholder swap (not a direct replace) so a remap like A<->B can't
+             double-replace an already-rewritten line — e.g. rewriting A->B then
+             later B->A would otherwise turn every A and B line into B. */
+          var tempMarkers = {};
+          Object.keys(pendingLetterRemap).forEach(function(oldL, idx){
+            tempMarkers[oldL] = '\u0000REMAP' + idx + '\u0000';
+          });
+          Object.keys(pendingLetterRemap).forEach(function(oldL){
+            var re = new RegExp('(^|\\n)(\\s*[-*]?\\s*)' + oldL + '(\\)|\\.)', 'g');
+            explanation = explanation.replace(re, function(full, pre, dash, punct){ return pre + dash + tempMarkers[oldL] + punct; });
+          });
+          Object.keys(pendingLetterRemap).forEach(function(oldL){
+            explanation = explanation.split(tempMarkers[oldL]).join(pendingLetterRemap[oldL]);
+          });
+        }
       }
+
+      /* #TIER: is optional and can appear on either side of #TAGS. Tier previously
+         had no field of its own — it lived buried inside the free-text #TAGS string
+         (e.g. "Tier1-Recall" as just another comma-separated tag), which means
+         anything wanting to filter or schedule by difficulty tier programmatically
+         would have to string-parse tags rather than read a real field. This doesn't
+         remove the old convention (tags with "TierN-..." in them still parse fine
+         as ordinary tags) — it just gives tier a proper home going forward. */
+      var tier = null;
+      var tryParseTier = function(){
+        if (i < lines.length && lines[i].trim().indexOf('#TIER:') === 0) {
+          var tierLine = lines[i].trim();
+          tier = tierLine.slice(tierLine.indexOf(':') + 1).trim();
+          i++;
+        }
+      };
+      tryParseTier();
 
       var tags = [];
       if (i < lines.length && lines[i].trim().indexOf('#TAGS') === 0) {
@@ -306,6 +410,7 @@ function parseLibraryText(raw, sourceOverride){
         tags = tl.slice(tl.indexOf(':') + 1).split(',').map(function(s){return s.trim();}).filter(Boolean);
         i++;
       }
+      tryParseTier();
 
       if (i < lines.length && lines[i].trim().indexOf('#END') === 0) { i++; }
 
@@ -324,6 +429,7 @@ function parseLibraryText(raw, sourceOverride){
           answer: answer,
           explanation: explanation,
           tags: tags,
+          tier: tier, /* dedicated field, separate from tags — see #TIER: parsing above */
           flagged: false,
           images: qImageUrls,
           answerImages: aImageUrls,
@@ -1498,6 +1604,7 @@ var MASTER_PROMPT = "PRACTEX MCQ STANDARDIZATION PROMPT\n\n" +
 "#EXPLANATION\n" +
 "<explanation text if the book provides one, else omit this whole block>\n" +
 "#TAGS: <comma-separated - exam name/year if shown e.g. AIIMS 2015, plus any topic tags you can infer>\n" +
+"#TIER: <optional - only include if you can genuinely tell from context whether this is a direct-recall fact vs. an applied/scenario question; omit entirely rather than guess>\n" +
 "#END\n\n" +
 "Always re-letter options A, B, C, D, E in that order regardless of how the original numbered them (i, ii, iii or 1, 2, 3 all become A, B, C...).\n\n" +
 "=== SPECIAL QUESTION TYPES ===\n\n" +
@@ -1522,6 +1629,7 @@ var MASTER_PROMPT = "PRACTEX MCQ STANDARDIZATION PROMPT\n\n" +
 "9. Negative/EXCEPT questions (\"which of the following is NOT true\", \"all of the following are correct EXCEPT\", \"which is a contraindication\" when everything else in the list is an indication, etc.) - keep the negative framing exactly as worded in the #Q stem, never rephrase it into a positive question. #ANSWER is still whichever single letter correctly answers the question AS ASKED - i.e. the one false/exceptional statement, not the ones that happen to be individually true. Getting this backwards is the single most common conversion error on this question type, so double check the answer key's letter actually matches the exception, not the rule.\n\n" +
 "10. Questions referencing an image/photo/diagram that OCR cannot capture - insert a line inside the #Q body: #IMAGE: [brief description inferred from the surrounding text/caption]. Never invent findings that aren't stated nearby - if you cannot tell what the image shows, write #IMAGE: [image - description unavailable].\n\n" +
 "10b. If the source material actually gives you a REAL, working image URL (e.g. converting from a webpage or a digital document where images are already hosted somewhere, not a scanned/photographed page) - use #IMAGE_Q: <url> instead, on its own line inside the #Q body, for an image that belongs with the question itself. For an image that belongs with the answer/explanation, use #IMAGE_A: <url> on its own line inside the #EXPLANATION body specifically (it will not be recognized anywhere else). Only ever use these two for a URL you can actually see verbatim in the source - NEVER invent, guess, or construct a plausible-looking URL. If you are not looking at a real link, use #IMAGE: [description] from rule 10 instead. A question can have #IMAGE_Q:/#IMAGE_A: and the plain #IMAGE: placeholder together if some images have real links and others don't.\n\n" +
+"Note: there is no separate 'image' question type. An image-heavy question (histology, gross pathology, a labeled diagram) is still a normal standard MCQ (recall/vignette/compare/except) - it just carries an image via #IMAGE_Q:/#IMAGE_A: or #IMAGE: like any other question can. Don't look for a #TYPE: image option; it doesn't exist.\n\n" +
 "11. Questions with no visible answer key anywhere in the source - still create the full block, options included, and set #ANSWER: UNKNOWN.\n\n" +
 "12. Match-the-following as its OWN question type (not the #OPTIONS-based combination style in rule 4 - use this instead when the source is asking the reader to pair items directly, not pick a lettered combination): \n" +
 "#TYPE: match\n" +
@@ -1560,10 +1668,10 @@ var MASTER_PROMPT = "PRACTEX MCQ STANDARDIZATION PROMPT\n\n" +
 "<Letter> = <meaning>\n" +
 "<Letter> = <meaning>\n" +
 "(at least 2 letters, one line per letter of the mnemonic, in order)\n" +
-"#TESTLETTER: <one specific letter to quiz - optional, Practex picks one at random if omitted, but prefer being explicit>\n" +
+"#TESTLETTER: <a specific letter, a comma-separated list, or omit entirely - see the note below>\n" +
 "#TAGS: <comma-separated>\n" +
 "#END\n" +
-"If converting a whole chapter with several mnemonics, and time/space allows, create multiple #TYPE: mnemonic blocks for the SAME mnemonic with different #TESTLETTER: values (one block per letter worth testing) rather than just one block per mnemonic - this is what lets the letter being quizzed rotate across review sessions instead of always testing the same one.\n\n" +
+"#TESTLETTER: can be a comma-separated list of letters worth testing (e.g. #TESTLETTER: A,I,N), or omitted entirely to mean every letter is fair game - either way, write ONE #TYPE: mnemonic block per mnemonic, never one per letter. Which specific letter actually gets tested is picked fresh each review session by the app itself, not decided here - that is what makes it genuinely rotate across repeated study.\n\n" +
 "Types 12-15 do NOT use #OPTIONS, #ANSWER, or #EXPLANATION at all - grading is built into the shape of the data itself (pairs must all link correctly, steps must be in the stated order, the slider must land on the correct side of the threshold, the self-graded mnemonic answer is checked against #LETTERS). They still support #IMAGE_Q: exactly like rule 10b, on its own line right after #Q, but never #IMAGE_A: (there's no #EXPLANATION block for these types to put an answer-side image in).\n\n" +
 "16. Content with NO natural distractor at all - a pure definition, a single fact, a step in a flowchart with nothing to confuse it with - is usually better as a Kardex flashcard than a Practex question. But when the source material itself frames something as a standalone fact worth reading rather than quizzing (a named syndrome's full definition, a classic clinical picture worth just seeing once), use a read-only card instead of forcing a fake distractor into existence:\n" +
 "#TYPE: card\n" +

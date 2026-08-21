@@ -537,6 +537,28 @@ async function storeImageFromFile(file){
   uploadImageToCloud(hash, mimeType, blob); // background — don't block the UI on network
   return hash;
 }
+/* Same underlying pipeline as storeImageFromFile above (compress, hash, cache
+   locally) — the difference is this AWAITS the cloud upload instead of firing it
+   in the background, because the caller needs a real, working ImgBB URL back
+   immediately (for pasting inline as #IMAGE_Q:/#IMAGE_A: text), not just a local
+   hash. Used by the paste-image-into-textarea feature — see bindEvents() in
+   practex-events-init.js. Returns null for the url if the upload genuinely fails
+   (e.g. offline) — the caller is expected to handle that by leaving the
+   placeholder text in place rather than inserting a broken reference. */
+async function storeImageFromFileAwaitingUrl(file){
+  var compressed = await compressImageForUpload(file);
+  var blob = compressed.blob, mimeType = compressed.mimeType;
+  var dataUrl = await readFileAsDataUrl(blob);
+  var buffer = await blob.arrayBuffer();
+  var hash = await computeSha256(buffer);
+  var db = await openImageDb();
+  var tx = db.transaction(IMAGE_STORE_NAME, 'readwrite');
+  var store = tx.objectStore(IMAGE_STORE_NAME);
+  var existing = await requestToPromise(store.get(hash));
+  if (!existing) await requestToPromise(store.put({ hash: hash, mimeType: mimeType, dataUrl: dataUrl }));
+  await uploadImageToCloud(hash, mimeType, blob); // awaited here, unlike storeImageFromFile — this caller specifically needs the URL back
+  return { hash: hash, url: state.imageUrlMap[hash] || null };
+}
 async function getImageRecord(hash){
   if (!hash) return null;
   var db = await openImageDb();
