@@ -1,0 +1,85 @@
+ROLE: You are processing an uploaded pathology/micro/pharm chapter PDF (recall-sheet style: headers, tables, flowcharts, mnemonics, eponyms, images) into TWO separate outputs — a Kardex flashcard deck (full coverage) and a Practex MCQ set (discriminative subset only). Do not force full coverage into MCQ form.
+
+═══════════════════════════════════════
+STEP 1 — CONTENT INVENTORY
+═══════════════════════════════════════
+Go through the PDF section by section, following its own subheadings. List every discrete testable unit as a short bullet: a fact, table row, mnemonic item, numeric cutoff, gene/translocation pair, flowchart node, or image finding.
+This inventory is the coverage checklist. Every bullet must end up routed to Kardex, MCQ, or both — nothing gets silently dropped.
+
+═══════════════════════════════════════
+STEP 2 — ROUTE EACH INVENTORY ITEM
+═══════════════════════════════════════
+For each item, decide:
+
+→ KARDEX ONLY if:
+  - It's a node in a multi-step pathogenesis/pathway flowchart with no natural distractor
+  - It's a pure classification/list with no confusable neighbor in the chapter
+  - It's a mnemonic scaffold best held together as one card (not fragmented into isolated MCQs)
+  - It's a >4-column comparison table where forcing MCQs would mean padding with weak options
+  - It's background/definitional content with no clinical stakes
+
+→ MCQ CANDIDATE if:
+  - It's a 2-entity comparison with a genuinely distinguishing feature (A vs B tables)
+  - It has a numeric cutoff with clinical/diagnostic consequence
+  - It clusters into a vignette (triad, classic presentation, crisis type)
+  - It has a plausible near-miss elsewhere in the SAME chapter (gene, eponym, translocation, stain, appearance term)
+  - It's a match-type set (gene↔disease, translocation↔tumor) with ≥4 pairs to permute
+
+→ BOTH if the fact is high-yield enough to warrant a Kardex card AND has a genuine distractor for an MCQ (this will be common for marked/highlighted terms in the source).
+
+Output this routing as a table: Item | Destination (Kardex/MCQ/Both) | Reason (one line).
+
+═══════════════════════════════════════
+STEP 3A — KARDEX DECK GENERATION (full coverage layer)
+═══════════════════════════════════════
+Apply all standing Kardex conventions:
+- 5–8 decks per chapter, deck names ≤40 characters
+- Bullet any answer with 2+ distinct facts — no dense prose
+- `==highlight==` sparingly — only the load-bearing word/number/trap term, never a whole sentence; reserved for exceptions, traps, high-yield deviations from expected pattern (matches red/orange source highlights, not general yellow)
+- Preserve source tables as markdown tables within answer fields
+- Sequential flowcharts become step-by-step cloze or ordered-recall cards, not prose paragraphs
+- Mnemonics get their own card with the full expansion, plus (if warranted) separate cards for any individually high-yield component
+- Images placed by label-text match only — never speculative; flag unlabeled/ambiguous images for clarification
+- `===` separators between decks
+
+═══════════════════════════════════════
+STEP 3B — MCQ GENERATION (discriminative layer)
+═══════════════════════════════════════
+Only for items routed to MCQ/Both in Step 2. Format:
+
+#Q <vignette or direct-recall stem>
+#OPTIONS
+A. <option>
+B. <option>
+C. <option>
+D. <option>
+#ANSWER <letter>
+#EXPLANATION
+A. <why right/wrong, 1 line>
+B. <why right/wrong, 1 line>
+C. <why right/wrong, 1 line>
+D. <why right/wrong, 1 line>
+#TAGS <topic keywords>
+#CHAPTER <Subject > Chapter Name > Subtopic — must exactly match existing Practex app tree>
+#END
+
+Rules:
+1. Always exactly 4 options. No "all/none of the above" unless source itself uses that pattern.
+2. Distractors must be genuine near-misses from the SAME chapter — never random unrelated facts.
+3. Option lengths comparable — correct answer not identifiable by length.
+4. Balanced A–D answer distribution across the full set (deterministic seeded shuffle).
+5. No duplicate stems; no re-testing the same fact via near-identical phrasing.
+6. Images via #IMAGE_Q:/#IMAGE_A: inline tags, label-matched only — flag anything uncertain.
+7. One MCQ per genuinely distinguishing feature in a comparison table — never one mega-question trying to cover a whole table.
+8. Match-type content follows source's own convention (numbered pairs + permuted lettered answer sets), not written-out prose matching.
+9. Mnemonic components get tested individually across separate questions over time — rotate which letter/item is being tested, don't always hit the same one.
+10. Flag (don't silently fix) any source error — reversed labels, mismatched captions, inconsistent answer keys.
+
+═══════════════════════════════════════
+STEP 4 — VALIDATION & COVERAGE REPORT
+═══════════════════════════════════════
+- Confirm every Step 1 inventory item appears in Kardex, MCQ, or both — list any exceptions with reason.
+- Programmatic checks: Kardex deck count/names within limits; MCQ option count=4 everywhere, no duplicate stems, no unused/unmatched images, answer-letter distribution within tolerance, #CHAPTER paths match app tree exactly.
+- Report format: "N inventory items → M Kardex cards, K MCQs (J items covered by both), 0 items dropped."
+
+OUTPUT: Two complete files (not diffs) — one Kardex deck, one MCQ file — following existing formatting conventions, delivered together per chapter, with === separators for multi-chapter batches.
