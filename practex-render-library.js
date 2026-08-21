@@ -198,7 +198,15 @@ function parseLibraryText(raw, sourceOverride){
           notes: [],
           asleep: false,
           addedAt: Date.now(),
-          learning: { due: Date.now(), interval: 0, history: [], lastReviewed: null, fsrs: null }
+          learning: { due: Date.now(), interval: 0, history: [], lastReviewed: null, fsrs: null },
+          /* Defensive safety net, not the primary fix — expectedAnswerStrFor() and
+             evaluateCorrect() already handle these 4 types correctly without needing
+             m.answer/m.options at all. This exists in case some OTHER, still-undiscovered
+             code path makes the same unconditional-field assumption LearningEngine.record()
+             did (see the real bug that shipped from exactly this gap) — better a harmless
+             placeholder than another silent crash. */
+          answer: ['UNKNOWN'],
+          options: [],
         }));
       }
       continue;

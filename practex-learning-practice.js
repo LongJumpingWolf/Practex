@@ -103,7 +103,7 @@ const LearningEngine={
       correct,
       picked,
       rating:null,
-      expected:mcq.answer[0],
+      expected: expectedAnswerStrFor(mcq), /* was mcq.answer[0] unconditionally — threw for any type without m.answer set, killing advanceAfterReveal() mid-execution. See the big comment above expectedAnswerStrFor(). */
       ts:Date.now(),
       timeToAnswerMs: (typeof timeToAnswerMs === 'number') ? timeToAnswerMs : null,
       timeOnExplanationMs: (typeof timeOnExplanationMs === 'number') ? timeOnExplanationMs : null,
@@ -918,6 +918,35 @@ function pickedStrFor(m, selected){
   if (m.type === 'sequence') return Array.isArray(selected) ? selected.join(',') : '';
   if (m.type === 'cutoff') return selected !== null && selected !== undefined ? String(selected) : '';
   return selected ? selected.join(',') : '';
+}
+
+/* THE bug: LearningEngine.record() read mcq.answer[0] unconditionally, on every single
+   answer commit, for every question type — including the 4 new ones, which never had
+   m.answer set at all when created via the real Add Source parser (parseLibraryText()
+   in practex-render-library.js). mcq.answer[0] on undefined threw, killing
+   advanceAfterReveal() mid-execution — before it ever reached render() — which is
+   exactly why clicking "Next question" or a self-grade button looked like it did
+   nothing at all: the click handler started running and silently died partway through.
+   Mirrors pickedStrFor() above — same per-type shape, but describing the CORRECT
+   answer for the review-history "expected:" field, not what the person picked. */
+function expectedAnswerStrFor(m){
+  if (m.isShortAnswer || m.type === 'mnemonic') {
+    if (m.type === 'mnemonic' && m.letters && m.letters[m.testIndex]) return m.letters[m.testIndex].meaning;
+    return (m.answer && m.answer[0]) || '';
+  }
+  if (m.type === 'match') {
+    if (!Array.isArray(m.pairs)) return '';
+    return m.pairs.map(function(p, i){ return i + '→' + i; }).join(','); // correct match is always "each left with its own index" — see evaluateCorrect()
+  }
+  if (m.type === 'sequence') {
+    return Array.isArray(m.steps_correct_order) ? m.steps_correct_order.map(function(_, i){ return i; }).join(',') : '';
+  }
+  if (m.type === 'cutoff') {
+    return (typeof m.testValue === 'number' && typeof m.threshold === 'number')
+      ? (m.testValue < m.threshold ? 'below ' + m.threshold : 'above ' + m.threshold)
+      : '';
+  }
+  return (m.answer && m.answer[0]) || 'UNKNOWN'; // standard MCQ types — unchanged behavior, m.answer is always present here
 }
 
 async function advanceAfterReveal(){
