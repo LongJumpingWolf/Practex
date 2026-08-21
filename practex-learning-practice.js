@@ -947,7 +947,7 @@ function renderCutoffBody(m, s, isReviewing, result, viewRevealed){
       '<button class="btn btn-primary" data-action="reveal-mcq">Check answer</button></div>';
   } else {
     var userSide = Number(viewSel) < m.threshold ? m.below : m.above;
-    html += '<div class="view-sub" style="margin:10px 0;">Your side of the threshold: <b>' + escapeHtml(userSide) + '</b></div>';
+    html += '<div class="reveal-explain"><p>Your side of the threshold: <b>' + escapeHtml(userSide) + '</b></p></div>';
     html += renderRevealFooter(m, s, isReviewing);
   }
   html += '</div>';
