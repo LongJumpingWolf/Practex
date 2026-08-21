@@ -379,6 +379,56 @@ function renderReveal(mcq){
   return banner + renderExplanation(mcq);
 }
 
+/* Shared by both the manual "Resume test" click (practex-events-init.js) and the
+   automatic boot sequence on practice.html itself (goToPracticeIfSessionPending()
+   below) — was previously duplicated logic inline in the resume-paused action handler
+   only; extracted here in Chapter 4 so the two paths can't drift apart. Defensive
+   normalization — a paused/handed-off session saved by an older version of the app
+   (or corrupted some other way) could be missing fields the current code expects.
+   Without this, a missing viewIndex specifically made the practice view look up
+   s.ids[undefined], find no question, and silently jump straight to a 0%/empty
+   summary screen instead of resuming anything. */
+function normalizePausedSessionForResume(pausedSession){
+  var restored = JSON.parse(JSON.stringify(pausedSession));
+  if (!Array.isArray(restored.ids)) restored.ids = [];
+  if (typeof restored.index !== 'number' || restored.index < 0) restored.index = 0;
+  if (restored.index > restored.ids.length) restored.index = restored.ids.length;
+  if (typeof restored.viewIndex !== 'number' || restored.viewIndex < 0 || restored.viewIndex > restored.index) restored.viewIndex = restored.index;
+  if (!Array.isArray(restored.results)) restored.results = [];
+  if (!Array.isArray(restored.undoStack)) restored.undoStack = [];
+  if (!restored.stats) restored.stats = { correct:0, wrong:0, misconception:0, learning:0, mastered:0, noconcept:0 };
+  if (restored.shortAnswerCorrect === undefined) restored.shortAnswerCorrect = null;
+  return restored;
+}
+
+/* Chapter 4 (MPA) boot entry point for practice.html specifically — called once after
+   loadLibrary() resolves (which already reconciles state.pausedSession across cloud/
+   mirror/sync-key/live-crash-recovery, per Chapter 3). Whether the person got here by
+   starting a brand-new session (startPractice() above) or clicking "Resume test" on
+   library.html, both hand off through the exact same state.pausedSession field — so
+   this one function is the single place that turns "there's a pausedSession waiting"
+   into an actual live practice screen. If there's nothing to resume (direct URL visit,
+   stale bookmark, browser back button after a session already ended), there's nothing
+   for this page to show, so it sends the person back to the library rather than
+   rendering an empty practice screen. */
+function goToPracticeIfSessionPending(){
+  if (!state.pausedSession) { window.location.href = 'library.html'; return false; }
+  var restored = normalizePausedSessionForResume(state.pausedSession);
+  if (!restored.ids.length) {
+    showToast('That test looks corrupted and can\'t be resumed — sorry about that.');
+    state.pausedSession = null;
+    savePausedSession();
+    clearLiveSessionSync();
+    window.location.href = 'library.html';
+    return false;
+  }
+  state.session = restored;
+  state.pausedSession = null;
+  state.view = 'practice';
+  savePausedSession(); /* clears the paused_session column now that it's live again, so a stale copy can't linger and get re-offered */
+  return true;
+}
+
 function startPractice(ids){
   var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
   if(state.learningMode && state.learningMode.enabled){
@@ -397,7 +447,7 @@ function startPractice(ids){
     var j = Math.floor(Math.random() * (i + 1));
     var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
   }
-  state.session = {
+  var freshSession = {
     ids: pool.map(function(m){ return m.id; }),
     index: 0,
     viewIndex: 0, /* which question is currently displayed — usually equals index (the frontier), but can sit behind it while reviewing an already-answered question */
@@ -411,8 +461,21 @@ function startPractice(ids){
     revealedAt: null,            /* silent timing — when it was revealed, so time-on-explanation can be measured */
     lastTimeToAnswerMs: null
   };
-  state.view = 'practice';
-  render();
+  /* Chapter 4 (MPA): practice now lives on its own page, so a freshly-started session
+     has to survive the navigation the same way a resumed one does — there is no
+     shared in-memory state across a real page load. Handing it off through
+     state.pausedSession reuses the exact reconciliation and normalization machinery
+     Chapter 3 already built and tested (multi-source freshness comparison, defensive
+     field normalization on resume) rather than inventing a second, parallel path. It's
+     tagged neither "paused" nor "recoveredFromCrash" — practice.html's boot sequence
+     (see goToPracticeIfSessionPending() in practex-events-init.js) treats any
+     pausedSession it finds on arrival as "the session to show", regardless of how it
+     got there. */
+  state.pausedSession = freshSession;
+  state.pausedSession.pausedAt = Date.now();
+  persistPausedSessionSync();
+  savePausedSession(); /* best-effort, not awaited — practice.html's own boot re-reconciles against Supabase/mirror/sync-key anyway, same as any resume */
+  window.location.href = 'practice.html';
 }
 
 /* Birds-eye view of the whole session — jump to any already-reached question, see at

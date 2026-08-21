@@ -797,27 +797,20 @@ function guardNavigation(action, el){
   requestLeavePractice();
   return true;
 }
-/* Runs after the user resolves the leave-practice modal (pause or leave without pausing),
-   sending them to wherever they originally tried to navigate instead of always dumping
-   them on the Library view. */
-function applyPendingNav(){
+/* Chapter 4 (MPA): building the return URL for wherever the person was trying to go
+   before requestLeavePractice()'s modal interrupted them. Previously this just set
+   state.view in memory; now practice.html and library.html are different documents,
+   so "where they were headed" has to survive an actual navigation — encoded as a
+   query string that library.html's own boot reads once on load (see the boot script
+   in library.html) to restore the same view/path this used to set directly. */
+function pendingNavTargetUrl(){
   var nav = state.pendingNav;
   state.pendingNav = null;
-  state.sidebarOpen = false;
-  if (!nav) { state.view = 'browse'; return; }
-  if (nav.action === 'set-view') {
-    state.view = nav.view || 'browse';
-  } else if (nav.action === 'open-dashboard') {
-    state.view = 'dashboard';
-  } else if (nav.action === 'select-node' && nav.path) {
-    state.selectedPath = nav.path.split('␟');
-    state.view = 'browse';
-    state.expanded[nav.path] = true;
-    state.forceList = false;
-    resetFolderFilters();
-  } else {
-    state.view = 'browse';
-  }
+  if (!nav) return 'library.html';
+  if (nav.action === 'set-view') return 'library.html?view=' + encodeURIComponent(nav.view || 'browse');
+  if (nav.action === 'open-dashboard') return 'library.html?view=dashboard';
+  if (nav.action === 'select-node' && nav.path) return 'library.html?view=browse&path=' + encodeURIComponent(nav.path);
+  return 'library.html';
 }
 function bookmarkButton(m){
   return '<button class="btn btn-ghost btn-sm bookmark-btn'+(m.flagged?' bookmarked':'')+'" data-action="bookmark-current" title="Bookmark question (F)" aria-label="'+(m.flagged?'Remove bookmark':'Bookmark question')+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4V3z"></path></svg><span>'+(m.flagged?'Bookmarked':'Bookmark')+'</span></button>';

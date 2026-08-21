@@ -617,16 +617,20 @@ async function onClick(e){
   }
   if (action === 'leave-practice') { requestLeavePractice(); return; }
   if (action === 'pause-and-leave') {
+    var targetUrl = pendingNavTargetUrl(); /* compute before clearing state.session below, since it reads state.pendingNav, not state.session */
     state.pausedSession=currentSessionSnapshot();
     if (state.pausedSession) state.pausedSession.pausedAt = Date.now();
-    state.session=null; applyPendingNav(); closeModal(); render();
+    persistPausedSessionSync(); /* synchronous, instant — guaranteed to survive the navigation below even if the async cloud save gets cancelled by it, same reasoning as Chapter 3's crash-recovery key */
+    state.session=null; closeModal(); render();
     clearLiveSessionSync(); /* deliberate pause takes precedence over any earlier ungraceful-exit leftover from earlier in this same session */
     showToast('Pausing…');
-    /* Awaited — this is exactly the highest-risk spot for a fire-and-forget save:
-       pausing a test is almost always immediately followed by closing the tab or
-       switching devices, precisely when a background save is most likely to get
-       cut off mid-flight. Worth the brief wait for the pause to actually be
-       guaranteed on the server before the person walks away from this screen. */
+    /* Awaited BEFORE navigating (Chapter 4) — navigating to library.html cancels any
+       in-flight fetch the same way closing the tab would, which is exactly the race
+       this await was already guarding against; the difference is this now happens on
+       every pause, not just when someone closes the tab unusually fast. The sync
+       localStorage write above already guarantees local durability regardless, so
+       navigating a little late here is about giving OTHER devices a fresher cloud
+       copy, not about losing anything locally. */
     await saveUserSettings();
     if (state.lastSaveHadPermanentConflict) {
       /* saveUserSettings doesn't currently set this, but stay consistent with the
@@ -636,39 +640,32 @@ async function onClick(e){
     } else {
       showToast('Paused — resume it from any device.');
     }
+    window.location.href = targetUrl;
     return;
   }
   if (action === 'leave-without-pausing') {
-    state.session=null; applyPendingNav(); closeModal(); render();
+    var targetUrl2 = pendingNavTargetUrl();
+    state.session=null; closeModal(); render();
     clearLiveSessionSync(); /* explicit "don't save this" — an ungraceful-exit leftover from earlier in this session shouldn't override that choice next load */
+    window.location.href = targetUrl2;
     return;
   }
   if (action === 'resume-paused') {
+    /* Chapter 4 (MPA): resuming now means navigating to practice.html, which runs this
+       exact same normalization itself on arrival (see normalizePausedSessionForResume()
+       and goToPracticeIfSessionPending() in practex-learning-practice.js) — a manual
+       click here doesn't need to duplicate that logic, just get the browser there. The
+       corrupted-session case still needs to be caught HERE though, before navigating,
+       so the person gets the toast on the page they're already looking at instead of
+       silently landing on an empty practice.html. */
     if(!state.pausedSession){ closeModal(); return; }
-    var restored = JSON.parse(JSON.stringify(state.pausedSession));
-    /* Defensive normalization — a paused session saved by an older version of the app
-       (or corrupted some other way) could be missing fields the current code expects.
-       Without this, a missing viewIndex specifically made the practice view look up
-       s.ids[undefined], find no question, and silently jump straight to a 0%/empty
-       summary screen instead of resuming anything. */
-    if (!Array.isArray(restored.ids)) restored.ids = [];
-    if (typeof restored.index !== 'number' || restored.index < 0) restored.index = 0;
-    if (restored.index > restored.ids.length) restored.index = restored.ids.length;
-    if (typeof restored.viewIndex !== 'number' || restored.viewIndex < 0 || restored.viewIndex > restored.index) restored.viewIndex = restored.index;
-    if (!Array.isArray(restored.results)) restored.results = [];
-    if (!Array.isArray(restored.undoStack)) restored.undoStack = [];
-    if (!restored.stats) restored.stats = { correct:0, wrong:0, misconception:0, learning:0, mastered:0, noconcept:0 };
-    if (restored.shortAnswerCorrect === undefined) restored.shortAnswerCorrect = null;
-    if (!restored.ids.length) {
+    var check = normalizePausedSessionForResume(state.pausedSession);
+    if (!check.ids.length) {
       showToast('That paused test looks corrupted and can\'t be resumed — sorry about that. Starting fresh is the safest option.');
       state.pausedSession = null; closeModal(); render(); savePausedSession(); clearLiveSessionSync(); return;
     }
-    state.session = restored;
-    state.pausedSession = null;
-    state.view = 'practice';
     closeModal();
-    render();
-    savePausedSession();
+    window.location.href = 'practice.html';
     return;
   }
   if (action === 'confirm-new-test') {
@@ -786,8 +783,7 @@ async function onClick(e){
 
   if (action === 'back-to-library') {
     state.session = null;
-    state.view = 'browse';
-    render();
+    window.location.href = 'library.html';
     return;
   }
 }
@@ -904,6 +900,35 @@ async function showApp(){
 
   document.getElementById('loadingScreen').style.display = 'none';
   document.getElementById('appRoot').style.display = 'grid';
+
+  /* Chapter 4 (MPA) — page-specific boot, now that loadLibrary() above has already
+     reconciled state.pausedSession from every source (cloud/mirror/sync-key/live
+     crash-recovery — see loadLibrary() in practex-data-core.js). This runs once,
+     right before the very first render() on whichever page we're actually on. */
+  var onPracticePage = /practice\.html/.test(window.location.pathname);
+  if (onPracticePage) {
+    var hasSession = goToPracticeIfSessionPending(); /* navigates away itself if there's nothing to resume — see practex-learning-practice.js */
+    if (!hasSession) return; /* navigation already in flight; rendering this page now would just flash stale content before the browser leaves it */
+  } else {
+    /* library.html (or a direct load of index.html, which redirects before this ever
+       runs) — restore whatever view/path a pendingNavTargetUrl() redirect encoded, the
+       same restoration applyPendingNav() used to do in-memory before MPA made that a
+       real navigation instead. A plain visit with no query string just uses whatever
+       state.view already defaults to. */
+    var params = new URLSearchParams(window.location.search);
+    var qView = params.get('view');
+    var qPath = params.get('path');
+    if (qPath) {
+      state.selectedPath = qPath.split('␟');
+      state.view = 'browse';
+      state.expanded[qPath] = true;
+      state.forceList = false;
+      resetFolderFilters();
+    } else if (qView) {
+      state.view = qView;
+    }
+  }
+
   render();
   loadImageUrlMap().then(hydrateImages); /* background, not awaited — the initial screen has no images to show anyway */
 }
