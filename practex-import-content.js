@@ -405,9 +405,10 @@ function setBookCover(sourceName){
   var html = '<h3>Set cover image</h3>';
   html += '<p class="view-sub" style="margin-bottom:14px;">For "' + escapeHtml(sourceName) + '"</p>';
   html += '<div class="form-field"><label>Paste an image link</label>' +
-    '<input type="text" id="bookCoverUrlInput" placeholder="https://..." value="' + escapeHtml(existing.coverImageUrl || '') + '"></div>';
+    '<input type="text" id="bookCoverUrlInput" placeholder="https://..."></div>';
+  html += '<div class="view-sub" style="margin-top:-6px;margin-bottom:10px;">Fetched once and hosted on our end from then on — not left depending on that link staying up.</div>';
   html += '<div class="action-row" style="margin-top:0;margin-bottom:14px;">' +
-    '<button class="btn btn-primary" data-action="confirm-book-cover-link" data-source="' + escapeHtml(sourceName) + '">Use this link</button></div>';
+    '<button class="btn btn-primary" data-action="confirm-book-cover-link" data-source="' + escapeHtml(sourceName) + '">Fetch &amp; use this link</button></div>';
   html += '<div class="view-sub" style="text-align:center;margin:4px 0 14px;">or</div>';
   html += '<div class="action-row" style="margin-top:0;margin-bottom:' + (hasCover ? '14px' : '0') + ';">' +
     '<button class="btn btn-ghost" data-action="set-book-cover-upload" data-source="' + escapeHtml(sourceName) + '">' + icon('upload',14) + ' Upload a file instead</button></div>';
@@ -427,16 +428,43 @@ function openBookCoverFilePicker(sourceName){
   });
   input.click();
 }
-function attachBookCoverUrl(sourceName, url){
+/* Fetches the pasted URL's actual image bytes and mirrors them through the exact
+   same ImgBB pipeline a file upload already uses (storeImageFromFile), rather than
+   just storing the raw external link — a real, fair concern was raised: an external
+   host isn't guaranteed to keep serving that image forever, and this app already
+   has its own reliable, permanent image hosting for everything else. The one real
+   constraint: fetching an arbitrary cross-origin URL from browser JS is subject to
+   CORS, a browser security boundary this code can't bypass — most image hosts
+   (including ImgBB itself) allow it for plain public images, but a host that
+   actively blocks cross-origin reads will make this fail, and there's no client-
+   side workaround for that. Failing loudly with a clear reason is the honest
+   behavior there, not silently falling back to the raw link this whole fix exists
+   to avoid. */
+async function attachBookCoverUrl(sourceName, url){
   url = (url || '').trim();
   if (!/^https?:\/\//i.test(url)) { showToast('That doesn\'t look like a real link — needs to start with http:// or https://'); return; }
-  if (!state.sources[sourceName]) state.sources[sourceName] = { color: colorForSource(sourceName) };
-  state.sources[sourceName].coverImageUrl = url;
-  delete state.sources[sourceName].coverImage; /* a source has ONE cover — switching to a link retires whichever uploaded-file cover was there before, rather than leaving an orphaned hash nothing points at */
-  closeModal();
-  render();
-  showToast('Cover updated.');
-  saveSources();
+  showToast('Fetching and hosting that image…');
+  try {
+    var res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var blob = await res.blob();
+    if (!blob.type || blob.type.indexOf('image/') !== 0) throw new Error('not an image');
+    var hash = await storeImageFromFile(blob); /* same pipeline as a file upload — compress, hash, cache locally, mirror to ImgBB */
+    if (!state.sources[sourceName]) state.sources[sourceName] = { color: colorForSource(sourceName) };
+    state.sources[sourceName].coverImage = hash; /* same field a file upload sets — from here on, a link-sourced cover and a file-sourced cover are stored identically */
+    delete state.sources[sourceName].coverImageUrl; /* retire the old raw-link storage style entirely — this path never sets it again */
+    closeModal();
+    render();
+    showToast('Cover updated — hosted on our end now, not the original link.');
+    saveSources();
+  } catch (err) {
+    console.error('attachBookCoverUrl:', err);
+    /* Most likely cause: the source site blocks cross-origin reads of its images
+       (a real, common restriction some hosts apply) — not something fixable from
+       here. Downloading the file yourself and using "Upload a file instead" sidesteps
+       this entirely, since a local file never needs a cross-origin fetch at all. */
+    showToast('Couldn\'t fetch that image to host it here — the source site may be blocking it. Try downloading it and using "Upload a file instead."');
+  }
 }
 function removeBookCover(sourceName){
   if (!state.sources[sourceName]) return;

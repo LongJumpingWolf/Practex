@@ -161,7 +161,7 @@ async function onClick(e){
   if (action === 'set-book-cover-upload') { openBookCoverFilePicker(el.getAttribute('data-source')); return; }
   if (action === 'confirm-book-cover-link') {
     var urlInput = document.getElementById('bookCoverUrlInput');
-    attachBookCoverUrl(el.getAttribute('data-source'), urlInput ? urlInput.value : '');
+    await attachBookCoverUrl(el.getAttribute('data-source'), urlInput ? urlInput.value : ''); /* now genuinely async — fetches and mirrors the image before returning, not a synchronous set-and-forget */
     return;
   }
   if (action === 'remove-book-cover') { removeBookCover(el.getAttribute('data-source')); return; }
