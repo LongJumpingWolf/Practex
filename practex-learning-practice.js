@@ -349,25 +349,32 @@ function renderExplanation(mcq){
 /* Raw skull+flames SVG markup, shared by every skull button in the app (the
    per-question practice-footer button below, and the sidebar's Skull Mode toggle
    in practex-render-library.js). One copy so the pixel art never drifts out of
-   sync between the two places it's used. */
+   sync between the two places it's used.
+
+   Shape: "Simplified" — the shading-band detail (nose-bridge shadow, brow band,
+   jaw shadow) from the original asset was stripped out; just the silhouette,
+   sockets, and one highlight accent remain. Reads cleaner at the small header-icon
+   size than the fully-detailed original did.
+   Palette: "Warm Bone" — deepened from the original's #f8efd9 (which was close
+   enough to --card/--paper to nearly vanish, the whole reason this needed a
+   drop-shadow hack) so it holds up on its own, without losing the cream/bone feel.
+   Picked from /mnt/user-data/outputs/skull-options.html. */
 function skullSvgMarkup(){
   return '<svg viewBox="0 0 120 146" aria-hidden="true" shapeRendering="crispEdges">' +
       '<g class="flames">' +
-        '<g class="flame flame-a"><rect x="16" y="54" width="8" height="32" fill="#ef3d1f"/><rect x="24" y="42" width="8" height="44" fill="#ff5a1f"/><rect x="24" y="50" width="8" height="22" fill="#ffd24a"/></g>' +
-        '<g class="flame flame-b"><rect x="32" y="34" width="8" height="38" fill="#ef3d1f"/><rect x="40" y="22" width="8" height="50" fill="#ff5a1f"/><rect x="40" y="34" width="8" height="24" fill="#ffe36c"/></g>' +
-        '<g class="flame flame-c"><rect x="56" y="22" width="8" height="42" fill="#ef3d1f"/><rect x="64" y="12" width="8" height="52" fill="#ff5a1f"/><rect x="64" y="26" width="8" height="26" fill="#ffd24a"/></g>' +
-        '<g class="flame flame-d"><rect x="80" y="34" width="8" height="40" fill="#ef3d1f"/><rect x="88" y="24" width="8" height="50" fill="#ff5a1f"/><rect x="88" y="36" width="8" height="24" fill="#ffe36c"/></g>' +
-        '<g class="flame flame-e"><rect x="96" y="54" width="8" height="32" fill="#ef3d1f"/><rect x="88" y="46" width="8" height="40" fill="#ff5a1f"/><rect x="88" y="56" width="8" height="20" fill="#ffd24a"/></g>' +
+        '<g class="flame flame-a"><rect x="16" y="54" width="8" height="32" fill="#B23A2E"/><rect x="24" y="42" width="8" height="44" fill="#ff5a1f"/><rect x="24" y="50" width="8" height="22" fill="#F0C33C"/></g>' +
+        '<g class="flame flame-b"><rect x="32" y="34" width="8" height="38" fill="#B23A2E"/><rect x="40" y="22" width="8" height="50" fill="#ff5a1f"/><rect x="40" y="34" width="8" height="24" fill="#F0C33C"/></g>' +
+        '<g class="flame flame-c"><rect x="56" y="22" width="8" height="42" fill="#B23A2E"/><rect x="64" y="12" width="8" height="52" fill="#ff5a1f"/><rect x="64" y="26" width="8" height="26" fill="#F0C33C"/></g>' +
+        '<g class="flame flame-d"><rect x="80" y="34" width="8" height="40" fill="#B23A2E"/><rect x="88" y="24" width="8" height="50" fill="#ff5a1f"/><rect x="88" y="36" width="8" height="24" fill="#F0C33C"/></g>' +
+        '<g class="flame flame-e"><rect x="96" y="54" width="8" height="32" fill="#B23A2E"/><rect x="88" y="46" width="8" height="40" fill="#ff5a1f"/><rect x="88" y="56" width="8" height="20" fill="#F0C33C"/></g>' +
       '</g>' +
       '<g class="skull">' +
-        '<rect x="40" y="28" width="40" height="8" fill="#f8efd9"/><rect x="32" y="36" width="56" height="8" fill="#f8efd9"/><rect x="24" y="44" width="72" height="40" fill="#f8efd9"/><rect x="32" y="84" width="56" height="24" fill="#f8efd9"/>' +
-        '<rect x="40" y="108" width="8" height="8" fill="#f8efd9"/><rect x="56" y="108" width="8" height="8" fill="#f8efd9"/><rect x="72" y="108" width="8" height="8" fill="#f8efd9"/>' +
-        '<rect x="44" y="32" width="8" height="4" fill="#fff8e8"/><rect x="52" y="28" width="16" height="4" fill="#fff8e8"/><rect x="68" y="32" width="8" height="4" fill="#fff8e8"/><rect x="32" y="44" width="4" height="8" fill="#fff8e8"/><rect x="84" y="44" width="4" height="8" fill="#fff8e8"/>' +
-        '<rect x="56" y="40" width="4" height="8" fill="#d5c19c"/><rect x="60" y="44" width="4" height="4" fill="#d5c19c"/><rect x="52" y="48" width="4" height="4" fill="#d5c19c"/><rect x="32" y="52" width="20" height="4" fill="#e5d3b0"/><rect x="68" y="52" width="20" height="4" fill="#e5d3b0"/>' +
-        '<rect x="28" y="68" width="4" height="8" fill="#b99d7f"/><rect x="88" y="68" width="4" height="8" fill="#b99d7f"/><rect x="32" y="80" width="8" height="4" fill="#b99d7f"/><rect x="80" y="80" width="8" height="4" fill="#b99d7f"/><rect x="36" y="84" width="8" height="4" fill="#fff8e8"/><rect x="76" y="84" width="8" height="4" fill="#fff8e8"/>' +
-        '<rect x="36" y="56" width="16" height="24" fill="#251325"/><rect x="68" y="56" width="16" height="24" fill="#251325"/><rect x="44" y="56" width="8" height="4" fill="#f8efd9"/><rect x="48" y="60" width="4" height="4" fill="#f8efd9"/><rect x="68" y="56" width="8" height="4" fill="#f8efd9"/><rect x="68" y="60" width="4" height="4" fill="#f8efd9"/>' +
+        '<rect x="40" y="28" width="40" height="8" fill="#D9C9A8"/><rect x="32" y="36" width="56" height="8" fill="#D9C9A8"/><rect x="24" y="44" width="72" height="40" fill="#D9C9A8"/><rect x="32" y="84" width="56" height="24" fill="#D9C9A8"/>' +
+        '<rect x="40" y="108" width="8" height="8" fill="#D9C9A8"/><rect x="56" y="108" width="8" height="8" fill="#D9C9A8"/><rect x="72" y="108" width="8" height="8" fill="#D9C9A8"/>' +
+        '<rect x="52" y="28" width="16" height="4" fill="#F1E8D3"/><rect x="36" y="84" width="8" height="4" fill="#F1E8D3"/><rect x="76" y="84" width="8" height="4" fill="#F1E8D3"/>' +
+        '<rect x="36" y="56" width="16" height="24" fill="#3A2E1F"/><rect x="68" y="56" width="16" height="24" fill="#3A2E1F"/>' +
         '<rect class="eye-core" x="40" y="64" width="8" height="8" fill="#ff5a1f"/><rect class="eye-core" x="72" y="64" width="8" height="8" fill="#ff5a1f"/>' +
-        '<rect x="56" y="80" width="8" height="8" fill="#251325"/><rect x="52" y="84" width="4" height="4" fill="#251325"/><rect x="64" y="84" width="4" height="4" fill="#251325"/><rect x="44" y="92" width="4" height="8" fill="#d5c19c"/><rect x="72" y="92" width="4" height="8" fill="#d5c19c"/><rect x="52" y="92" width="4" height="8" fill="#fff8e8"/><rect x="60" y="92" width="4" height="8" fill="#fff8e8"/><rect x="68" y="92" width="4" height="8" fill="#fff8e8"/><rect x="48" y="96" width="8" height="12" fill="#251325"/><rect x="64" y="96" width="8" height="12" fill="#251325"/>' +
+        '<rect x="56" y="80" width="8" height="8" fill="#3A2E1F"/><rect x="48" y="96" width="8" height="12" fill="#3A2E1F"/><rect x="64" y="96" width="8" height="12" fill="#3A2E1F"/>' +
       '</g>' +
     '</svg>';
 }
