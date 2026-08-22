@@ -174,6 +174,28 @@ input,textarea,select{font-family:inherit;color:inherit;}
 .fsrs-switch.on .fsrs-switch-track{background:#F0C33C;}
 .fsrs-switch-thumb{position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#EAF0F5;box-shadow:0 1px 2px rgba(0,0,0,0.3);transition:left .15s;}
 .fsrs-switch.on .fsrs-switch-thumb{left:17px;background:#2F2611;}
+.skull-switch{position:relative;display:inline-block;width:34px;height:19px;flex-shrink:0;}
+.skull-switch-track{position:absolute;inset:0;background:rgba(255,255,255,0.22);border-radius:99px;transition:background .15s;}
+.skull-switch.on .skull-switch-track{background:#F0C33C;}
+.skull-switch-thumb{position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#EAF0F5;box-shadow:0 1px 2px rgba(0,0,0,0.3);transition:left .15s;}
+.skull-switch.on .skull-switch-thumb{left:17px;background:#2F2611;}
+.skull-fire-btn{width:40px;height:auto;aspect-ratio:120/146;border:0;padding:0;cursor:pointer;background:transparent;image-rendering:pixelated;transition:transform .16s cubic-bezier(.23,1,.32,1);flex-shrink:0;}
+.skull-fire-btn:hover:not(:disabled){transform:scale(1.06);}
+.skull-fire-btn:active:not(:disabled){transform:scale(.92);}
+.skull-fire-btn:disabled{cursor:default;}
+.skull-fire-btn svg{display:block;width:100%;height:100%;overflow:visible;}
+.skull-fire-btn .flames,.skull-fire-btn .eye-core{opacity:0;transition:opacity .16s ease .16s;}
+.skull-fire-btn .flame{transform-box:fill-box;transform-origin:center bottom;}
+.skull-fire-btn.is-ignited .flames,.skull-fire-btn.is-ignited .eye-core{opacity:1;}
+.skull-fire-btn.is-ignited .flame-a{animation:skull-flame-a 1.16s steps(2,end) infinite alternate;}
+.skull-fire-btn.is-ignited .flame-b{animation:skull-flame-b .92s steps(2,end) -.2s infinite alternate;}
+.skull-fire-btn.is-ignited .flame-c{animation:skull-flame-c 1.34s steps(2,end) -.46s infinite alternate;}
+.skull-fire-btn.is-ignited .flame-d{animation:skull-flame-b 1.04s steps(2,end) -.7s infinite alternate;}
+.skull-fire-btn.is-ignited .flame-e{animation:skull-flame-a .88s steps(2,end) -.35s infinite alternate;}
+@keyframes skull-flame-a{from{transform:translate(-2px,4px) scaleX(.86) scaleY(.9);}to{transform:translate(3px,-6px) scaleX(1.14) scaleY(1.12);}}
+@keyframes skull-flame-b{from{transform:translate(3px,3px) scaleX(1.1) scaleY(.82);}to{transform:translate(-2px,-7px) scaleX(.88) scaleY(1.16);}}
+@keyframes skull-flame-c{from{transform:translate(1px,4px) scaleX(.84) scaleY(.88);}to{transform:translate(-1px,-8px) scaleX(1.16) scaleY(1.17);}}
+@media (prefers-reduced-motion: reduce){.skull-fire-btn{transition:none;}.skull-fire-btn .flames,.skull-fire-btn .eye-core{transition:none;}.skull-fire-btn.is-ignited .flame{animation:none;}}
 
 /* Collapsible FSRS bar */
 .fsrs-bar{border-radius:10px;overflow:hidden;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);}

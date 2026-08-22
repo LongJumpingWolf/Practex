@@ -612,6 +612,7 @@ function buildTree(){
   var root = {};
   state.mcqs.forEach(function(m){
     if (m.trashedAt) return; /* soft-deleted — invisible everywhere browsing/counting/practicing happens, without needing to touch every read site individually; see TRASH_RETENTION_DAYS and the Trash view for where these actually live now */
+    if (state.skullModeActive && !((m.skullCount||0) > 0)) return; /* Skull Mode — same technique as the trashedAt line above: filtering right here, in the one function every browsing view (Library tree, Book Shelf, chapter counts) is built from, means the whole app narrows to skull-marked questions automatically, with nothing else needing to know Skull Mode exists */
     if (sourceFilter && m.source !== sourceFilter) return;
     if (!root[m.subject]) root[m.subject] = { name: m.subject, count: 0, children: {}, ids: [] };
     var node = root[m.subject];
@@ -629,8 +630,10 @@ function buildTree(){
      Harmless no-op if a path here now DOES have real content (a normal node already
      exists for it, this just finds it rather than creating a duplicate). Skipped
      entirely while source-filtered — an empty folder isn't associated with any
-     particular book, so it doesn't belong in a book-scoped view. */
-  if (!sourceFilter) {
+     particular book, so it doesn't belong in a book-scoped view. Same reasoning
+     extends to Skull Mode: an empty folder has zero skulled questions in it by
+     definition, so it doesn't belong in a skull-scoped view either. */
+  if (!sourceFilter && !state.skullModeActive) {
     (state.emptyFolders || []).forEach(function(pathArr){
       if (!pathArr || !pathArr.length) return;
       if (!root[pathArr[0]]) root[pathArr[0]] = { name: pathArr[0], count: 0, children: {}, ids: [] };
@@ -1079,6 +1082,19 @@ function renderSidebar(){
     html += '<div style="border-top:1px solid rgba(255,255,255,0.15);padding-top:6px;font-size:11px;display:flex;justify-content:space-between;opacity:0.9;">' +
       '<span>Tracked</span><strong>' + liveMcqs().length + ' Questions</strong></div>';
     html += '</div>';
+  }
+  html += '</div>';
+
+  var skulledCount = liveMcqs().filter(function(m){ return (m.skullCount||0) > 0; }).length;
+  html += '<div class="fsrs-bar" style="margin-top:8px;">';
+  html += '<div class="fsrs-bar-header" style="cursor:default;">' +
+    '<span class="icon-inline"><span style="font-size:14px;line-height:1;">💀</span><span style="font-size:12px;font-weight:600;">SKULL MODE</span></span>' +
+    '<span class="skull-switch' + (state.skullModeActive ? ' on' : '') + '" data-action="toggle-skull-mode" role="switch" aria-checked="' + (state.skullModeActive ? 'true' : 'false') + '" aria-label="Toggle Skull Mode" title="' + (state.skullModeActive ? 'Skull Mode is on — click to see the full library again' : 'Skull Mode is off — click to see only questions you\'ve marked for extra practice') + '"><span class="skull-switch-track"></span><span class="skull-switch-thumb"></span></span>' +
+    '</div>';
+  if (skulledCount) {
+    html += '<div style="font-size:11px;opacity:0.85;padding:0 2px 2px;">' + skulledCount + ' question' + (skulledCount===1?'':'s') + ' marked for extra practice' + (state.skullModeActive ? ' — showing those only' : '') + '.</div>';
+  } else if (state.skullModeActive) {
+    html += '<div style="font-size:11px;opacity:0.85;padding:0 2px 2px;">No skulled questions yet — press the skull button after any question in practice to mark it for extra review.</div>';
   }
   html += '</div>';
 
@@ -1634,7 +1650,7 @@ function renderChapterGrid(tree, node){
 /* Flat filtered question list — shown once you're inside a leaf chapter, or after "View questions" */
 function renderQuestionList(tree, node, searchAll){
   var title = searchAll ? 'Search results' : (state.selectedPath ? state.selectedPath[state.selectedPath.length-1] : 'All subjects');
-  var ids = (searchAll || !node) ? liveMcqs().map(function(m){return m.id;}) : collectIds(node);
+  var ids = (searchAll || !node) ? skullScoped(liveMcqs()).map(function(m){return m.id;}) : collectIds(node);
   var byId = {}; state.mcqs.forEach(function(m){ byId[m.id] = m; });
   var list = ids.map(function(id){ return byId[id]; }).filter(Boolean).filter(passesFilters);
   /* Sleeping subjects stay visible for browsing, but drop out of the root-level "Start practice" pool/count. */

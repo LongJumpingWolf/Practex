@@ -42,6 +42,13 @@ async function onClick(e){
     render();
     return;
   }
+  if (action === 'toggle-skull-mode') {
+    state.skullModeActive = !state.skullModeActive;
+    try { localStorage.setItem('practex_skull_mode', state.skullModeActive ? '1' : '0'); } catch(e) {}
+    showToast(state.skullModeActive ? '💀 Skull Mode — showing only the questions you\'ve marked for extra practice.' : 'Skull Mode off — back to the full library.');
+    render();
+    return;
+  }
   if (action === 'toggle-auto-sleep') {
     state.autoSleepEnabled = !state.autoSleepEnabled;
     saveAutoSleepSettings();
@@ -194,7 +201,7 @@ async function onClick(e){
     /* Same bug, more severe here — "Start practice (all)" had NO filtering at all,
        meaning a deleted question could actually be answered during a live session,
        feeding back into its learning history despite supposedly being gone. */
-    var allIds = liveMcqs().map(function(m){ return m.id; });
+    var allIds = skullScoped(liveMcqs()).map(function(m){ return m.id; });
     requestStartPractice(allIds, false);
     return;
   }
@@ -262,7 +269,7 @@ async function onClick(e){
        button used everywhere in the app, not just the settings-menu "all" variant —
        its root-level fallback (no specific deck selected) had the same missing
        trashedAt filter as everything else audited here. */
-    var ids = node ? collectIds(node) : liveMcqs().map(function(m){ return m.id; });
+    var ids = node ? collectIds(node) : skullScoped(liveMcqs()).map(function(m){ return m.id; });
     var byId = {}; state.mcqs.forEach(function(m){ byId[m.id]=m; });
     if (!node) ids = ids.filter(function(id){ return byId[id] && !state.sleepingSubjects[byId[id].subject]; }); /* root-level "Start Practice" skips sleeping subjects entirely */
     ids = ids.filter(function(id){ return byId[id] && !byId[id].asleep; }); /* individually-slept questions are excluded everywhere, not just from the root */
@@ -277,7 +284,7 @@ async function onClick(e){
     var expSearchAll = !!(state.filters.search || '').trim();
     var expTree = buildTree();
     var expNode = state.selectedPath ? getNodeByPath(expTree, state.selectedPath) : null;
-    var expIds = (expSearchAll || !expNode) ? liveMcqs().map(function(m){ return m.id; }) : collectIds(expNode);
+    var expIds = (expSearchAll || !expNode) ? skullScoped(liveMcqs()).map(function(m){ return m.id; }) : collectIds(expNode);
     var expById = {}; state.mcqs.forEach(function(m){ expById[m.id] = m; });
     var expList = expIds.map(function(id){ return expById[id]; }).filter(Boolean).filter(passesFilters);
     var expLabel = expSearchAll ? 'search-results' : (state.selectedPath ? state.selectedPath[state.selectedPath.length-1].toLowerCase().replace(/[^a-z0-9]+/g,'-') : 'all-subjects');
@@ -1172,6 +1179,51 @@ async function onClick(e){
     return;
   }
 
+  if (action === 'skull-question') {
+    /* "Skull it" — agree to see this exact question again before the test ends,
+       at a random point you haven't reached yet, not predictably tacked onto the
+       end (that would just teach people to anticipate "oh, skulled ones come last").
+       Nothing about the re-encounter itself needs separate storage — it's just
+       another id sitting in this session's own s.ids queue, so every existing
+       mechanism (pause/resume, FSRS recording, results/stats, "Finish session" vs
+       "Next question" labeling) already handles it with zero special-casing.
+       skullCount is the one thing that DOES persist — a plain field on the mcq,
+       synced the exact same way flagged/asleep/needsReview already are (see
+       saveLibrary — the whole mcq object rides along as one JSONB blob, no schema
+       change needed), and it's what powers Skull Mode's descending-frequency
+       ordering later (see startPractice). */
+    var s3 = state.session;
+    if (!s3) return;
+    var skullId = el.getAttribute('data-id');
+    var m3 = state.mcqs.find(function(x){ return x.id === skullId; });
+    if (!m3) return;
+    if (!s3.skulledPositions) s3.skulledPositions = {};
+    if (s3.skulledPositions[s3.index]) return; /* already actioned for this exact occurrence — this same id can still be skulled again on a LATER occurrence (that's the whole point, see below), just not twice for the one you're looking at right now */
+    s3.skulledPositions[s3.index] = true;
+    m3.skullCount = (m3.skullCount || 0) + 1;
+
+    /* Insert somewhere in the not-yet-reached tail of the queue. Leaving at least one
+       real question of breathing room (s3.index + 2, not +1) means it never lands as
+       literally the very next question either — that would feel just as anticipated
+       as always-at-the-end did, only one step removed. Falls back to a plain append
+       only when there genuinely isn't enough queue left to randomize into (e.g.
+       skulling the last question in the session) — extending "Finish session" back
+       into "Next question" is handled automatically by advanceAfterReveal(), which
+       always re-reads s.ids.length fresh. */
+    var remainingStart = s3.index + 2;
+    if (remainingStart < s3.ids.length) {
+      var insertAt = remainingStart + Math.floor(Math.random() * (s3.ids.length - remainingStart + 1));
+      s3.ids.splice(insertAt, 0, skullId);
+    } else {
+      s3.ids.push(skullId);
+    }
+
+    render();
+    saveLibrary(); /* fire-and-forget, same convention as bookmark-current just above */
+    showToast('🔥 Skulled — you\'ll see this one again before the test ends.');
+    return;
+  }
+
   if (action === 'retry-wrong') {
     var ids2 = el.getAttribute('data-ids').split(',').filter(Boolean);
     startPractice(ids2);
@@ -1360,6 +1412,7 @@ async function showApp(){
    source one way or another (cloud/mirror/sync-key/live crash-recovery). Runs once,
    right before the very first render() on whichever page we're actually on. */
 function bootCurrentPage(){
+  try { state.skullModeActive = localStorage.getItem('practex_skull_mode') === '1'; } catch(e) {} /* device-local display preference — same lightweight pattern as practex_landing_view, read once here regardless of which page/branch below runs */
   var onPracticePage = /practice\.html/.test(window.location.pathname);
   if (onPracticePage) {
     var hasSession = goToPracticeIfSessionPending(); /* navigates away itself if there's nothing to resume — see practex-learning-practice.js */

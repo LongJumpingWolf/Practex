@@ -68,7 +68,8 @@ var state = {
   emptyFolders: [], /* array of path-arrays for folders created on purpose with nothing in them yet — the tree is otherwise entirely implied by which subject/chapterPath actual questions carry, so without this there's no way to represent "a folder that exists but has zero questions" at all */
   studyPlans: {}, /* keyed by "subject::Name" or "source::Name" or "all" — see createStudyPlan()/planTodayTarget() for the full design. Requires the study_plans column added to user_settings — see STUDY_PLANS_MIGRATION.sql */
   bookCoverDraft: null, /* {source} while the "set cover" upload is in progress */
-  bookshelfActiveSource: null /* which book is currently drilled into on the shelf — null means showing the shelf grid itself */
+  bookshelfActiveSource: null, /* which book is currently drilled into on the shelf — null means showing the shelf grid itself */
+  skullModeActive: false /* browsing/practice lens that scopes the whole library down to only skull-marked questions — see buildTree(), startPractice(), and the sidebar Skull Mode toggle. Read from localStorage at boot in bootCurrentPage(); a device-local display preference, not synced cross-account. */
 };
 
 /* ================= Local-first data mirror =================
@@ -908,6 +909,16 @@ function trashGroupKeyOf(m){
    the next time something new gets added that needs the same exclusion. */
 function liveMcqs(){
   return state.mcqs.filter(function(m){ return !m.trashedAt; });
+}
+
+/* Same idea as liveMcqs(), one layer up: the handful of root-level "whole library"
+   fallbacks (root Start Practice, root Export-current-view, the flat "All subjects"
+   list) build their pool straight from liveMcqs() instead of buildTree(), so they
+   don't automatically pick up buildTree()'s own Skull Mode filter the way every
+   chapter/subject/book-scoped view does. This wrapper gives those specific call
+   sites the same behavior without duplicating the filter logic at each one. */
+function skullScoped(list){
+  return state.skullModeActive ? list.filter(function(m){ return (m.skullCount||0) > 0; }) : list;
 }
 
 /* Gathers every distinct image hash already used ANYWHERE within one source —

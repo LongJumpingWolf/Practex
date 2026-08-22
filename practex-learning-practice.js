@@ -346,6 +346,41 @@ function renderExplanation(mcq){
   return imagesHtml + (mcq.explanation ? '<div class="reveal-explain">' + renderContent(mcq.explanation) + '</div>' : '');
 }
 
+/* The skull button — sits beside "Next question"/"Next"/"Finish session" (the label
+   varies by question type, see the 4 render*Body callers below) wherever that button
+   appears. Pressing it agrees to see this exact question again before the test ends,
+   at a random not-yet-reached point (see the skull-question handler in
+   practex-events-init.js for the actual re-queue logic and why it isn't just appended
+   to the end). Ignites and disables itself for the occurrence just acted on — the SAME
+   question can still be skulled again on a later occurrence within this session, that's
+   the whole mechanism, so the "already actioned" check keyed on s.index rather than
+   m.id is deliberate, not an oversight. */
+function renderSkullButton(m, s){
+  var ignited = !!(s.skulledPositions && s.skulledPositions[s.index]);
+  return '<button type="button" class="skull-fire-btn' + (ignited ? ' is-ignited' : '') + '" data-action="skull-question" data-id="' + escapeHtml(m.id) + '"' + (ignited ? ' disabled' : '') +
+    ' aria-pressed="' + (ignited ? 'true' : 'false') + '" title="' + (ignited ? 'Queued — you\'ll see this again before the test ends' : 'Need more practice on this one? See it again later in this test') + '">' +
+    '<svg viewBox="0 0 120 146" aria-hidden="true" shapeRendering="crispEdges">' +
+      '<g class="flames">' +
+        '<g class="flame flame-a"><rect x="16" y="54" width="8" height="32" fill="#ef3d1f"/><rect x="24" y="42" width="8" height="44" fill="#ff5a1f"/><rect x="24" y="50" width="8" height="22" fill="#ffd24a"/></g>' +
+        '<g class="flame flame-b"><rect x="32" y="34" width="8" height="38" fill="#ef3d1f"/><rect x="40" y="22" width="8" height="50" fill="#ff5a1f"/><rect x="40" y="34" width="8" height="24" fill="#ffe36c"/></g>' +
+        '<g class="flame flame-c"><rect x="56" y="22" width="8" height="42" fill="#ef3d1f"/><rect x="64" y="12" width="8" height="52" fill="#ff5a1f"/><rect x="64" y="26" width="8" height="26" fill="#ffd24a"/></g>' +
+        '<g class="flame flame-d"><rect x="80" y="34" width="8" height="40" fill="#ef3d1f"/><rect x="88" y="24" width="8" height="50" fill="#ff5a1f"/><rect x="88" y="36" width="8" height="24" fill="#ffe36c"/></g>' +
+        '<g class="flame flame-e"><rect x="96" y="54" width="8" height="32" fill="#ef3d1f"/><rect x="88" y="46" width="8" height="40" fill="#ff5a1f"/><rect x="88" y="56" width="8" height="20" fill="#ffd24a"/></g>' +
+      '</g>' +
+      '<g class="skull">' +
+        '<rect x="40" y="28" width="40" height="8" fill="#f8efd9"/><rect x="32" y="36" width="56" height="8" fill="#f8efd9"/><rect x="24" y="44" width="72" height="40" fill="#f8efd9"/><rect x="32" y="84" width="56" height="24" fill="#f8efd9"/>' +
+        '<rect x="40" y="108" width="8" height="8" fill="#f8efd9"/><rect x="56" y="108" width="8" height="8" fill="#f8efd9"/><rect x="72" y="108" width="8" height="8" fill="#f8efd9"/>' +
+        '<rect x="44" y="32" width="8" height="4" fill="#fff8e8"/><rect x="52" y="28" width="16" height="4" fill="#fff8e8"/><rect x="68" y="32" width="8" height="4" fill="#fff8e8"/><rect x="32" y="44" width="4" height="8" fill="#fff8e8"/><rect x="84" y="44" width="4" height="8" fill="#fff8e8"/>' +
+        '<rect x="56" y="40" width="4" height="8" fill="#d5c19c"/><rect x="60" y="44" width="4" height="4" fill="#d5c19c"/><rect x="52" y="48" width="4" height="4" fill="#d5c19c"/><rect x="32" y="52" width="20" height="4" fill="#e5d3b0"/><rect x="68" y="52" width="20" height="4" fill="#e5d3b0"/>' +
+        '<rect x="28" y="68" width="4" height="8" fill="#b99d7f"/><rect x="88" y="68" width="4" height="8" fill="#b99d7f"/><rect x="32" y="80" width="8" height="4" fill="#b99d7f"/><rect x="80" y="80" width="8" height="4" fill="#b99d7f"/><rect x="36" y="84" width="8" height="4" fill="#fff8e8"/><rect x="76" y="84" width="8" height="4" fill="#fff8e8"/>' +
+        '<rect x="36" y="56" width="16" height="24" fill="#251325"/><rect x="68" y="56" width="16" height="24" fill="#251325"/><rect x="44" y="56" width="8" height="4" fill="#f8efd9"/><rect x="48" y="60" width="4" height="4" fill="#f8efd9"/><rect x="68" y="56" width="8" height="4" fill="#f8efd9"/><rect x="68" y="60" width="4" height="4" fill="#f8efd9"/>' +
+        '<rect class="eye-core" x="40" y="64" width="8" height="8" fill="#ff5a1f"/><rect class="eye-core" x="72" y="64" width="8" height="8" fill="#ff5a1f"/>' +
+        '<rect x="56" y="80" width="8" height="8" fill="#251325"/><rect x="52" y="84" width="4" height="4" fill="#251325"/><rect x="64" y="84" width="4" height="4" fill="#251325"/><rect x="44" y="92" width="4" height="8" fill="#d5c19c"/><rect x="72" y="92" width="4" height="8" fill="#d5c19c"/><rect x="52" y="92" width="4" height="8" fill="#fff8e8"/><rect x="60" y="92" width="4" height="8" fill="#fff8e8"/><rect x="68" y="92" width="4" height="8" fill="#fff8e8"/><rect x="48" y="96" width="8" height="12" fill="#251325"/><rect x="64" y="96" width="8" height="12" fill="#251325"/>' +
+      '</g>' +
+    '</svg>' +
+  '</button>';
+}
+
 function renderReveal(mcq){
   const state=LearningEngine.classify(mcq);
   const hist=mcq.learning.history||[];
@@ -453,9 +488,18 @@ function startPractice(ids, planKey){
     }
     return;
   }
-  for (var i = pool.length - 1; i > 0; i--) {
-    var j = Math.floor(Math.random() * (i + 1));
-    var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+  if (!planKey && state.skullModeActive) {
+    /* Skull Mode: deliberately NOT shuffled. The whole point is surfacing the
+       questions you've told it you need more of, worst-offenders first — a random
+       order would bury the ones you've skulled five times behind ones you've only
+       skulled once. Ties (equal skullCount, including the ordinary case of everyone
+       being skulled exactly once) keep whatever order the pool arrived in. */
+    pool.sort(function(a, b){ return (b.skullCount||0) - (a.skullCount||0); });
+  } else {
+    for (var i = pool.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+    }
   }
   var freshSession = {
     ids: pool.map(function(m){ return m.id; }),
@@ -634,7 +678,8 @@ function renderPractice(){
         '<button class="btn btn-danger" data-action="self-grade" data-correct="false">' + icon('x',15) + ' I was wrong</button>' +
         '<button class="btn btn-primary" data-action="self-grade" data-correct="true">' + icon('check-circle',15) + ' I was right</button></div>';
     } else {
-      html += '<div class="answer-footer" style="justify-content:flex-end;">' +
+      html += '<div class="answer-footer" style="justify-content:flex-end;gap:10px;">' +
+        renderSkullButton(m, s) +
         '<button class="btn btn-primary" data-action="next-question">' + (s.index + 1 < s.ids.length ? 'Next question' : 'Finish session') + '</button></div>';
     }
     html += '</div>';
@@ -1008,7 +1053,8 @@ function renderMnemonicBody(m, s, isReviewing, result, viewRevealed){
         '<button class="btn btn-danger" data-action="self-grade" data-correct="false">' + icon('x',15) + ' I was wrong</button>' +
         '<button class="btn btn-primary" data-action="self-grade" data-correct="true">' + icon('check-circle',15) + ' I was right</button></div>';
     } else {
-      html += '<div class="answer-footer" style="justify-content:flex-end;">' +
+      html += '<div class="answer-footer" style="justify-content:flex-end;gap:10px;">' +
+        renderSkullButton(m, s) +
         '<button class="btn btn-primary" data-action="next-question">' + (s.index + 1 < s.ids.length ? 'Next question' : 'Finish session') + '</button></div>';
     }
   }
@@ -1029,7 +1075,8 @@ function renderCardBody(m, s, isReviewing, result, viewRevealed){
   }
   html += renderNotesSection(m);
   if (!isReviewing) {
-    html += '<div class="answer-footer" style="justify-content:flex-end;">' +
+    html += '<div class="answer-footer" style="justify-content:flex-end;gap:10px;">' +
+      renderSkullButton(m, s) +
       '<button class="btn btn-primary" data-action="next-question">' + (s.index + 1 < s.ids.length ? 'Next' : 'Finish session') + '</button></div>';
   }
   html += '</div>';
@@ -1046,7 +1093,8 @@ function renderRevealFooter(m, s, isReviewing){
   html += renderReveal(m);
   html += renderNotesSection(m);
   if (!isReviewing) {
-    html += '<div class="answer-footer" style="justify-content:flex-end;">' +
+    html += '<div class="answer-footer" style="justify-content:flex-end;gap:10px;">' +
+      renderSkullButton(m, s) +
       '<button class="btn btn-primary" data-action="next-question">' + (s.index + 1 < s.ids.length ? 'Next question' : 'Finish session') + '</button></div>';
   }
   html += '</div>';
