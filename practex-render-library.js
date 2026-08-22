@@ -837,6 +837,7 @@ function allTags(){
 function render(){
   document.body.classList.toggle('fsrs-mode', !!(state.learningMode && state.learningMode.enabled));
   document.body.classList.toggle('dark-mode', !!state.darkMode);
+  document.body.classList.toggle('skull-mode', !!state.skullModeActive);
   var root = document.getElementById('appRoot');
   root.innerHTML =
     renderSidebar() +
@@ -1086,10 +1087,10 @@ function renderSidebar(){
   html += '</div>';
 
   var skulledCount = liveMcqs().filter(function(m){ return (m.skullCount||0) > 0; }).length;
-  html += '<div class="fsrs-bar" style="margin-top:8px;">';
+  html += '<div class="fsrs-bar skull-mode-bar" style="margin-top:8px;">';
   html += '<div class="fsrs-bar-header" style="cursor:default;">' +
-    '<span class="icon-inline"><span style="font-size:14px;line-height:1;">💀</span><span style="font-size:12px;font-weight:600;">SKULL MODE</span></span>' +
-    '<span class="skull-switch' + (state.skullModeActive ? ' on' : '') + '" data-action="toggle-skull-mode" role="switch" aria-checked="' + (state.skullModeActive ? 'true' : 'false') + '" aria-label="Toggle Skull Mode" title="' + (state.skullModeActive ? 'Skull Mode is on — click to see the full library again' : 'Skull Mode is off — click to see only questions you\'ve marked for extra practice') + '"><span class="skull-switch-track"></span><span class="skull-switch-thumb"></span></span>' +
+    '<span class="icon-inline"><span style="font-size:12px;font-weight:600;">SKULL MODE</span></span>' +
+    '<button type="button" class="skull-fire-btn skull-mode-toggle' + (state.skullModeActive ? ' is-ignited' : '') + '" data-action="toggle-skull-mode" role="switch" aria-checked="' + (state.skullModeActive ? 'true' : 'false') + '" aria-label="Toggle Skull Mode" title="' + (state.skullModeActive ? 'Skull Mode is on — click to see the full library again' : 'Skull Mode is off — click to see only questions you\'ve marked for extra practice') + '">' + skullSvgMarkup() + '</button>' +
     '</div>';
   if (skulledCount) {
     html += '<div style="font-size:11px;opacity:0.85;padding:0 2px 2px;">' + skulledCount + ' question' + (skulledCount===1?'':'s') + ' marked for extra practice' + (state.skullModeActive ? ' — showing those only' : '') + '.</div>';

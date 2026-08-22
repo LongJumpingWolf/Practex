@@ -111,6 +111,24 @@ body.dark-mode.fsrs-mode{
   --cover-dark:#6B4F92;
 }
 body.dark-mode{ background-image: linear-gradient(var(--rule) 1px, transparent 1px); }
+
+/* Skull Mode reskin — purely visual, no behavior change. Overriding --cover/--cover-dark
+   alone reaches everywhere the app's accent color is used (sidebar background, primary
+   buttons, links, focus rings, active states) without touching every rule individually.
+   A separate combined selector handles dark-mode's own --paper/--card/--rule so the two
+   modes layer correctly instead of one silently winning by source order. */
+body.skull-mode{
+  --cover:#B0391E;
+  --cover-dark:#7C2712;
+  --paper:#F6EBE2;
+  --card:#FCF4EC;
+}
+body.skull-mode.dark-mode{
+  --paper:#211412;
+  --card:#2B1916;
+  --rule:#3D2620;
+  --rule-strong:#4F3129;
+}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html,body{height:100%;touch-action:manipulation;}
 body{
@@ -174,11 +192,7 @@ input,textarea,select{font-family:inherit;color:inherit;}
 .fsrs-switch.on .fsrs-switch-track{background:#F0C33C;}
 .fsrs-switch-thumb{position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#EAF0F5;box-shadow:0 1px 2px rgba(0,0,0,0.3);transition:left .15s;}
 .fsrs-switch.on .fsrs-switch-thumb{left:17px;background:#2F2611;}
-.skull-switch{position:relative;display:inline-block;width:34px;height:19px;flex-shrink:0;}
-.skull-switch-track{position:absolute;inset:0;background:rgba(255,255,255,0.22);border-radius:99px;transition:background .15s;}
-.skull-switch.on .skull-switch-track{background:#F0C33C;}
-.skull-switch-thumb{position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#EAF0F5;box-shadow:0 1px 2px rgba(0,0,0,0.3);transition:left .15s;}
-.skull-switch.on .skull-switch-thumb{left:17px;background:#2F2611;}
+.skull-mode-toggle{width:26px;filter:drop-shadow(0 0 1px rgba(255,255,255,.55)) drop-shadow(0 1px 2px rgba(0,0,0,.35));}
 .skull-fire-btn{width:40px;height:auto;aspect-ratio:120/146;border:0;padding:0;cursor:pointer;background:transparent;image-rendering:pixelated;transition:transform .16s cubic-bezier(.23,1,.32,1);flex-shrink:0;filter:drop-shadow(0 0 1px rgba(37,19,37,.5)) drop-shadow(0 2px 3px rgba(0,0,0,.3));}
 .skull-fire-btn:hover:not(:disabled){transform:scale(1.06);}
 .skull-fire-btn:active:not(:disabled){transform:scale(.92);}

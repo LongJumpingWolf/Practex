@@ -346,20 +346,12 @@ function renderExplanation(mcq){
   return imagesHtml + (mcq.explanation ? '<div class="reveal-explain">' + renderContent(mcq.explanation) + '</div>' : '');
 }
 
-/* The skull button — sits beside "Next question"/"Next"/"Finish session" (the label
-   varies by question type, see the 4 render*Body callers below) wherever that button
-   appears. Pressing it agrees to see this exact question again before the test ends,
-   at a random not-yet-reached point (see the skull-question handler in
-   practex-events-init.js for the actual re-queue logic and why it isn't just appended
-   to the end). Ignites and disables itself for the occurrence just acted on — the SAME
-   question can still be skulled again on a later occurrence within this session, that's
-   the whole mechanism, so the "already actioned" check keyed on s.index rather than
-   m.id is deliberate, not an oversight. */
-function renderSkullButton(m, s){
-  var ignited = !!(s.skulledPositions && s.skulledPositions[s.index]);
-  return '<button type="button" class="skull-fire-btn' + (ignited ? ' is-ignited' : '') + '" data-action="skull-question" data-id="' + escapeHtml(m.id) + '"' + (ignited ? ' disabled' : '') +
-    ' aria-pressed="' + (ignited ? 'true' : 'false') + '" title="' + (ignited ? 'Queued — you\'ll see this again before the test ends' : 'Need more practice on this one? See it again later in this test') + '">' +
-    '<svg viewBox="0 0 120 146" aria-hidden="true" shapeRendering="crispEdges">' +
+/* Raw skull+flames SVG markup, shared by every skull button in the app (the
+   per-question practice-footer button below, and the sidebar's Skull Mode toggle
+   in practex-render-library.js). One copy so the pixel art never drifts out of
+   sync between the two places it's used. */
+function skullSvgMarkup(){
+  return '<svg viewBox="0 0 120 146" aria-hidden="true" shapeRendering="crispEdges">' +
       '<g class="flames">' +
         '<g class="flame flame-a"><rect x="16" y="54" width="8" height="32" fill="#ef3d1f"/><rect x="24" y="42" width="8" height="44" fill="#ff5a1f"/><rect x="24" y="50" width="8" height="22" fill="#ffd24a"/></g>' +
         '<g class="flame flame-b"><rect x="32" y="34" width="8" height="38" fill="#ef3d1f"/><rect x="40" y="22" width="8" height="50" fill="#ff5a1f"/><rect x="40" y="34" width="8" height="24" fill="#ffe36c"/></g>' +
@@ -377,7 +369,23 @@ function renderSkullButton(m, s){
         '<rect class="eye-core" x="40" y="64" width="8" height="8" fill="#ff5a1f"/><rect class="eye-core" x="72" y="64" width="8" height="8" fill="#ff5a1f"/>' +
         '<rect x="56" y="80" width="8" height="8" fill="#251325"/><rect x="52" y="84" width="4" height="4" fill="#251325"/><rect x="64" y="84" width="4" height="4" fill="#251325"/><rect x="44" y="92" width="4" height="8" fill="#d5c19c"/><rect x="72" y="92" width="4" height="8" fill="#d5c19c"/><rect x="52" y="92" width="4" height="8" fill="#fff8e8"/><rect x="60" y="92" width="4" height="8" fill="#fff8e8"/><rect x="68" y="92" width="4" height="8" fill="#fff8e8"/><rect x="48" y="96" width="8" height="12" fill="#251325"/><rect x="64" y="96" width="8" height="12" fill="#251325"/>' +
       '</g>' +
-    '</svg>' +
+    '</svg>';
+}
+
+/* The skull button — sits beside "Next question"/"Next"/"Finish session" (the label
+   varies by question type, see the 4 render*Body callers below) wherever that button
+   appears. Pressing it agrees to see this exact question again before the test ends,
+   at a random not-yet-reached point (see the skull-question handler in
+   practex-events-init.js for the actual re-queue logic and why it isn't just appended
+   to the end). Ignites and disables itself for the occurrence just acted on — the SAME
+   question can still be skulled again on a later occurrence within this session, that's
+   the whole mechanism, so the "already actioned" check keyed on s.index rather than
+   m.id is deliberate, not an oversight. */
+function renderSkullButton(m, s){
+  var ignited = !!(s.skulledPositions && s.skulledPositions[s.index]);
+  return '<button type="button" class="skull-fire-btn' + (ignited ? ' is-ignited' : '') + '" data-action="skull-question" data-id="' + escapeHtml(m.id) + '"' + (ignited ? ' disabled' : '') +
+    ' aria-pressed="' + (ignited ? 'true' : 'false') + '" title="' + (ignited ? 'Queued — you\'ll see this again before the test ends' : 'Need more practice on this one? See it again later in this test') + '">' +
+    skullSvgMarkup() +
   '</button>';
 }
 
