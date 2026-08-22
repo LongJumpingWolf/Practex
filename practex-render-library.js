@@ -1054,10 +1054,14 @@ function getDashboardData(){
 function renderSidebar(){
   var tree = buildTree();
   var subjectKeys = Object.keys(tree).sort();
+  var skulledCount = liveMcqs().filter(function(m){ return (m.skullCount||0) > 0; }).length;
+  var skullTitle = state.skullModeActive
+    ? 'Skull Mode is on (' + skulledCount + ' question' + (skulledCount===1?'':'s') + ' marked) — click to see the full library again'
+    : (skulledCount ? skulledCount + ' question' + (skulledCount===1?'':'s') + ' marked for extra practice — click to see only those' : 'No skulled questions yet — press the skull button after any question in practice to mark it for extra review');
   var html = '<aside class="sidebar' + (state.sidebarOpen ? ' open' : '') + '" id="sidebar">';
   html += '<div class="brand"><div class="brand-mark"><img src="icons/icon-128x128.png" alt="Practex logo"></div>' +
     '<div style="flex:1;"><div class="brand-name serif">Practex</div><div class="brand-tag">MCQ practice</div></div>' +
-    '<button type="button" class="skull-fire-btn skull-mode-toggle' + (state.skullModeActive ? ' is-ignited' : '') + '" data-action="toggle-skull-mode" role="switch" aria-checked="' + (state.skullModeActive ? 'true' : 'false') + '" aria-label="Toggle Skull Mode" title="' + (state.skullModeActive ? 'Skull Mode is on — click to see the full library again' : 'Skull Mode is off — click to see only questions you\'ve marked for extra practice') + '">' + skullSvgMarkup() + '</button>' +
+    '<button type="button" class="skull-fire-btn skull-mode-toggle' + (state.skullModeActive ? ' is-ignited' : '') + '" data-action="toggle-skull-mode" role="switch" aria-checked="' + (state.skullModeActive ? 'true' : 'false') + '" aria-label="Toggle Skull Mode" title="' + skullTitle + '">' + skullSvgMarkup() + '</button>' +
     '<button class="sidebar-gear-btn' + (state.view === 'addsource' ? ' active' : '') + '" data-action="set-view" data-view="addsource" title="Add source" aria-label="Add source">' + icon('folder-plus',16) + '</button>' +
     '<button class="sidebar-gear-btn" data-action="open-settings" title="Settings" aria-label="Settings">' + icon('settings',16) + '</button></div>';
 
@@ -1084,18 +1088,6 @@ function renderSidebar(){
     html += '<div style="border-top:1px solid rgba(255,255,255,0.15);padding-top:6px;font-size:11px;display:flex;justify-content:space-between;opacity:0.9;">' +
       '<span>Tracked</span><strong>' + liveMcqs().length + ' Questions</strong></div>';
     html += '</div>';
-  }
-  html += '</div>';
-
-  var skulledCount = liveMcqs().filter(function(m){ return (m.skullCount||0) > 0; }).length;
-  html += '<div class="fsrs-bar skull-mode-bar" style="margin-top:8px;">';
-  html += '<div class="fsrs-bar-header" style="cursor:default;">' +
-    '<span class="icon-inline"><span style="font-size:14px;line-height:1;">' + (state.skullModeActive ? '🔥' : '💀') + '</span><span style="font-size:12px;font-weight:600;">SKULL MODE' + (state.skullModeActive ? ' — ON' : '') + '</span></span>' +
-    '</div>';
-  if (skulledCount) {
-    html += '<div style="font-size:11px;opacity:0.85;padding:0 2px 2px;">' + skulledCount + ' question' + (skulledCount===1?'':'s') + ' marked for extra practice' + (state.skullModeActive ? ' — showing those only' : '') + '.</div>';
-  } else if (state.skullModeActive) {
-    html += '<div style="font-size:11px;opacity:0.85;padding:0 2px 2px;">No skulled questions yet — press the skull button after any question in practice to mark it for extra review.</div>';
   }
   html += '</div>';
 
