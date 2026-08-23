@@ -52,10 +52,9 @@ window.state = {
   filters: { search: '' }, studyPlans: {}, autoSleepEnabled: true, autoSleepStreak: 4,
 };
 
-console.log('=== Sidebar "Tracked" stat and side-footer count now exclude trashed items ===');
+console.log('=== Sidebar side-footer count excludes trashed items (the "Tracked" stat itself moved to Settings, see below) ===');
 {
   const sidebarHtml = window.renderSidebar();
-  assert('sidebar "Tracked" shows 5 (live), not 7 (including trashed)', sidebarHtml.indexOf('<span>Tracked</span><strong>5 Questions</strong>') !== -1, sidebarHtml.match(/Tracked<\/span><strong>\d+/));
   assert('side-footer "MCQs logged" shows 5, not 7', sidebarHtml.indexOf('5 MCQs logged from 1 source') !== -1, sidebarHtml.match(/\d+ MCQs logged/));
 }
 
@@ -66,7 +65,15 @@ console.log('\n=== Settings "Questions tracked" now excludes trashed items ===')
   assert('a settings-render function exists to check', typeof window.renderSettingsModalContent === 'function');
   if (settingsHtml) {
     assert('"Questions tracked" shows 5, not 7', settingsHtml.indexOf('<span>Questions tracked</span><strong>5</strong>') !== -1, settingsHtml.match(/Questions tracked<\/span><strong>\d+/));
+    assert('FSRS stats (Due/Misconcept./Tomorrow) now live in Settings, not the sidebar', settingsHtml.indexOf('Due') !== -1 && settingsHtml.indexOf('Misconcept.') !== -1 && settingsHtml.indexOf('Tomorrow') !== -1);
   }
+}
+
+console.log('\n=== The old sidebar FSRS bar is gone entirely — no dead markup left behind ===');
+{
+  const sidebarHtml = window.renderSidebar();
+  assert('no more fsrs-bar in the sidebar', sidebarHtml.indexOf('fsrs-bar') === -1);
+  assert('no more standalone FSRS toggle switch in the sidebar', sidebarHtml.indexOf('fsrs-switch') === -1);
 }
 
 console.log('\n=== Add Source: "All questions (N)" dropdown label now matches what downloadIdSheet() actually exports ===');
