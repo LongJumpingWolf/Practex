@@ -1088,25 +1088,6 @@ function renderSidebar(){
     '<button class="nav-tab' + (state.view==='bookshelf'?' active':'') + '" data-action="toggle-bookshelf">Book Shelf</button>' +
     '</div>';
 
-  var ls = getLearningStats();
-  html += '<div class="fsrs-bar">';
-  html += '<div class="fsrs-bar-header" data-action="toggle-fsrs-card" role="button" aria-expanded="' + (state.fsrsCardExpanded ? 'true' : 'false') + '">' +
-    '<span class="icon-inline">' + icon(state.fsrsCardExpanded ? 'chevron-down' : 'chevron-right', 13) + '<span style="font-size:12px;font-weight:600;">FSRS MODE</span></span>' +
-    '<span class="fsrs-switch' + (state.learningMode.enabled ? ' on' : '') + '" data-action="toggle-fsrs-mode" role="switch" aria-checked="' + (state.learningMode.enabled ? 'true' : 'false') + '" aria-label="Toggle FSRS mode" title="' + (state.learningMode.enabled ? 'FSRS mode is on — click to disable' : 'FSRS mode is off — click to enable') + '"><span class="fsrs-switch-track"></span><span class="fsrs-switch-thumb"></span></span>' +
-    '</div>';
-  if (state.fsrsCardExpanded) {
-    html += '<div class="fsrs-bar-body" data-action="open-dashboard">';
-    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin-bottom:8px;">';
-    html += '<div><div style="font-size:18px;font-weight:700">' + ls.due + '</div><div style="font-size:10px;opacity:0.8;">Due</div></div>';
-    html += '<div><div style="font-size:18px;font-weight:700">' + ls.misconception + '</div><div style="font-size:10px;opacity:0.8;">Misconcept.</div></div>';
-    html += '<div><div style="font-size:18px;font-weight:700">' + ls.tomorrow + '</div><div style="font-size:10px;opacity:0.8;">Tomorrow</div></div>';
-    html += '</div>';
-    html += '<div style="border-top:1px solid rgba(255,255,255,0.15);padding-top:6px;font-size:11px;display:flex;justify-content:space-between;opacity:0.9;">' +
-      '<span>Tracked</span><strong>' + liveMcqs().length + ' Questions</strong></div>';
-    html += '</div>';
-  }
-  html += '</div>';
-
   html += '<div class="side-section-label">Subjects &amp; chapters</div>';
   html += '<button class="toc-root-link' + (state.view==='browse' && !state.selectedPath ? ' active' : '') + '" data-action="clear-selection">' + icon('home',14) + ' Library (all subjects)</button>';
   html += '<div class="toc">';

@@ -27,7 +27,7 @@ async function onClick(e){
   if (action === 'toggle-sidebar') { state.sidebarOpen = !state.sidebarOpen; render(); return; }
   if (action === 'manual-sync') { manualSync(); return; }
   if (action === 'set-view') { if (guardNavigation(action, el)) return; closeModal(); state.view = el.getAttribute('data-view'); state.sidebarOpen = false; render(); return; }
-  if (action === 'open-dashboard') { if (guardNavigation(action, el)) return; state.view = 'dashboard'; state.sidebarOpen = false; render(); return; }
+  if (action === 'open-dashboard') { if (guardNavigation(action, el)) return; closeModal(); state.view = 'dashboard'; state.sidebarOpen = false; render(); return; }
   if (action === 'set-landing-view') {
     var landingVal = el.getAttribute('data-value');
     try { localStorage.setItem('practex_landing_view', landingVal); } catch(e) {}

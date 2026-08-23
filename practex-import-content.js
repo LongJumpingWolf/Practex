@@ -769,6 +769,7 @@ function openSettingsModal(){
   renderSettingsModalContent();
 }
 function renderSettingsModalContent(){
+  var ls = getLearningStats();
   var html = '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;">' +
     '<h3 style="margin-bottom:0;">Settings</h3>' +
     '<button class="modal-close-btn" data-action="close-modal" title="Close" aria-label="Close">' + icon('x',18) + '</button>' +
@@ -816,6 +817,14 @@ function renderSettingsModalContent(){
       '<span class="settings-toggle' + (state.darkMode?' on':'') + '" data-action="toggle-dark-mode" role="switch" aria-checked="' + (state.darkMode?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
     '<div class="settings-row"><span>FSRS mode</span>' +
       '<span class="settings-toggle' + (state.learningMode.enabled?' on':'') + '" data-action="toggle-fsrs-mode" role="switch" aria-checked="' + (state.learningMode.enabled?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
+    '<div class="settings-row" data-action="open-dashboard" style="display:block;cursor:pointer;">' +
+      '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin:6px 0 2px;">' +
+        '<div><div style="font-size:18px;font-weight:700;">' + ls.due + '</div><div style="font-size:10px;opacity:0.7;">Due</div></div>' +
+        '<div><div style="font-size:18px;font-weight:700;">' + ls.misconception + '</div><div style="font-size:10px;opacity:0.7;">Misconcept.</div></div>' +
+        '<div><div style="font-size:18px;font-weight:700;">' + ls.tomorrow + '</div><div style="font-size:10px;opacity:0.7;">Tomorrow</div></div>' +
+      '</div>' +
+      '<div style="font-size:10.5px;opacity:0.6;text-align:center;">Tap for the full dashboard</div>' +
+    '</div>' +
     '<div class="settings-row"><span>Auto-sleep a question after it\'s right N times in a row</span>' +
       '<span class="settings-toggle' + (state.autoSleepEnabled?' on':'') + '" data-action="toggle-auto-sleep" role="switch" aria-checked="' + (state.autoSleepEnabled?'true':'false') + '"><span class="settings-toggle-track"></span><span class="settings-toggle-thumb"></span></span></div>' +
     (state.autoSleepEnabled ? '<div class="settings-row"><span>Streak needed (N)</span>' +
