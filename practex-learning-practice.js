@@ -351,31 +351,55 @@ function renderExplanation(mcq){
    in practex-render-library.js). One copy so the pixel art never drifts out of
    sync between the two places it's used.
 
-   Shape: "Simplified" — the shading-band detail (nose-bridge shadow, brow band,
-   jaw shadow) from the original asset was stripped out; just the silhouette,
-   sockets, and one highlight accent remain. Reads cleaner at the small header-icon
-   size than the fully-detailed original did.
-   Palette: "Warm Bone" — deepened from the original's #f8efd9 (which was close
-   enough to --card/--paper to nearly vanish, the whole reason this needed a
-   drop-shadow hack) so it holds up on its own, without losing the cream/bone feel.
-   Picked from /mnt/user-data/outputs/skull-options.html. */
+   Ported directly from the approved final asset (skull-fire-button-final.zip,
+   SkullIgnitionButton.tsx's NeutralSkullButton — the reference design based on
+   the hand-drawn sketch). REFERENCE_GRID is the actual source of truth, encoded
+   row-by-row exactly as that file has it (W = bone, K = dark, . = empty) and
+   rotated 90° clockwise at render time the same way the source component does,
+   rather than hand-transcribing 188 individual rects — verified byte-for-byte
+   identical against the real component's output before landing this. No separate
+   eye-glow rect this time (the final design doesn't have one — only the flames
+   ignite); the drop-shadow-for-contrast hack from earlier iterations is gone too,
+   since this shape carries its own black outline. */
 function skullSvgMarkup(){
+  var REFERENCE_GRID = [
+    "..WWWKKKK......",
+    "..WKKWWWWK.....",
+    ".KKWWKKKWWK....",
+    ".KWWKKKKKWWKKK.",
+    "KWWWKKKKKWWWWWK",
+    "KWWWKKKKKWWWWWK",
+    "KWWWWKKKWWWWKKK",
+    "KWWWWWWWWKKWWWK",
+    "KWWWWWWWWKKWWWK",
+    "KWWWWKKKWWWWKKK",
+    "KWWWKKKKKWWWWWK",
+    "KWWWKKKKKWWWWWK",
+    ".KWWKKKKKWWKKK.",
+    ".KKWWKKKWWK....",
+    "...KKWWWWK.....",
+    ".....KKKK......"
+  ];
+  var CELL = 7, GRID_X = 8, GRID_Y = 18;
+  var REMOVED_GRID_CELLS = { '2-14':1, '2-15':1, '3-15':1, '4-15':1 };
+  var cols = REFERENCE_GRID[0].length, rows = REFERENCE_GRID.length;
+  var skullRects = '';
+  for (var c = 0; c < cols; c++) {
+    for (var r = 0; r < rows; r++) {
+      var cell = REFERENCE_GRID[rows - 1 - r][c];
+      if (cell === '.' || REMOVED_GRID_CELLS[c + '-' + r]) continue;
+      skullRects += '<rect x="' + (GRID_X + r * CELL) + '" y="' + (GRID_Y + c * CELL) + '" width="' + CELL + '" height="' + CELL + '" fill="' + (cell === 'W' ? '#f8f7f0' : '#242023') + '"/>';
+    }
+  }
   return '<svg viewBox="0 0 120 146" aria-hidden="true" shapeRendering="crispEdges">' +
       '<g class="flames">' +
-        '<g class="flame flame-a"><rect x="16" y="54" width="8" height="32" fill="#B23A2E"/><rect x="24" y="42" width="8" height="44" fill="#ff5a1f"/><rect x="24" y="50" width="8" height="22" fill="#F0C33C"/></g>' +
-        '<g class="flame flame-b"><rect x="32" y="34" width="8" height="38" fill="#B23A2E"/><rect x="40" y="22" width="8" height="50" fill="#ff5a1f"/><rect x="40" y="34" width="8" height="24" fill="#F0C33C"/></g>' +
-        '<g class="flame flame-c"><rect x="56" y="22" width="8" height="42" fill="#B23A2E"/><rect x="64" y="12" width="8" height="52" fill="#ff5a1f"/><rect x="64" y="26" width="8" height="26" fill="#F0C33C"/></g>' +
-        '<g class="flame flame-d"><rect x="80" y="34" width="8" height="40" fill="#B23A2E"/><rect x="88" y="24" width="8" height="50" fill="#ff5a1f"/><rect x="88" y="36" width="8" height="24" fill="#F0C33C"/></g>' +
-        '<g class="flame flame-e"><rect x="96" y="54" width="8" height="32" fill="#B23A2E"/><rect x="88" y="46" width="8" height="40" fill="#ff5a1f"/><rect x="88" y="56" width="8" height="20" fill="#F0C33C"/></g>' +
+        '<g class="flame flame-a"><path d="M0 102V72H8V58H16V48H24V38H32V54H24V70H16V102Z" fill="#ef3d1f"/><path d="M8 96V72H16V60H24V50H24V78H16V96Z" fill="#ff5a1f"/></g>' +
+        '<g class="flame flame-b"><path d="M24 90V54H32V40H40V28H48V16H56V44H48V58H40V90Z" fill="#ef3d1f"/><path d="M32 84V58H40V46H48V32H48V74H40V84Z" fill="#ff5a1f"/><path d="M40 78V58H48V48H48V70Z" fill="#ffd24a"/></g>' +
+        '<g class="flame flame-c"><path d="M48 84V32H56V18H64V0H72V14H80V30H88V84Z" fill="#ef3d1f"/><path d="M56 80V36H64V24H72V16H72V38H80V80Z" fill="#ff5a1f"/><path d="M64 76V40H72V30H72V68Z" fill="#ffd24a"/></g>' +
+        '<g class="flame flame-d"><path d="M72 90V54H80V40H88V28H96V16H104V44H96V58H88V90Z" fill="#ef3d1f"/><path d="M80 84V58H88V46H96V32H96V74H88V84Z" fill="#ff5a1f"/><path d="M88 78V58H96V48H96V70Z" fill="#ffd24a"/></g>' +
+        '<g class="flame flame-e"><path d="M88 102V72H96V54H88V38H96V48H104V58H112V72H120V102Z" fill="#ef3d1f"/><path d="M96 96V78H104V50H104V60H112V72H120V96Z" fill="#ff5a1f"/></g>' +
       '</g>' +
-      '<g class="skull">' +
-        '<rect x="40" y="28" width="40" height="8" fill="#D9C9A8"/><rect x="32" y="36" width="56" height="8" fill="#D9C9A8"/><rect x="24" y="44" width="72" height="40" fill="#D9C9A8"/><rect x="32" y="84" width="56" height="24" fill="#D9C9A8"/>' +
-        '<rect x="40" y="108" width="8" height="8" fill="#D9C9A8"/><rect x="56" y="108" width="8" height="8" fill="#D9C9A8"/><rect x="72" y="108" width="8" height="8" fill="#D9C9A8"/>' +
-        '<rect x="52" y="28" width="16" height="4" fill="#F1E8D3"/><rect x="36" y="84" width="8" height="4" fill="#F1E8D3"/><rect x="76" y="84" width="8" height="4" fill="#F1E8D3"/>' +
-        '<rect x="36" y="56" width="16" height="24" fill="#3A2E1F"/><rect x="68" y="56" width="16" height="24" fill="#3A2E1F"/>' +
-        '<rect class="eye-core" x="40" y="64" width="8" height="8" fill="#ff5a1f"/><rect class="eye-core" x="72" y="64" width="8" height="8" fill="#ff5a1f"/>' +
-        '<rect x="56" y="80" width="8" height="8" fill="#3A2E1F"/><rect x="48" y="96" width="8" height="12" fill="#3A2E1F"/><rect x="64" y="96" width="8" height="12" fill="#3A2E1F"/>' +
-      '</g>' +
+      '<g class="skull">' + skullRects + '</g>' +
     '</svg>';
 }
 
