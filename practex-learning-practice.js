@@ -383,12 +383,19 @@ function skullSvgMarkup(){
   var CELL = 7, GRID_X = 8, GRID_Y = 18;
   var REMOVED_GRID_CELLS = { '2-14':1, '2-15':1, '3-15':1, '4-15':1 };
   var cols = REFERENCE_GRID[0].length, rows = REFERENCE_GRID.length;
+  /* Adjacent same-size rects that only just touch edge-to-edge show faint seams at
+     small render sizes (anti-aliasing sampling right at the shared boundary) —
+     reads as a visible grid instead of one solid shape. Padding each cell slightly
+     past its true edge makes neighboring cells overlap a hair instead of exactly
+     touching, which erases the seams; imperceptible at this scale since it's under
+     10% of a single cell. */
+  var OVERLAP = 0.6;
   var skullRects = '';
   for (var c = 0; c < cols; c++) {
     for (var r = 0; r < rows; r++) {
       var cell = REFERENCE_GRID[rows - 1 - r][c];
       if (cell === '.' || REMOVED_GRID_CELLS[c + '-' + r]) continue;
-      skullRects += '<rect x="' + (GRID_X + r * CELL) + '" y="' + (GRID_Y + c * CELL) + '" width="' + CELL + '" height="' + CELL + '" fill="' + (cell === 'W' ? '#f8f7f0' : '#242023') + '"/>';
+      skullRects += '<rect x="' + (GRID_X + r * CELL) + '" y="' + (GRID_Y + c * CELL) + '" width="' + (CELL + OVERLAP) + '" height="' + (CELL + OVERLAP) + '" fill="' + (cell === 'W' ? '#f8f7f0' : '#242023') + '"/>';
     }
   }
   return '<svg viewBox="0 0 120 146" aria-hidden="true" shapeRendering="crispEdges">' +
