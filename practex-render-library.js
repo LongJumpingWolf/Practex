@@ -1065,6 +1065,22 @@ function renderSidebar(){
     '<button class="sidebar-gear-btn' + (state.view === 'addsource' ? ' active' : '') + '" data-action="set-view" data-view="addsource" title="Add source" aria-label="Add source">' + icon('folder-plus',16) + '</button>' +
     '<button class="sidebar-gear-btn" data-action="open-settings" title="Settings" aria-label="Settings">' + icon('settings',16) + '</button></div>';
 
+  /* Book-scoped indicator — while drilled into one book on the shelf, buildTree()
+     silently filters the whole "Subjects & chapters" list down to just that book
+     (see its sourceFilter comment). That's easy to miss, especially since the tree
+     looks structurally identical either way — a real "wait, where did the rest of
+     my library go?" trap. This ribbon is the one visual signal that what's below
+     it isn't the whole library, colored to match that book's own established color
+     (same one its chapter card uses on Book Shelf), and doubles as a quick exit
+     back to the full tree since it reuses the same clear-book-path action the
+     breadcrumb link already does. */
+  var inBookScope = state.view === 'bookshelf' && state.bookshelfActiveSource;
+  if (inBookScope) {
+    html += '<div class="book-scope-banner" data-action="clear-book-path" style="background:' + colorForSource(state.bookshelfActiveSource) + ';" title="Showing only ' + escapeHtml(state.bookshelfActiveSource) + ' — click to see your whole library again">' +
+      icon('bookmark',13) + '<span>Only showing <strong>' + escapeHtml(state.bookshelfActiveSource) + '</strong></span>' +
+      '</div>';
+  }
+
   html += renderSyncStatusPill();
 
   html += '<div class="nav-tabs">' +
