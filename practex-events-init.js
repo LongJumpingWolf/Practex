@@ -17,6 +17,49 @@ function bindEvents(){
       if (newInput) { newInput.focus(); newInput.setSelectionRange(cursorPos, cursorPos); }
     });
   }
+
+  /* Gate screen's custom time input — two 2-digit segments, typing the 2nd digit of
+     minutes auto-advances into seconds (a plain HTML input can't do that on its own,
+     hence the manual focus juggling here rather than just letting the browser handle
+     it, same reasoning as globalSearchInput above). */
+  var gateMm = document.getElementById('gateMmInput');
+  var gateSs = document.getElementById('gateSsInput');
+  function commitGateTime(focusTarget, cursorPos){
+    var s = state.session;
+    if (!s) return;
+    var mmVal = parseInt((document.getElementById('gateMmInput')||{}).value || '0', 10) || 0;
+    var ssVal = parseInt((document.getElementById('gateSsInput')||{}).value || '0', 10) || 0;
+    var total = mmVal * 60 + ssVal;
+    if (total > 0) {
+      s.timePerQ = total;
+      try { localStorage.setItem('practex_time_per_q', String(total)); } catch(e) {}
+    }
+    render();
+    var el = document.getElementById(focusTarget);
+    if (el) { el.focus(); if (typeof cursorPos === 'number') el.setSelectionRange(cursorPos, cursorPos); }
+  }
+  if (gateMm) {
+    gateMm.addEventListener('input', function(e){
+      var digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 2);
+      e.target.value = digits;
+      var advance = digits.length === 2; /* 2 digits typed — hand off to seconds, matching a normal OTP-style time input */
+      commitGateTime(advance ? 'gateSsInput' : 'gateMmInput', advance ? 0 : digits.length);
+    });
+  }
+  if (gateSs) {
+    gateSs.addEventListener('input', function(e){
+      var digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 2);
+      if (parseInt(digits || '0', 10) > 59) digits = '59';
+      e.target.value = digits;
+      commitGateTime('gateSsInput', digits.length);
+    });
+    gateSs.addEventListener('keydown', function(e){
+      if (e.key === 'Backspace' && !e.target.value) {
+        var mmEl = document.getElementById('gateMmInput');
+        if (mmEl) { mmEl.focus(); mmEl.setSelectionRange(mmEl.value.length, mmEl.value.length); }
+      }
+    });
+  }
 }
 
 async function onClick(e){
@@ -973,6 +1016,33 @@ async function onClick(e){
     return;
   }
   if (action === 'leave-practice') { requestLeavePractice(); return; }
+
+  if (action === 'set-gate-time-chip') {
+    var s4 = state.session;
+    if (!s4) return;
+    s4.timePerQ = parseInt(el.getAttribute('data-secs'), 10) || 0;
+    try { localStorage.setItem('practex_time_per_q', String(s4.timePerQ)); } catch(e) {}
+    render();
+    return;
+  }
+  if (action === 'toggle-gate-autoskull') {
+    var s5 = state.session;
+    if (!s5) return;
+    s5.autoSkullEnabled = !s5.autoSkullEnabled;
+    try { localStorage.setItem('practex_auto_skull', s5.autoSkullEnabled ? '1' : '0'); } catch(e) {}
+    render();
+    return;
+  }
+  if (action === 'dismiss-gate-screen') {
+    var s6 = state.session;
+    if (!s6) return;
+    s6.awaitingStart = false;
+    s6.timerStartedAt = null; /* forces startQuestionTimerIfNeeded() to treat this as a fresh countdown for whichever question is current, whether that's genuinely Q1 or a resumed mid-test question */
+    s6.timerFrozenPct = null;
+    persistLiveSessionSync(); /* state.pausedSession is already null by now (reconciled into state.session on arrival) — persistPausedSessionSync() would be a no-op here; this is the live-session key that actually covers "mid-question, tab still open" durability */
+    render();
+    return;
+  }
   if (action === 'pause-and-leave') {
     var targetUrl = pendingNavTargetUrl(); /* compute before clearing state.session below, since it reads state.pendingNav, not state.session */
     state.pausedSession=currentSessionSnapshot();
@@ -1197,26 +1267,7 @@ async function onClick(e){
     var skullId = el.getAttribute('data-id');
     var m3 = state.mcqs.find(function(x){ return x.id === skullId; });
     if (!m3) return;
-    if (!s3.skulledPositions) s3.skulledPositions = {};
-    if (s3.skulledPositions[s3.index]) return; /* already actioned for this exact occurrence — this same id can still be skulled again on a LATER occurrence (that's the whole point, see below), just not twice for the one you're looking at right now */
-    s3.skulledPositions[s3.index] = true;
-    m3.skullCount = (m3.skullCount || 0) + 1;
-
-    /* Insert somewhere in the not-yet-reached tail of the queue. Leaving at least one
-       real question of breathing room (s3.index + 2, not +1) means it never lands as
-       literally the very next question either — that would feel just as anticipated
-       as always-at-the-end did, only one step removed. Falls back to a plain append
-       only when there genuinely isn't enough queue left to randomize into (e.g.
-       skulling the last question in the session) — extending "Finish session" back
-       into "Next question" is handled automatically by advanceAfterReveal(), which
-       always re-reads s.ids.length fresh. */
-    var remainingStart = s3.index + 2;
-    if (remainingStart < s3.ids.length) {
-      var insertAt = remainingStart + Math.floor(Math.random() * (s3.ids.length - remainingStart + 1));
-      s3.ids.splice(insertAt, 0, skullId);
-    } else {
-      s3.ids.push(skullId);
-    }
+    if (!performAutoSkull(m3, s3)) return; /* already actioned for this exact occurrence — this same id can still be skulled again on a LATER occurrence (that's the whole point), just not twice for the one you're looking at right now. performAutoSkull() also does the actual re-queue-at-a-random-point work, and counts toward s.autoSkullCount either way it's triggered (manual button or auto-on-mistake/timeout) — see its own comment in practex-learning-practice.js. */
 
     render();
     saveLibrary(); /* fire-and-forget, same convention as bookmark-current just above */
@@ -1413,6 +1464,11 @@ async function showApp(){
    right before the very first render() on whichever page we're actually on. */
 function bootCurrentPage(){
   try { state.skullModeActive = localStorage.getItem('practex_skull_mode') === '1'; } catch(e) {} /* device-local display preference — same lightweight pattern as practex_landing_view, read once here regardless of which page/branch below runs */
+  try {
+    var storedSecs = parseInt(localStorage.getItem('practex_time_per_q'), 10);
+    state.defaultTimePerQ = (!isNaN(storedSecs) && storedSecs >= 0) ? storedSecs : 60; /* seconds; 0 = no limit. Only the DEFAULT offered on a fresh test's gate screen — each session's own timePerQ, once chosen, travels with that session regardless of what this default changes to afterward. */
+  } catch(e) { state.defaultTimePerQ = 60; }
+  try { state.defaultAutoSkull = localStorage.getItem('practex_auto_skull') !== '0'; } catch(e) { state.defaultAutoSkull = true; } /* on by default */
   var onPracticePage = /practice\.html/.test(window.location.pathname);
   if (onPracticePage) {
     var hasSession = goToPracticeIfSessionPending(); /* navigates away itself if there's nothing to resume — see practex-learning-practice.js */

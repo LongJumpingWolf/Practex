@@ -483,6 +483,12 @@ function normalizePausedSessionForResume(pausedSession){
   if (!Array.isArray(restored.undoStack)) restored.undoStack = [];
   if (!restored.stats) restored.stats = { correct:0, wrong:0, misconception:0, learning:0, mastered:0, noconcept:0 };
   if (restored.shortAnswerCorrect === undefined) restored.shortAnswerCorrect = null;
+  if (typeof restored.timePerQ !== 'number') restored.timePerQ = 0; /* older paused sessions from before the timer existed — treat as "no limit" rather than guessing a duration */
+  if (typeof restored.autoSkullEnabled !== 'boolean') restored.autoSkullEnabled = true;
+  if (typeof restored.autoSkullCount !== 'number') restored.autoSkullCount = 0;
+  restored.timerStartedAt = null; /* never trust a wall-clock reference from before the page reloaded — the gate screen always restarts the current question's timer fresh on resume, see startQuestionTimerFor() */
+  restored.timerFrozenPct = null;
+  restored.timedOut = false;
   return restored;
 }
 
@@ -508,6 +514,12 @@ function goToPracticeIfSessionPending(){
     window.location.href = 'library.html';
     return false;
   }
+  /* Always true on arrival, whether this was a brand-new session (already true, this
+     is a no-op) or a resume of one that was mid-question when paused — every arrival
+     at practice.html shows the "ready to start / continue where you left off" gate
+     screen first, never drops straight back into a live countdown the person wasn't
+     looking at when they left. */
+  restored.awaitingStart = true;
   state.session = restored;
   state.pausedSession = null;
   state.view = 'practice';
@@ -561,7 +573,20 @@ function startPractice(ids, planKey){
     revealedAt: null,            /* silent timing — when it was revealed, so time-on-explanation can be measured */
     lastTimeToAnswerMs: null,
     planKey: planKey || null, /* tags this session as belonging to a study plan — advanceAfterReveal() checks this to update plan progress as each question is answered */
-    originContext: currentNavOriginContext() /* where this session was started from — pendingNavTargetUrl() falls back to this on exit so leaving a test returns to where it actually began, not always the bare library root */
+    originContext: currentNavOriginContext(), /* where this session was started from — pendingNavTargetUrl() falls back to this on exit so leaving a test returns to where it actually began, not always the bare library root */
+    /* Per-question timer + auto-skull-on-mistake — configured on the gate screen
+       (renderPracticeGateScreen) before the first question, and re-editable there
+       again on every resume. Chosen once per session, not a global toggle — a plan
+       session or a quick 5-question drill might legitimately want different timing
+       than a full mock test. Seeded from the device's last-used defaults so the
+       gate screen doesn't start blank every time. */
+    timePerQ: state.defaultTimePerQ || 0,
+    autoSkullEnabled: state.defaultAutoSkull !== false,
+    autoSkullCount: 0, /* this session's own tally, shown on the resume/gate screen — separate from the question's persisted skullCount, which is lifetime across all sessions */
+    timerStartedAt: null,
+    timerFrozenPct: null,
+    timedOut: false,
+    awaitingStart: true /* gates renderPractice() — see the big comment on goToPracticeIfSessionPending() for why this is also force-set true on every resume, not just here */
   };
   /* Chapter 4 (MPA): practice now lives on its own page, so a freshly-started session
      has to survive the navigation the same way a resumed one does — there is no
@@ -611,8 +636,64 @@ function openQuestionOverview(){
   showRichModal(html, 'narrow');
 }
 
+/* The screen shown before the first question of a fresh session, AND again every
+   time a paused session is resumed (see the comment on goToPracticeIfSessionPending()
+   for why both funnel through the same s.awaitingStart flag). Lets the person set —
+   or, on a resume, re-adjust — per-question timing and auto-skull before actually
+   looking at a question, and on a resume shows how far they'd already gotten. */
+function renderPracticeGateScreen(){
+  var s = state.session;
+  var isResume = s.results.length > 0;
+  var mm = Math.floor((s.timePerQ||0) / 60);
+  var ss = (s.timePerQ||0) % 60;
+  var chipSecs = [30, 60, 120];
+  var matchesChip = chipSecs.indexOf(s.timePerQ) !== -1;
+
+  var html = '<div class="practice-wrap"><div class="card gate-card">';
+  html += '<h2 class="serif" style="margin:0 0 4px;">' + (isResume ? 'Continue where you left off?' : 'Ready to start?') + '</h2>';
+  html += '<div class="view-sub" style="margin-bottom:' + (isResume ? '18' : '22') + 'px;">' + s.ids.length + ' question' + (s.ids.length===1?'':'s') + (isResume ? ' — question ' + (s.index+1) + ' of ' + s.ids.length : '') + '</div>';
+
+  if (isResume) {
+    html += '<div class="gate-progress">' +
+      '<div class="gate-row-label">Progress so far</div>' +
+      '<div class="gate-progress-grid">' +
+        '<div class="gate-progress-cell"><div class="gate-progress-num">' + s.results.length + '</div><div class="gate-progress-lbl">Attempted</div></div>' +
+        '<div class="gate-progress-cell right"><div class="gate-progress-num">' + s.stats.correct + '</div><div class="gate-progress-lbl">Right</div></div>' +
+        '<div class="gate-progress-cell wrong"><div class="gate-progress-num">' + s.stats.wrong + '</div><div class="gate-progress-lbl">Wrong</div></div>' +
+        '<div class="gate-progress-cell skulled"><div class="gate-progress-num">' + (s.autoSkullCount||0) + '</div><div class="gate-progress-lbl">Skulled</div></div>' +
+      '</div></div>';
+  }
+
+  html += '<div class="config-row"><div class="gate-row-label">Time per question</div><div class="time-chips">' +
+    [30,60,120].map(function(secs){
+      var label = secs === 30 ? '30s' : (secs/60) + ' min';
+      return '<button type="button" class="time-chip' + (s.timePerQ===secs?' active':'') + '" data-action="set-gate-time-chip" data-secs="' + secs + '">' + label + '</button>';
+    }).join('') +
+    '<button type="button" class="time-chip none' + (s.timePerQ===0?' active':'') + '" data-action="set-gate-time-chip" data-secs="0">No limit</button>' +
+    '</div></div>';
+
+  html += '<div class="config-row"><div class="gate-row-label">Or set a custom time</div><div class="mmss-wrap">' +
+    '<div class="mmss-box' + (!matchesChip && s.timePerQ>0 ? ' active' : '') + '">' +
+      '<input type="text" id="gateMmInput" inputmode="numeric" maxlength="2" placeholder="00" value="' + (mm ? String(mm).padStart(2,'0') : '') + '" aria-label="Minutes">' +
+      '<span class="colon">:</span>' +
+      '<input type="text" id="gateSsInput" inputmode="numeric" maxlength="2" placeholder="00" value="' + (ss ? String(ss).padStart(2,'0') : '') + '" aria-label="Seconds">' +
+    '</div><span class="mmss-caption">mm : ss</span></div></div>';
+
+  html += '<div class="config-row"><div class="gate-row-label">On a mistake or timeout</div>' +
+    '<div class="autoskull-row">' +
+      '<button type="button" class="skull-fire-btn' + (s.autoSkullEnabled ? '' : ' is-off') + '" data-action="toggle-gate-autoskull" style="width:30px;" aria-pressed="' + (s.autoSkullEnabled?'true':'false') + '" title="' + (s.autoSkullEnabled ? 'Auto-skull is on — click to turn off' : 'Auto-skull is off — click to turn on') + '">' + skullSvgMarkup() + '</button>' +
+      '<div class="autoskull-text">Auto-skull the question<div class="sub">Marked wrong questions get queued for extra practice automatically</div></div>' +
+      '<span class="onoff-pill ' + (s.autoSkullEnabled?'on':'off') + '">' + (s.autoSkullEnabled?'ON':'OFF') + '</span>' +
+    '</div></div>';
+
+  html += '<button class="btn btn-primary gate-start-btn" data-action="dismiss-gate-screen">' + (isResume ? 'Continue test' : 'Start test') + '</button>';
+  html += '</div></div>';
+  return html;
+}
+
 function renderPractice(){
   var s = state.session;
+  if (s.awaitingStart) return renderPracticeGateScreen();
   var isReviewing = s.viewIndex < s.index;
   var m = state.mcqs.find(function(x){ return x.id === s.ids[s.viewIndex]; });
   if (!m) { state.view = 'summary'; return renderSummary(); }
@@ -647,14 +728,16 @@ function renderPractice(){
   /* New question types (match/sequence/cutoff/mnemonic) branch out here, before the
      bubble-MCQ/short-answer card markup below. Each owns its own answer-sheet body but
      shares the header/progress bar above and the qmeta/reveal-panel/notes conventions
-     via the shared helpers passed in. */
-  if (m.type === 'match')    { html += renderMatchBody(m, s, isReviewing, result, viewRevealed); html += '</div>'; return html; }
-  if (m.type === 'sequence') { html += renderSequenceBody(m, s, isReviewing, result, viewRevealed); html += '</div>'; return html; }
-  if (m.type === 'cutoff')   { html += renderCutoffBody(m, s, isReviewing, result, viewRevealed); html += '</div>'; return html; }
-  if (m.type === 'mnemonic') { html += renderMnemonicBody(m, s, isReviewing, result, viewRevealed); html += '</div>'; return html; }
+     via the shared helpers passed in. Computed once here (rather than once per branch)
+     since m/s/isReviewing are already in scope and identical either way. */
+  var timerBarHtml = renderTimerBar(m, s, isReviewing);
+  if (m.type === 'match')    { html += renderMatchBody(m, s, isReviewing, result, viewRevealed, timerBarHtml); html += '</div>'; return html; }
+  if (m.type === 'sequence') { html += renderSequenceBody(m, s, isReviewing, result, viewRevealed, timerBarHtml); html += '</div>'; return html; }
+  if (m.type === 'cutoff')   { html += renderCutoffBody(m, s, isReviewing, result, viewRevealed, timerBarHtml); html += '</div>'; return html; }
+  if (m.type === 'mnemonic') { html += renderMnemonicBody(m, s, isReviewing, result, viewRevealed, timerBarHtml); html += '</div>'; return html; }
   if (m.type === 'card')     { html += renderCardBody(m, s, isReviewing, result, viewRevealed); html += '</div>'; return html; }
 
-  html += '<div class="card answer-sheet">';
+  html += '<div class="card answer-sheet">' + timerBarHtml;
   html += '<div class="qmeta"><span class="qnum mono">Q.' + (s.viewIndex+1) + '</span><div class="qmeta-tags">' +
     '<span class="source-pill" style="background:' + colorForSource(m.source) + '">' + escapeHtml(m.source) + '</span>' +
     m.tags.map(function(t){ return '<span class="tag-pill">' + escapeHtml(t) + '</span>'; }).join('') +
@@ -870,7 +953,7 @@ function shuffledIndices(n, seedKey){
 }
 
 /* ---------------- MATCH ---------------- */
-function renderMatchBody(m, s, isReviewing, result, viewRevealed){
+function renderMatchBody(m, s, isReviewing, result, viewRevealed, timerBarHtml){
   var viewSel = isReviewing ? (result ? result.selected : null) : s.selected;
   if (!isReviewing && !viewSel) {
     viewSel = { links: {}, rightOrder: shuffledIndices(m.pairs.length, m.id || 'match'), pendingLeft: null };
@@ -879,7 +962,7 @@ function renderMatchBody(m, s, isReviewing, result, viewRevealed){
   var rightOrder = viewSel && viewSel.rightOrder ? viewSel.rightOrder : shuffledIndices(m.pairs.length, m.id || 'match');
   var links = (viewSel && viewSel.links) || {};
 
-  var html = '<div class="card answer-sheet">';
+  var html = '<div class="card answer-sheet">' + timerBarHtml;
   html += qMetaAndStemHtml(m, s, m.stem);
   html += '<div class="multi-select-hint">' + icon('check-circle',13) + ' Tap an item on the left, then try any match on the right — it stays open to change until you tap a different left item or tap it again.</div>';
   html += '<div class="match-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px;">';
@@ -958,7 +1041,7 @@ function renderMatchBody(m, s, isReviewing, result, viewRevealed){
 }
 
 /* ---------------- SEQUENCE ---------------- */
-function renderSequenceBody(m, s, isReviewing, result, viewRevealed){
+function renderSequenceBody(m, s, isReviewing, result, viewRevealed, timerBarHtml){
   var viewSel = isReviewing ? (result ? result.selected : null) : s.selected;
   if (!isReviewing && !viewSel) {
     viewSel = shuffledIndices(m.steps_correct_order.length, m.id || 'sequence');
@@ -968,7 +1051,7 @@ function renderSequenceBody(m, s, isReviewing, result, viewRevealed){
   var interactive = !viewRevealed && !isReviewing;
   var allCorrect = order.length && order.every(function(origIdx, pos){ return origIdx === pos; });
 
-  var html = '<div class="card answer-sheet">';
+  var html = '<div class="card answer-sheet">' + timerBarHtml;
   html += qMetaAndStemHtml(m, s, m.stem);
   html += '<div class="multi-select-hint">' + icon('check-circle',13) + (interactive ? ' Drag to reorder, or use the arrows' : '') + '</div>';
   /* data-step-id is the STABLE identity FLIP animation keys off of — origIdx never
@@ -1015,14 +1098,14 @@ function renderSequenceBody(m, s, isReviewing, result, viewRevealed){
 }
 
 /* ---------------- CUTOFF ---------------- */
-function renderCutoffBody(m, s, isReviewing, result, viewRevealed){
+function renderCutoffBody(m, s, isReviewing, result, viewRevealed, timerBarHtml){
   var viewSel = isReviewing ? (result ? result.selected : null) : s.selected;
   if (!isReviewing && (viewSel === null || viewSel === undefined)) {
     viewSel = (m.range[0] + m.range[1]) / 2;
     s.selected = viewSel;
   }
 
-  var html = '<div class="card answer-sheet">';
+  var html = '<div class="card answer-sheet">' + timerBarHtml;
   html += qMetaAndStemHtml(m, s, m.stem + (m.testValue !== undefined ? '' : ''));
   if (m.testValue !== undefined) {
     html += '<div class="passage-box">A value of <b class="mono">' + m.testValue + '</b> is given. Drag the slider to where you\'d classify it, then check.</div>';
@@ -1068,12 +1151,12 @@ function resolveMnemonicTestIndex(m, s){
 }
 
 /* ---------------- MNEMONIC ---------------- */
-function renderMnemonicBody(m, s, isReviewing, result, viewRevealed){
+function renderMnemonicBody(m, s, isReviewing, result, viewRevealed, timerBarHtml){
   var viewSel = isReviewing ? (result ? result.selected : null) : s.selected;
   var resolvedIdx = (isReviewing && result && typeof result.resolvedMnemonicIndex === 'number') ? result.resolvedMnemonicIndex : resolveMnemonicTestIndex(m, s);
   var testLetter = m.letters[resolvedIdx];
 
-  var html = '<div class="card answer-sheet">';
+  var html = '<div class="card answer-sheet">' + timerBarHtml;
   html += qMetaAndStemHtml(m, s, m.stem);
   html += '<div class="mnem-grid" style="display:flex;flex-wrap:wrap;gap:9px;margin:14px 0;">';
   m.letters.forEach(function(l, i){
@@ -1198,8 +1281,93 @@ function evaluateCorrect(m, selected){
   return a === b;
 }
 
+/* ---------------- Per-question timer ----------------
+   Deliberately NOT driven by a full render() every tick — that would rebuild the
+   whole practice DOM every second, which is wasteful and (per the searchInput
+   precedent in bindEvents()) risks fighting focus/animation smoothness for no
+   reason. Instead one interval directly mutates the bar's own width/class each
+   tick, and only calls into the real render pipeline at the two moments that
+   actually change state: the question changing, and timeout. */
+var _qTimerIntervalId = null;
+var _qTimerKey = null; /* "<sessionIndex>:<mcqId>" the running interval currently belongs to — lets the render function detect "this is a different question than what's ticking" without needing a separate explicit stop/start call at every advance site */
+
+function stopQuestionTimer(){
+  if (_qTimerIntervalId) clearInterval(_qTimerIntervalId);
+  _qTimerIntervalId = null;
+  _qTimerKey = null;
+}
+
+function tickQuestionTimer(){
+  var s = state.session;
+  if (!s || s.revealed || s.awaitingStart) { stopQuestionTimer(); return; }
+  var fillEl = document.getElementById('qTimerFill');
+  if (!fillEl) { stopQuestionTimer(); return; } /* navigated away from the live question view entirely (review, overview, back to library) */
+  var elapsed = (Date.now() - s.timerStartedAt) / 1000;
+  var remaining = Math.max(0, s.timePerQ - elapsed);
+  var pct = (remaining / s.timePerQ) * 100;
+  fillEl.style.width = pct + '%';
+  fillEl.classList.toggle('danger', remaining > 0 && remaining <= 10);
+  if (remaining <= 0) {
+    stopQuestionTimer();
+    onQuestionTimeout();
+  }
+}
+
+/* Renders the bar itself AND, as a side effect, makes sure exactly one interval is
+   running for whichever question is actually current — starting a fresh one the
+   moment it notices s.index/mcq.id changed since the last tick, stopping it once
+   revealed. Called from inside each question type's own card markup (right after
+   its opening <div class="card ...">), so "on top of the question's own container"
+   falls out naturally rather than needing a separate fixed-position overlay. */
+function renderTimerBar(m, s, isReviewing){
+  if (isReviewing || m.type === 'card' || !s.timePerQ) { stopQuestionTimer(); return ''; }
+  var key = s.index + ':' + m.id;
+  if (s.revealed) {
+    stopQuestionTimer();
+    var frozenPct = (s.timerFrozenPct != null) ? s.timerFrozenPct : 0;
+    return '<div class="q-timer-track"><div class="q-timer-fill frozen" style="width:' + frozenPct + '%;"></div></div>';
+  }
+  if (_qTimerKey !== key) {
+    stopQuestionTimer();
+    if (!s.timerStartedAt) s.timerStartedAt = Date.now(); /* only (re)stamp if not already running for this exact question — avoids restarting the clock on every incidental re-render */
+    _qTimerKey = key;
+    _qTimerIntervalId = setInterval(tickQuestionTimer, 500);
+  }
+  var elapsed0 = (Date.now() - s.timerStartedAt) / 1000;
+  var remaining0 = Math.max(0, s.timePerQ - elapsed0);
+  var pct0 = (remaining0 / s.timePerQ) * 100;
+  return '<div class="q-timer-track"><div class="q-timer-fill' + (remaining0 <= 10 ? ' danger' : '') + '" id="qTimerFill" style="width:' + pct0 + '%;"></div></div>';
+}
+
+/* Forces the current question to reveal as wrong, the same way a real (but empty)
+   manual answer would — see evaluateCorrect(): selected === null/undefined always
+   grades false for every gradable type except mnemonic/short-answer, which self-grade
+   via s.shortAnswerCorrect instead, so that's set directly for those. Actual skulling
+   and the "you ran out of time" vs "you got it wrong" wording both happen generically
+   in advanceAfterReveal() / the reveal panel, not here — this function's only job is
+   making evaluateCorrect() land on false, uniformly, regardless of question type. */
+function onQuestionTimeout(){
+  var s = state.session;
+  if (!s || s.revealed || s.awaitingStart) return;
+  var m = state.mcqs.find(function(x){ return x.id === s.ids[s.index]; });
+  if (!m || m.type === 'card') return; /* card is ungraded — renderTimerBar() already refuses to run a timer for it, this is just a defensive second check */
+  if (m.isShortAnswer || m.type === 'mnemonic') { s.shortAnswerCorrect = false; }
+  else { s.selected = null; }
+  s.timedOut = true;
+  revealCurrent();
+}
+
 function revealCurrent(){
   var s = state.session;
+  if (s.timePerQ) {
+    if (s.timedOut) {
+      s.timerFrozenPct = 0;
+    } else {
+      var elapsed = (Date.now() - (s.timerStartedAt || Date.now())) / 1000;
+      s.timerFrozenPct = Math.max(0, Math.min(100, (Math.max(0, s.timePerQ - elapsed) / s.timePerQ) * 100));
+    }
+  }
+  stopQuestionTimer();
   s.revealed = true;
   s.lastTimeToAnswerMs = s.questionShownAt ? (Date.now() - s.questionShownAt) : null; /* silent timing — how long they deliberated before checking */
   s.revealedAt = Date.now();
@@ -1254,6 +1422,31 @@ function expectedAnswerStrFor(m, resolvedMnemonicIndex){
   return (m.answer && m.answer[0]) || 'UNKNOWN'; // standard MCQ types — unchanged behavior, m.answer is always present here
 }
 
+/* The actual skull re-queue mechanics, shared by the manual skull-question button
+   (events-init.js) and the auto-skull-on-mistake/timeout hook in advanceAfterReveal()
+   below. See the manual handler's own comment for why the re-queue lands at a random
+   point at least one question ahead rather than predictably at the end or immediately
+   next. Returns true if it actually skulled something (false if this exact occurrence
+   was already skulled once already — the position-keyed guard is what allows the SAME
+   question to be skulled again on a genuinely later occurrence without this call
+   silently double-counting the one you're looking at right now). */
+function performAutoSkull(mcq, s){
+  if (!mcq || !s) return false;
+  if (!s.skulledPositions) s.skulledPositions = {};
+  if (s.skulledPositions[s.index]) return false;
+  s.skulledPositions[s.index] = true;
+  mcq.skullCount = (mcq.skullCount || 0) + 1;
+  s.autoSkullCount = (s.autoSkullCount || 0) + 1;
+  var remainingStart = s.index + 2;
+  if (remainingStart < s.ids.length) {
+    var insertAt = remainingStart + Math.floor(Math.random() * (s.ids.length - remainingStart + 1));
+    s.ids.splice(insertAt, 0, mcq.id);
+  } else {
+    s.ids.push(mcq.id);
+  }
+  return true;
+}
+
 async function advanceAfterReveal(){
   var s = state.session;
   var m = state.mcqs.find(function(x){ return x.id === s.ids[s.index]; });
@@ -1292,7 +1485,11 @@ async function advanceAfterReveal(){
   var cls = LearningEngine.classify(m);
   if (s.stats && s.stats[cls] !== undefined && m.type !== 'card') s.stats[cls]++;
   if (correct === true) s.stats.correct++;
-  if (correct === false) s.stats.wrong++;
+  var justAutoSkulled = false;
+  if (correct === false) {
+    s.stats.wrong++;
+    if (s.autoSkullEnabled) justAutoSkulled = performAutoSkull(m, s); /* "mistake" covers both a genuinely wrong pick and a forced-wrong timeout (onQuestionTimeout() sets selected/shortAnswerCorrect the same way a real wrong answer would) — evaluateCorrect() can't tell the two apart and doesn't need to */
+  }
 
   s.results.push({ id: m.id, correct: correct, selected: scoringSelected, resolvedMnemonicIndex: (m.type === 'mnemonic' ? resolveMnemonicTestIndex(m, s) : undefined) }); /* same reasoning — reviewing this question later should show what was actually chosen (and for mnemonic, which letter was actually tested at the time), not something re-derived fresh */
   bumpStreak();
@@ -1310,12 +1507,16 @@ async function advanceAfterReveal(){
   var justAutoSlept = m.autoSlept;
   if (justAutoSlept) m.autoSlept = false; // one-shot — don't re-toast on a future render
 
+  var wasTimedOut = s.timedOut;
   s.index++; s.selected = null; s.revealed = false; s.shortAnswerCorrect = null; s.viewIndex = s.index;
+  s.timerStartedAt = null; s.timerFrozenPct = null; s.timedOut = false; /* fresh countdown for whatever's next — renderTimerBar() re-stamps timerStartedAt the moment it notices the question changed */
   delete s.preRevealSelected; /* reset for whatever question comes next — this flag only ever applies to the one question it was captured for */
   s.questionShownAt = Date.now(); s.revealedAt = null; s.lastTimeToAnswerMs = null; /* start the clock fresh for whatever's next */
   if (s.index >= s.ids.length) { state.view = 'summary'; clearLiveSessionSync(); /* finished normally — this isn't an ungraceful exit, don't let it be adopted as a crash-recovery resume next load */ }
   render(); /* update the screen immediately — don't make the person wait on a network round trip just to see the next question */
   saveLibrary(); /* fire-and-forget in the background; it has its own error toast if it fails */
+  if (justAutoSkulled) showToast((wasTimedOut ? '⏱️ Time\'s up — marked wrong' : '✗ Marked wrong') + ' and skulled for extra practice.');
+  else if (wasTimedOut) showToast('⏱️ Time\'s up — marked wrong.');
   if (justAutoSlept) showToast('That question is asleep now — ' + (state.autoSleepStreak||4) + ' correct in a row. Wake it anytime from its row in the library.');
 }
 

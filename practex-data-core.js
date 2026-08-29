@@ -69,7 +69,9 @@ var state = {
   studyPlans: {}, /* keyed by "subject::Name" or "source::Name" or "all" — see createStudyPlan()/planTodayTarget() for the full design. Requires the study_plans column added to user_settings — see STUDY_PLANS_MIGRATION.sql */
   bookCoverDraft: null, /* {source} while the "set cover" upload is in progress */
   bookshelfActiveSource: null, /* which book is currently drilled into on the shelf — null means showing the shelf grid itself */
-  skullModeActive: false /* browsing/practice lens that scopes the whole library down to only skull-marked questions — see buildTree(), startPractice(), and the sidebar Skull Mode toggle. Read from localStorage at boot in bootCurrentPage(); a device-local display preference, not synced cross-account. */
+  skullModeActive: false, /* browsing/practice lens that scopes the whole library down to only skull-marked questions — see buildTree(), startPractice(), and the sidebar Skull Mode toggle. Read from localStorage at boot in bootCurrentPage(); a device-local display preference, not synced cross-account. */
+  defaultTimePerQ: 60, /* seconds offered by default on a fresh test's gate screen — read from localStorage at boot, see bootCurrentPage() */
+  defaultAutoSkull: true /* same — the gate screen's auto-skull toggle default */
 };
 
 /* ================= Local-first data mirror =================
