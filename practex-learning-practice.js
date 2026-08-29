@@ -701,6 +701,8 @@ function renderPractice(){
   var viewSelected = isReviewing ? (result ? result.selected : null) : s.selected;
   var viewRevealed = isReviewing ? true : s.revealed;
   var pct = Math.round((s.index / s.ids.length) * 100);
+  var nextM = state.mcqs.find(function(x){ return x.id === s.ids[s.index+1]; });
+  var nextLabelForToolbar = nextM && nextM.learning ? LearningEngine.classify(nextM) : (nextM ? 'new' : null);
 
   var html = '<div class="practice-wrap">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap;">' +
@@ -709,6 +711,7 @@ function renderPractice(){
     '<button class="btn btn-ghost btn-sm" data-action="practice-prev"' + (s.viewIndex > 0 ? '' : ' disabled') + ' title="Previous question">' + icon('chevron-left',14) + '</button>' +
     '<button class="btn btn-ghost btn-sm" data-action="practice-next"' + (s.viewIndex < s.index ? '' : ' disabled') + ' title="Next question">' + icon('chevron-right',14) + '</button>' +
     '<button class="btn btn-ghost btn-sm" data-action="open-question-overview" title="Question overview">' + icon('layout-grid',14) + ' Overview</button>' +
+    '<span class="mono" style="font-size:12px;color:var(--ink-soft);margin-left:2px;"' + (nextLabelForToolbar ? ' title="Next: ' + escapeHtml(nextLabelForToolbar) + '"' : '') + '>' + (s.index+1) + ' / ' + s.ids.length + '</span>' +
     (!isReviewing && s.undoStack && s.undoStack.length ? '<button class="undo-btn icon-inline" data-action="undo-answer">' + icon('undo',13) + ' Undo last answer</button>' : '') +
     '</div>' +
     bookmarkButton(m) +
@@ -718,12 +721,6 @@ function renderPractice(){
     html += '<div class="reviewing-banner">' + icon('layout-grid',14) + ' Reviewing question ' + (s.viewIndex+1) + ' of ' + s.ids.length + ' — already answered.' +
       '<button class="link-btn" data-action="jump-to-current">Jump to current question ' + icon('chevron-right',12) + '</button></div>';
   }
-
-  var nextM = state.mcqs.find(function(x){ return x.id === s.ids[s.index+1]; });
-  var nextLabel = nextM && nextM.learning ? LearningEngine.classify(nextM) : (nextM ? 'new' : null);
-  html += '<div class="practice-progress"><div class="progress-track"><div class="progress-fill" style="width:' + pct + '%;"></div></div>' +
-    '<div class="progress-label">' + (s.index+1) + ' / ' + s.ids.length +
-    (nextLabel ? '<br>Next: ' + escapeHtml(nextLabel) : '') + '</div></div>';
 
   /* New question types (match/sequence/cutoff/mnemonic) branch out here, before the
      bubble-MCQ/short-answer card markup below. Each owns its own answer-sheet body but
