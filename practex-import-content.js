@@ -1170,7 +1170,7 @@ function isMidSession(){ return state.view === 'practice' && !!state.session; }
    the caller can bail out instead of navigating immediately. */
 function guardNavigation(action, el){
   if (!isMidSession()) return false;
-  state.pendingNav = { action: action, view: el.getAttribute('data-view'), path: el.getAttribute('data-path') };
+  state.pendingNav = { action: action, view: el.getAttribute('data-view'), path: el.getAttribute('data-path'), subject: el.getAttribute('data-subject') };
   requestLeavePractice();
   return true;
 }
@@ -1215,7 +1215,11 @@ function pendingNavTargetUrl(){
   if (nav) {
     if (nav.action === 'set-view') return practexPageUrl('library.html?view=' + encodeURIComponent(nav.view || 'browse'));
     if (nav.action === 'open-dashboard') return practexPageUrl('library.html?view=dashboard');
-    if (nav.action === 'select-node' && nav.path) return practexPageUrl('library.html?view=browse&path=' + encodeURIComponent(nav.path));
+    if ((nav.action === 'select-node' || nav.action === 'view-node-questions') && nav.path) return practexPageUrl('library.html?view=browse&path=' + encodeURIComponent(nav.path));
+    if (nav.action === 'toggle-bookshelf') return practexPageUrl('library.html?view=bookshelf');
+    if (nav.action === 'clear-selection') return practexPageUrl('library.html?view=browse');
+    if (nav.action === 'start-queue-preview') return practexPageUrl('library.html?view=queuepreview');
+    if (nav.action === 'jump-subject' && nav.subject) return practexPageUrl('library.html?view=browse&path=' + encodeURIComponent(nav.subject));
   }
   /* No specific nav-link interrupted this exit (the person used Leave/Pause &
      leave directly) — fall back to wherever THIS session actually started from,

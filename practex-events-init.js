@@ -178,6 +178,7 @@ async function onClick(e){
   }
   if (action === 'open-settings') { openSettingsModal(); return; }
   if (action === 'toggle-bookshelf') {
+    if (guardNavigation(action, el)) return;
     /* Was a genuine toggle (go to shelf / leave shelf, same button either direction) —
        correct for the old small icon-button spot, but Book Shelf now sits as a plain
        peer tab next to "Library", so it should behave like one: always navigate TO
@@ -224,7 +225,7 @@ async function onClick(e){
   if (action === 'remove-book-cover') { removeBookCover(el.getAttribute('data-source')); return; }
   if (action === 'sign-out') { signOutUser(); return; }
   if (action === 'google-sign-in') { signInWithGoogle(); return; }
-  if (action === 'start-queue-preview') { state.view = 'queuepreview'; state.sidebarOpen = false; render(); return; }
+  if (action === 'start-queue-preview') { if (guardNavigation(action, el)) return; state.view = 'queuepreview'; state.sidebarOpen = false; render(); return; }
   if (action === 'start-due-session') {
     var dueIds = getLearningQueue(state.mcqs.map(function(m){return m.id;})); /* getLearningQueue() itself now filters trashedAt internally, protecting this regardless of what's passed in */
     requestStartPractice(dueIds, true);
@@ -266,6 +267,7 @@ async function onClick(e){
     render(); return;
   }
   if (action === 'view-node-questions') {
+    if (guardNavigation(action, el)) return;
     var key4 = el.getAttribute('data-path');
     state.selectedPath = key4.split('␟');
     if (!(state.view === 'bookshelf' && state.bookshelfActiveSource)) state.view = 'browse';
@@ -275,7 +277,7 @@ async function onClick(e){
     resetFolderFilters();
     render(); return;
   }
-  if (action === 'clear-selection') { state.view = 'browse'; state.selectedPath = null; state.forceList = false; resetFolderFilters(); state.sidebarOpen = false; render(); return; }
+  if (action === 'clear-selection') { if (guardNavigation(action, el)) return; state.view = 'browse'; state.selectedPath = null; state.forceList = false; resetFolderFilters(); state.sidebarOpen = false; render(); return; }
 
   if (action === 'toggle-source-filter') {
     var s = el.getAttribute('data-source');
@@ -1102,6 +1104,7 @@ async function onClick(e){
     return;
   }
   if (action === 'jump-subject') {
+    if (guardNavigation(action, el)) return;
     state.selectedPath=[el.getAttribute('data-subject')]; state.view='browse'; state.forceList=false; state.expanded[state.selectedPath.join('␟')]=true; resetFolderFilters(); render(); return;
   }
 
