@@ -734,7 +734,7 @@ function renderPractice(){
   if (m.type === 'mnemonic') { html += renderMnemonicBody(m, s, isReviewing, result, viewRevealed, timerBarHtml); html += '</div>'; return html; }
   if (m.type === 'card')     { html += renderCardBody(m, s, isReviewing, result, viewRevealed); html += '</div>'; return html; }
 
-  html += '<div class="card answer-sheet">' + timerBarHtml;
+  html += '<div class="card">' + timerBarHtml + '<div class="answer-sheet">';
   html += '<div class="qmeta"><span class="qnum mono">Q.' + (s.viewIndex+1) + '</span><div class="qmeta-tags">' +
     '<span class="source-pill" style="background:' + colorForSource(m.source) + '">' + escapeHtml(m.source) + '</span>' +
     m.tags.map(function(t){ return '<span class="tag-pill">' + escapeHtml(t) + '</span>'; }).join('') +
@@ -811,7 +811,7 @@ function renderPractice(){
     html += '</div>';
   }
 
-  html += '</div></div>';
+  html += '</div></div></div>';
   return html;
 }
 
@@ -959,7 +959,7 @@ function renderMatchBody(m, s, isReviewing, result, viewRevealed, timerBarHtml){
   var rightOrder = viewSel && viewSel.rightOrder ? viewSel.rightOrder : shuffledIndices(m.pairs.length, m.id || 'match');
   var links = (viewSel && viewSel.links) || {};
 
-  var html = '<div class="card answer-sheet">' + timerBarHtml;
+  var html = '<div class="card">' + timerBarHtml + '<div class="answer-sheet">';
   html += qMetaAndStemHtml(m, s, m.stem);
   html += '<div class="multi-select-hint">' + icon('check-circle',13) + ' Tap an item on the left, then try any match on the right — it stays open to change until you tap a different left item or tap it again.</div>';
   html += '<div class="match-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px;">';
@@ -1033,7 +1033,7 @@ function renderMatchBody(m, s, isReviewing, result, viewRevealed, timerBarHtml){
   } else {
     html += renderRevealFooter(m, s, isReviewing);
   }
-  html += '</div>';
+  html += '</div></div>';
   return html;
 }
 
@@ -1048,7 +1048,7 @@ function renderSequenceBody(m, s, isReviewing, result, viewRevealed, timerBarHtm
   var interactive = !viewRevealed && !isReviewing;
   var allCorrect = order.length && order.every(function(origIdx, pos){ return origIdx === pos; });
 
-  var html = '<div class="card answer-sheet">' + timerBarHtml;
+  var html = '<div class="card">' + timerBarHtml + '<div class="answer-sheet">';
   html += qMetaAndStemHtml(m, s, m.stem);
   html += '<div class="multi-select-hint">' + icon('check-circle',13) + (interactive ? ' Drag to reorder, or use the arrows' : '') + '</div>';
   /* data-step-id is the STABLE identity FLIP animation keys off of — origIdx never
@@ -1090,7 +1090,7 @@ function renderSequenceBody(m, s, isReviewing, result, viewRevealed, timerBarHtm
   } else {
     html += renderRevealFooter(m, s, isReviewing);
   }
-  html += '</div>';
+  html += '</div></div>';
   return html;
 }
 
@@ -1102,7 +1102,7 @@ function renderCutoffBody(m, s, isReviewing, result, viewRevealed, timerBarHtml)
     s.selected = viewSel;
   }
 
-  var html = '<div class="card answer-sheet">' + timerBarHtml;
+  var html = '<div class="card">' + timerBarHtml + '<div class="answer-sheet">';
   html += qMetaAndStemHtml(m, s, m.stem + (m.testValue !== undefined ? '' : ''));
   if (m.testValue !== undefined) {
     html += '<div class="passage-box">A value of <b class="mono">' + m.testValue + '</b> is given. Drag the slider to where you\'d classify it, then check.</div>';
@@ -1121,7 +1121,7 @@ function renderCutoffBody(m, s, isReviewing, result, viewRevealed, timerBarHtml)
     html += '<div class="reveal-explain"><p>Your side of the threshold: <b>' + escapeHtml(userSide) + '</b></p></div>';
     html += renderRevealFooter(m, s, isReviewing);
   }
-  html += '</div>';
+  html += '</div></div>';
   return html;
 }
 
@@ -1153,7 +1153,7 @@ function renderMnemonicBody(m, s, isReviewing, result, viewRevealed, timerBarHtm
   var resolvedIdx = (isReviewing && result && typeof result.resolvedMnemonicIndex === 'number') ? result.resolvedMnemonicIndex : resolveMnemonicTestIndex(m, s);
   var testLetter = m.letters[resolvedIdx];
 
-  var html = '<div class="card answer-sheet">' + timerBarHtml;
+  var html = '<div class="card">' + timerBarHtml + '<div class="answer-sheet">';
   html += qMetaAndStemHtml(m, s, m.stem);
   html += '<div class="mnem-grid" style="display:flex;flex-wrap:wrap;gap:9px;margin:14px 0;">';
   m.letters.forEach(function(l, i){
@@ -1184,7 +1184,7 @@ function renderMnemonicBody(m, s, isReviewing, result, viewRevealed, timerBarHtm
         '<button class="btn btn-primary" data-action="next-question">' + (s.index + 1 < s.ids.length ? 'Next question' : 'Finish session') + '</button></div>';
     }
   }
-  html += '</div>';
+  html += '</div></div>';
   return html;
 }
 
