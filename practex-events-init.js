@@ -1093,7 +1093,7 @@ async function onClick(e){
       state.pausedSession = null; closeModal(); render(); savePausedSession(); clearLiveSessionSync(); clearPausedSessionSync(); return;
     }
     closeModal();
-    window.location.href = 'practice.html';
+    window.location.href = practexPageUrl('practice.html');
     return;
   }
   if (action === 'confirm-new-test') {
@@ -1286,7 +1286,7 @@ async function onClick(e){
        state.session, same reasoning as the other two exit paths above. */
     var backUrl = state.session && state.session.originContext ? originContextToUrl(state.session.originContext) : null;
     state.session = null;
-    window.location.href = backUrl || 'library.html';
+    window.location.href = backUrl || practexPageUrl('library.html');
     return;
   }
 }
@@ -1469,7 +1469,7 @@ function bootCurrentPage(){
     state.defaultTimePerQ = (!isNaN(storedSecs) && storedSecs >= 0) ? storedSecs : 60; /* seconds; 0 = no limit. Only the DEFAULT offered on a fresh test's gate screen — each session's own timePerQ, once chosen, travels with that session regardless of what this default changes to afterward. */
   } catch(e) { state.defaultTimePerQ = 60; }
   try { state.defaultAutoSkull = localStorage.getItem('practex_auto_skull') !== '0'; } catch(e) { state.defaultAutoSkull = true; } /* on by default */
-  var onPracticePage = /practice\.html/.test(window.location.pathname);
+  var onPracticePage = /practice(-offline)?\.html/.test(window.location.pathname); /* matches practice.html AND practice-offline.html — a plain /practice\.html/ regex doesn't match "practice-offline.html" at all, since "practice" there is followed by "-offline.html", not ".html" directly */
   if (onPracticePage) {
     var hasSession = goToPracticeIfSessionPending(); /* navigates away itself if there's nothing to resume — see practex-learning-practice.js */
     if (!hasSession) return; /* navigation already in flight; rendering this page now would just flash stale content before the browser leaves it */

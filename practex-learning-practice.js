@@ -503,7 +503,7 @@ function normalizePausedSessionForResume(pausedSession){
    for this page to show, so it sends the person back to the library rather than
    rendering an empty practice screen. */
 function goToPracticeIfSessionPending(){
-  if (!state.pausedSession) { window.location.href = 'library.html'; return false; }
+  if (!state.pausedSession) { window.location.href = practexPageUrl('library.html'); return false; }
   var restored = normalizePausedSessionForResume(state.pausedSession);
   if (!restored.ids.length) {
     showToast('That test looks corrupted and can\'t be resumed — sorry about that.');
@@ -511,7 +511,7 @@ function goToPracticeIfSessionPending(){
     savePausedSession();
     clearLiveSessionSync();
     clearPausedSessionSync(); /* bugfix — see the comment above this function's definition in practex-data-core.js */
-    window.location.href = 'library.html';
+    window.location.href = practexPageUrl('library.html');
     return false;
   }
   /* Always true on arrival, whether this was a brand-new session (already true, this
@@ -602,7 +602,7 @@ function startPractice(ids, planKey){
   state.pausedSession.pausedAt = Date.now();
   persistPausedSessionSync();
   savePausedSession(); /* best-effort, not awaited — practice.html's own boot re-reconciles against Supabase/mirror/sync-key anyway, same as any resume */
-  window.location.href = 'practice.html';
+  window.location.href = practexPageUrl('practice.html');
 }
 
 /* Birds-eye view of the whole session — jump to any already-reached question, see at

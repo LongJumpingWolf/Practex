@@ -1198,24 +1198,24 @@ function currentNavOriginContext(){
 function originContextToUrl(origin){
   if (!origin) return null;
   if (origin.view === 'bookshelf') {
-    return 'library.html?view=bookshelf' + (origin.bookshelfActiveSource ? '&source=' + encodeURIComponent(origin.bookshelfActiveSource) : '');
+    return practexPageUrl('library.html?view=bookshelf' + (origin.bookshelfActiveSource ? '&source=' + encodeURIComponent(origin.bookshelfActiveSource) : ''));
   }
   if (origin.selectedPath && origin.selectedPath.length) {
-    return 'library.html?view=browse&path=' + encodeURIComponent(origin.selectedPath.join('␟'));
+    return practexPageUrl('library.html?view=browse&path=' + encodeURIComponent(origin.selectedPath.join('␟')));
   }
   if (origin.view && origin.view !== 'practice' && origin.view !== 'summary') {
-    return 'library.html?view=' + encodeURIComponent(origin.view);
+    return practexPageUrl('library.html?view=' + encodeURIComponent(origin.view));
   }
-  return 'library.html?view=browse';
+  return practexPageUrl('library.html?view=browse');
 }
 
 function pendingNavTargetUrl(){
   var nav = state.pendingNav;
   state.pendingNav = null;
   if (nav) {
-    if (nav.action === 'set-view') return 'library.html?view=' + encodeURIComponent(nav.view || 'browse');
-    if (nav.action === 'open-dashboard') return 'library.html?view=dashboard';
-    if (nav.action === 'select-node' && nav.path) return 'library.html?view=browse&path=' + encodeURIComponent(nav.path);
+    if (nav.action === 'set-view') return practexPageUrl('library.html?view=' + encodeURIComponent(nav.view || 'browse'));
+    if (nav.action === 'open-dashboard') return practexPageUrl('library.html?view=dashboard');
+    if (nav.action === 'select-node' && nav.path) return practexPageUrl('library.html?view=browse&path=' + encodeURIComponent(nav.path));
   }
   /* No specific nav-link interrupted this exit (the person used Leave/Pause &
      leave directly) — fall back to wherever THIS session actually started from,
@@ -1224,7 +1224,7 @@ function pendingNavTargetUrl(){
      cleared), so its captured originContext (see currentNavOriginContext above)
      is exactly what's needed. */
   var originUrl = state.session && state.session.originContext ? originContextToUrl(state.session.originContext) : null;
-  return originUrl || 'library.html';
+  return originUrl || practexPageUrl('library.html');
 }
 function bookmarkButton(m){
   return '<button class="btn btn-ghost btn-sm bookmark-btn'+(m.flagged?' bookmarked':'')+'" data-action="bookmark-current" title="Bookmark question (B)" aria-label="'+(m.flagged?'Remove bookmark':'Bookmark question')+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4V3z"></path></svg><span>'+(m.flagged?'Bookmarked':'Bookmark')+'</span></button>';

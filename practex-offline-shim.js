@@ -30,6 +30,8 @@
   // page) — do nothing.
   if (!document.getElementById('authGate') && !document.getElementById('appRoot')) return;
 
+  window.PRACTEX_OFFLINE_MODE = true; // read by practexPageUrl() in practex-data-core.js — makes every internal redirect (start/resume/leave practice, "back to library", plan/dashboard links) stay on the -offline pages instead of bouncing back out to the real login-gated ones. Set FIRST, before anything else, since startPractice() etc. can fire from user clicks at any point after this.
+
   supabaseClient = null; // see the big comment above — this alone makes every existing save/sync call a safe no-op
 
   // NOT loadLocalMirror() — that helper requires state.currentUser to already be

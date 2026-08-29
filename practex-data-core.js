@@ -635,6 +635,19 @@ var ICON_PATHS = {
   book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
   list: '<path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/>'
 };
+/* Rewrites a same-origin navigation target (e.g. 'library.html', 'practice.html?view=browse')
+   to its Offline Mode counterpart when running under it — set by
+   practex-offline-shim.js via window.PRACTEX_OFFLINE_MODE = true, never true for
+   the real app, so this is a complete no-op (returns path unchanged) anywhere
+   except the two -offline.html pages. Centralizing this in one place means every
+   internal redirect (starting practice, leaving/pausing, resuming, "back to
+   library") stays inside Offline Mode automatically instead of bouncing back out
+   to the real login-gated pages one hardcoded 'practice.html'/'library.html' at a
+   time. */
+function practexPageUrl(path){
+  if (!window.PRACTEX_OFFLINE_MODE || !path) return path;
+  return path.replace(/^library\.html/, 'library-offline.html').replace(/^practice\.html/, 'practice-offline.html');
+}
 function icon(name, size){
   size = size || 16;
   return '<svg class="lucide-icon" width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(ICON_PATHS[name]||'')+'</svg>';
