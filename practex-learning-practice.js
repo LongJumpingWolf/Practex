@@ -681,7 +681,7 @@ function renderPracticeGateScreen(){
 
   html += '<div class="config-row"><div class="gate-row-label">On a mistake or timeout</div>' +
     '<div class="autoskull-row">' +
-      '<button type="button" class="skull-fire-btn' + (s.autoSkullEnabled ? '' : ' is-off') + '" data-action="toggle-gate-autoskull" style="width:30px;" aria-pressed="' + (s.autoSkullEnabled?'true':'false') + '" title="' + (s.autoSkullEnabled ? 'Auto-skull is on — click to turn off' : 'Auto-skull is off — click to turn on') + '">' + skullSvgMarkup() + '</button>' +
+      '<button type="button" class="skull-fire-btn' + (s.autoSkullEnabled ? ' is-ignited' : ' is-off') + '" data-action="toggle-gate-autoskull" style="width:30px;" aria-pressed="' + (s.autoSkullEnabled?'true':'false') + '" title="' + (s.autoSkullEnabled ? 'Auto-skull is on — click to turn off' : 'Auto-skull is off — click to turn on') + '">' + skullSvgMarkup() + '</button>' +
       '<div class="autoskull-text">Auto-skull the question<div class="sub">Marked wrong questions get queued for extra practice automatically</div></div>' +
       '<span class="onoff-pill ' + (s.autoSkullEnabled?'on':'off') + '">' + (s.autoSkullEnabled?'ON':'OFF') + '</span>' +
     '</div></div>';
