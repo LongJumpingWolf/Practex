@@ -18,6 +18,12 @@ function makeMcq(id, subject, chapterPath) {
   };
 }
 
+function extractGate(html) {
+  var b = html.match(/gate-breadcrumb">([^<]*)</);
+  var n = html.match(/gate-location">([^<]*)</);
+  return { breadcrumb: b ? b[1] : null, name: n ? n[1] : null };
+}
+
 const dom = new JSDOM('<div id="appRoot"></div><div id="toast"></div><div id="loadingScreen"></div><div id="authGate"></div><div id="syncStatusPill"></div>', { runScripts: 'outside-only', url: 'https://example.com/' });
 global.window = dom.window; global.document = dom.window.document;
 global.crypto = { subtle: { digest: async () => new ArrayBuffer(32) } };
@@ -26,14 +32,15 @@ let loadFailed = false;
 names.forEach(n => { try { dom.window.eval(fs.readFileSync(path.join(__dirname, n), 'utf8')); } catch(e){ console.error('LOAD ERROR:', e.message); loadFailed = true; } });
 assert('app files load cleanly', !loadFailed);
 
-console.log('\n=== Single question, single chapter (the exact reported screenshot) ===');
+console.log('\n=== Single question, deep chapter path (the exact reported screenshot: Prep Main > Microbiology > Bacteriology > Streptococcaceae) ===');
 {
   dom.window.state = {
-    mcqs: [makeMcq('a', 'Microbiology', ['Bacteriology', 'Staphylococcus'])],
+    mcqs: [makeMcq('a', 'Prep Main', ['Microbiology', '02. Bacteriology', '02. Streptococcaceae'])],
     session: { ids: ['a'], index:0, viewIndex:0, results:[], stats:{correct:0,wrong:0}, autoSkullCount:0, timePerQ:30, autoSkullEnabled:true, awaitingStart:true }
   };
-  var html = dom.window.renderPracticeGateScreen();
-  assert('shows the exact subject > chapter path', html.indexOf('Microbiology &gt; Bacteriology &gt; Staphylococcus') !== -1 || html.indexOf('Microbiology > Bacteriology > Staphylococcus') !== -1, html.match(/gate-location">([^<]*)</));
+  var g = extractGate(dom.window.renderPracticeGateScreen());
+  assert('big name is the DEEPEST segment only', g.name === '02. Streptococcaceae', g);
+  assert('breadcrumb is everything leading up to it', g.breadcrumb === 'Prep Main &gt; Microbiology &gt; 02. Bacteriology', g);
 }
 
 console.log('\n=== Many questions, all the same chapter ===');
@@ -44,9 +51,9 @@ console.log('\n=== Many questions, all the same chapter ===');
     makeMcq('c', 'Pathology', ['Neoplasia']),
   ];
   dom.window.state.session = { ids: ['a','b','c'], index:0, viewIndex:0, results:[], stats:{correct:0,wrong:0}, autoSkullCount:0, timePerQ:30, autoSkullEnabled:true, awaitingStart:true };
-  var html = dom.window.renderPracticeGateScreen();
-  var m = html.match(/gate-location">([^<]*)</);
-  assert('single shared chapter shown, no chapter-count suffix', m && m[1] === 'Pathology &gt; Neoplasia', m);
+  var g = extractGate(dom.window.renderPracticeGateScreen());
+  assert('name is the chapter itself', g.name === 'Neoplasia', g);
+  assert('breadcrumb is just the subject', g.breadcrumb === 'Pathology', g);
 }
 
 console.log('\n=== Same subject, different chapters (e.g. a study plan spanning a unit) ===');
@@ -56,9 +63,9 @@ console.log('\n=== Same subject, different chapters (e.g. a study plan spanning 
     makeMcq('b', 'Pathology', ['Inflammation']),
   ];
   dom.window.state.session = { ids: ['a','b'], index:0, viewIndex:0, results:[], stats:{correct:0,wrong:0}, autoSkullCount:0, timePerQ:30, autoSkullEnabled:true, awaitingStart:true };
-  var html = dom.window.renderPracticeGateScreen();
-  var m = html.match(/gate-location">([^<]*)</);
-  assert('single subject shown with a chapter count', m && m[1] === 'Pathology — 2 chapters', m);
+  var g = extractGate(dom.window.renderPracticeGateScreen());
+  assert('name is the subject', g.name === 'Pathology', g);
+  assert('breadcrumb notes the chapter spread', g.breadcrumb === '2 chapters', g);
 }
 
 console.log('\n=== A few different subjects ===');
@@ -68,36 +75,41 @@ console.log('\n=== A few different subjects ===');
     makeMcq('b', 'Microbiology', ['Bacteriology']),
   ];
   dom.window.state.session = { ids: ['a','b'], index:0, viewIndex:0, results:[], stats:{correct:0,wrong:0}, autoSkullCount:0, timePerQ:30, autoSkullEnabled:true, awaitingStart:true };
-  var html = dom.window.renderPracticeGateScreen();
-  var m = html.match(/gate-location">([^<]*)</);
-  assert('both subjects named directly', m && m[1] === 'Pathology, Microbiology', m);
+  var g = extractGate(dom.window.renderPracticeGateScreen());
+  assert('name lists both subjects', g.name === 'Pathology, Microbiology', g);
+  assert('no breadcrumb needed here', g.breadcrumb === null, g);
 }
 
-console.log('\n=== Many subjects — "Practice Everything" style, naming them all would be noise ===');
+console.log('\n=== Many subjects — "Practice Everything" style ===');
 {
   dom.window.state.mcqs = [
     makeMcq('a','Pathology',['X']), makeMcq('b','Microbiology',['X']),
     makeMcq('c','Pharmacology',['X']), makeMcq('d','Anatomy',['X']),
   ];
   dom.window.state.session = { ids: ['a','b','c','d'], index:0, viewIndex:0, results:[], stats:{correct:0,wrong:0}, autoSkullCount:0, timePerQ:30, autoSkullEnabled:true, awaitingStart:true };
-  var html = dom.window.renderPracticeGateScreen();
-  var m = html.match(/gate-location">([^<]*)</);
-  assert('collapses to a subject count instead of a long list', m && m[1] === '4 subjects', m);
+  var g = extractGate(dom.window.renderPracticeGateScreen());
+  assert('name is a clear catch-all', g.name === 'Practice Everything', g);
+  assert('breadcrumb notes the subject count', g.breadcrumb === '4 subjects', g);
 }
 
-console.log('\n=== Location label is visually distinct (bold pill), not lost in the subtitle text ===');
+console.log('\n=== CSS: name is genuinely bigger/bolder than the breadcrumb, not just re-labeled ===');
 {
-  var hasStyle = (function(){
+  var ok = (function(){
     for (var f of ['library.html','practice.html']) {
       var c = fs.readFileSync(path.join(__dirname, f), 'utf8');
-      if (c.indexOf('.gate-location{') === -1) return false;
-      if (c.indexOf('font-weight:700') === -1) return false;
+      var nameRule = c.match(/\.gate-location\{([^}]*)\}/);
+      var crumbRule = c.match(/\.gate-breadcrumb\{([^}]*)\}/);
+      if (!nameRule || !crumbRule) return false;
+      var nameSize = parseInt((nameRule[1].match(/font-size:(\d+)px/)||[])[1] || '0', 10);
+      var crumbSize = parseInt((crumbRule[1].match(/font-size:(\d+)px/)||[])[1] || '0', 10);
+      if (!(nameSize > crumbSize)) return false;
+      if (nameRule[1].indexOf('font-weight:700') === -1) return false;
     }
     return true;
   })();
-  assert('bold pill CSS present in both real pages', hasStyle);
+  assert('name font-size > breadcrumb font-size, and name is bold, in both real pages', ok);
 }
 
-console.log('\n' + (failures === 0 ? '=== GATE LOCATION LABEL VERIFIED ===' : '=== ' + failures + ' FAILURE(S) — see above ==='));
+console.log('\n' + (failures === 0 ? '=== GATE NAME/BREADCRUMB SPLIT VERIFIED ===' : '=== ' + failures + ' FAILURE(S) — see above ==='));
 process.exitCode = failures === 0 ? 0 : 1;
 process.exit(process.exitCode);

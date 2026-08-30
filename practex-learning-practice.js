@@ -641,15 +641,19 @@ function openQuestionOverview(){
    for why both funnel through the same s.awaitingStart flag). Lets the person set —
    or, on a resume, re-adjust — per-question timing and auto-skull before actually
    looking at a question, and on a resume shows how far they'd already gotten. */
-/* Derives a human-readable "where is this test actually from" label straight from
-   the pool's own questions, rather than trusting originContext alone (accurate for
-   how someone navigated TO start-practice, but "Practice Everything" from the
-   library root has no meaningful selectedPath at all, and a study plan or the
-   skull-mode queue don't either) — this always has an answer because it's just
-   reading what's actually in the session, the same way the "N questions" count
-   right next to it already does. One id->mcq lookup built once, not a repeated
-   .find() per id, since "Practice Everything" can mean thousands of ids. */
-function gateLocationLabel(s){
+/* Derives what this test is FROM, straight from the pool's own questions, rather
+   than trusting originContext alone (accurate for how someone navigated TO
+   start-practice, but "Practice Everything" from the library root has no
+   meaningful selectedPath at all, and a study plan or the skull-mode queue don't
+   either) — this always has an answer because it's just reading what's actually
+   in the session, the same way the "N questions" count right next to it already
+   does. Split into {name, breadcrumb}: name is the one big, specific thing worth
+   a person's attention (the actual chapter, or the subject if the test spans
+   several chapters of it); breadcrumb is the smaller context leading up to that —
+   source/subject/parent chapters — shown above it, not competing with it. One
+   id->mcq lookup built once, not a repeated .find() per id, since "Practice
+   Everything" can mean thousands of ids. */
+function gateLocationInfo(s){
   var byId = {};
   state.mcqs.forEach(function(m){ byId[m.id] = m; });
   var fullPaths = {}, subjects = {};
@@ -657,16 +661,27 @@ function gateLocationLabel(s){
     var m = byId[id];
     if (!m) return;
     var subj = m.subject || 'Unknown';
-    var full = subj + (m.chapterPath && m.chapterPath.length ? ' > ' + m.chapterPath.join(' > ') : '');
-    fullPaths[full] = true;
+    var segments = [subj].concat((m.chapterPath && m.chapterPath.length) ? m.chapterPath : []);
+    var full = segments.join(' > ');
+    if (!fullPaths[full]) fullPaths[full] = segments;
     subjects[subj] = true;
   });
   var fullKeys = Object.keys(fullPaths);
-  if (fullKeys.length === 1) return fullKeys[0]; // every question in this test shares one exact chapter — the common, expected case
+  if (fullKeys.length === 1) {
+    // Every question in this test shares one exact chapter — the common, expected
+    // case. The deepest segment (the actual chapter/topic) is the "name"; whatever
+    // led up to it (source, subject, parent chapters) is the breadcrumb.
+    var segs = fullPaths[fullKeys[0]];
+    return { name: segs[segs.length - 1], breadcrumb: segs.slice(0, -1).join(' > ') };
+  }
   var subjKeys = Object.keys(subjects);
-  if (subjKeys.length === 1) return subjKeys[0] + ' — ' + fullKeys.length + ' chapters'; // one subject, several chapters (e.g. a study plan spanning a unit)
-  if (subjKeys.length <= 3) return subjKeys.join(', '); // a handful of subjects — still worth naming them
-  return subjKeys.length + ' subjects'; // e.g. "Practice Everything" — naming all of them would just be noise
+  if (subjKeys.length === 1) {
+    // One subject, several chapters (e.g. a study plan spanning a unit) — the
+    // subject itself is the name; the breadcrumb just notes the chapter spread.
+    return { name: subjKeys[0], breadcrumb: fullKeys.length + ' chapters' };
+  }
+  if (subjKeys.length <= 3) return { name: subjKeys.join(', '), breadcrumb: '' }; // a handful of subjects — still worth naming them directly
+  return { name: 'Practice Everything', breadcrumb: subjKeys.length + ' subjects' }; // e.g. root-level "Start practice (all)" — naming every subject would just be noise
 }
 
 function renderPracticeGateScreen(){
@@ -679,7 +694,9 @@ function renderPracticeGateScreen(){
 
   var html = '<div class="practice-wrap"><div class="card gate-card">';
   html += '<h2 class="serif" style="margin:0 0 4px;">' + (isResume ? 'Continue where you left off?' : 'Ready to start?') + '</h2>';
-  html += '<div class="gate-location">' + escapeHtml(gateLocationLabel(s)) + '</div>';
+  var loc = gateLocationInfo(s);
+  if (loc.breadcrumb) html += '<div class="gate-breadcrumb">' + escapeHtml(loc.breadcrumb) + '</div>';
+  html += '<div class="gate-location">' + escapeHtml(loc.name) + '</div>';
   html += '<div class="view-sub" style="margin-bottom:' + (isResume ? '18' : '22') + 'px;">' + s.ids.length + ' question' + (s.ids.length===1?'':'s') + (isResume ? ' — question ' + (s.index+1) + ' of ' + s.ids.length : '') + '</div>';
 
   if (isResume) {
