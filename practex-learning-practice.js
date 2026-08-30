@@ -641,6 +641,34 @@ function openQuestionOverview(){
    for why both funnel through the same s.awaitingStart flag). Lets the person set —
    or, on a resume, re-adjust — per-question timing and auto-skull before actually
    looking at a question, and on a resume shows how far they'd already gotten. */
+/* Derives a human-readable "where is this test actually from" label straight from
+   the pool's own questions, rather than trusting originContext alone (accurate for
+   how someone navigated TO start-practice, but "Practice Everything" from the
+   library root has no meaningful selectedPath at all, and a study plan or the
+   skull-mode queue don't either) — this always has an answer because it's just
+   reading what's actually in the session, the same way the "N questions" count
+   right next to it already does. One id->mcq lookup built once, not a repeated
+   .find() per id, since "Practice Everything" can mean thousands of ids. */
+function gateLocationLabel(s){
+  var byId = {};
+  state.mcqs.forEach(function(m){ byId[m.id] = m; });
+  var fullPaths = {}, subjects = {};
+  s.ids.forEach(function(id){
+    var m = byId[id];
+    if (!m) return;
+    var subj = m.subject || 'Unknown';
+    var full = subj + (m.chapterPath && m.chapterPath.length ? ' > ' + m.chapterPath.join(' > ') : '');
+    fullPaths[full] = true;
+    subjects[subj] = true;
+  });
+  var fullKeys = Object.keys(fullPaths);
+  if (fullKeys.length === 1) return fullKeys[0]; // every question in this test shares one exact chapter — the common, expected case
+  var subjKeys = Object.keys(subjects);
+  if (subjKeys.length === 1) return subjKeys[0] + ' — ' + fullKeys.length + ' chapters'; // one subject, several chapters (e.g. a study plan spanning a unit)
+  if (subjKeys.length <= 3) return subjKeys.join(', '); // a handful of subjects — still worth naming them
+  return subjKeys.length + ' subjects'; // e.g. "Practice Everything" — naming all of them would just be noise
+}
+
 function renderPracticeGateScreen(){
   var s = state.session;
   var isResume = s.results.length > 0;
@@ -651,6 +679,7 @@ function renderPracticeGateScreen(){
 
   var html = '<div class="practice-wrap"><div class="card gate-card">';
   html += '<h2 class="serif" style="margin:0 0 4px;">' + (isResume ? 'Continue where you left off?' : 'Ready to start?') + '</h2>';
+  html += '<div class="gate-location">' + escapeHtml(gateLocationLabel(s)) + '</div>';
   html += '<div class="view-sub" style="margin-bottom:' + (isResume ? '18' : '22') + 'px;">' + s.ids.length + ' question' + (s.ids.length===1?'':'s') + (isResume ? ' — question ' + (s.index+1) + ' of ' + s.ids.length : '') + '</div>';
 
   if (isResume) {
