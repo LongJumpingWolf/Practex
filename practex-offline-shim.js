@@ -65,7 +65,40 @@
   // and anywhere else in the app that reads state.currentUser's shape, without
   // ever touching the network.
   state.currentUser = { id: mirror.userId, email: 'Offline mode', user_metadata: { full_name: 'Offline mode' } };
-  applyMirrorToState(mirror, false); // false = don't skip mcqs, load everything
+  applyMirrorToState(mirror, false); // false = don't skip mcqs, load everything — this also sets the mirror's own state.pausedSession as a baseline, reconciled against fresher local sources next
+
+  /* The real app's reconcilePausedSession() does exactly this comparison — mirror
+     vs. the two localStorage safety nets below — but it bails out immediately on
+     "if (!supabaseClient) return", since it also tries a cloud read first. That
+     guard is correct for the online app (no point reconciling without checking
+     the cloud too) but means offline mode never got ANY reconciliation at all —
+     it only ever saw whatever the mirror happened to have, which is written
+     asynchronously and can easily lose a race against a reload or an actual tab
+     close. Replicated here without the cloud row, since there isn't one:
+       - PAUSED_SESSION_SYNC_KEY: written synchronously the instant "Pause & leave"
+         is clicked — durable even if the mirror's own async write hadn't landed
+         yet. This is why "pause, immediately reload" was inconsistent before.
+       - LIVE_SESSION_SYNC_KEY: rewritten on every practice-screen render while a
+         session is live, completely independent of any explicit pause — this is
+         what an ungraceful tab close or reload mid-test actually needs, and
+         nothing was ever checking it in offline mode at all. */
+  var mirrorPausedAt = mirror.pausedSession ? (mirror.pausedSession.pausedAt || 0) : 0;
+  var syncPaused = loadPausedSessionSync();
+  var syncPausedAt = syncPaused ? (syncPaused.pausedAt || 0) : 0;
+  var liveSync = loadLiveSessionSync();
+  var liveSyncAt = liveSync ? (liveSync.savedAt || 0) : 0;
+  var bestPausedAt = Math.max(mirrorPausedAt, syncPausedAt, liveSyncAt);
+  if (bestPausedAt > mirrorPausedAt) {
+    if (liveSyncAt === bestPausedAt) {
+      state.pausedSession = liveSync.session;
+      state.pausedSession.pausedAt = liveSync.savedAt;
+      state.pausedSession.recoveredFromCrash = true; // renderBrowse() shows this distinctly — "Recovered session", not "Paused test", since the person didn't choose this
+    } else {
+      state.pausedSession = syncPaused;
+    }
+    saveUserSettings(); // offline-safe (see the top comment) — writes the winning choice back into the mirror so the next boot doesn't need to redo this comparison
+  }
+  clearLiveSessionSync(); // matches reconcilePausedSession()'s own unconditional clear — whether or not it won, a stale crash-recovery entry shouldn't linger and get re-offered on a future boot after this one's already been resolved one way or the other
 
   if (typeof reconcileSources === 'function' && reconcileSources()) {
     saveSources(); // safe no-op over the network now (supabaseClient is null); still persists locally via persistLocalMirror() at the top of saveUserSettings()
