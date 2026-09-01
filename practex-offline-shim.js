@@ -53,9 +53,19 @@
     if (loading) loading.style.display = 'none';
     if (gate) {
       gate.style.display = 'flex';
-      gate.innerHTML = '<div style="max-width:420px;margin:auto;padding:32px;text-align:center;color:#EAF0F5;">' +
-        '<h2 style="margin-bottom:10px;">No offline copy found on this device</h2>' +
-        '<p style="opacity:0.8;line-height:1.5;">Offline mode reads straight from this browser\'s own local storage — it only works on the exact device/browser Practex was normally used on before. Try opening this page on that device instead.</p>' +
+      /* .auth-gate's real background is var(--paper) — light — but this was
+         written with color:#EAF0F5, the near-white text color used everywhere
+         ELSE in the app for text sitting on the dark --cover sidebar/header.
+         Light-on-light: technically present, practically invisible. Matches the
+         real .auth-card styling now instead of inventing ad-hoc colors, and adds
+         an actual way forward — import-offline-backup.html already exists for
+         exactly this device (bring a backup exported from wherever the real data
+         lives) — the old version just never linked to it, a genuine dead end. */
+      gate.innerHTML = '<div class="auth-card" style="max-width:420px;">' +
+        '<h2 class="serif" style="margin:0 0 10px;">No offline copy found on this device</h2>' +
+        '<p class="view-sub" style="line-height:1.55;margin-bottom:20px;">Offline Mode reads straight from this browser\'s own local storage — it only works on the exact device/browser Practex was normally used on before.</p>' +
+        '<a href="import-offline-backup.html" class="btn btn-primary" style="display:block;text-decoration:none;margin-bottom:10px;">Import a backup file instead</a>' +
+        '<p class="view-sub" style="font-size:12px;">Have a <code>practex_backup.json</code> from another device? That page will load it onto this one.</p>' +
         '</div>';
     }
     return;
