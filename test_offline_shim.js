@@ -91,7 +91,7 @@ console.log('=== SCENARIO 1: a real local mirror exists on this device ===');
   assert('sync status pill force-hidden via injected style', win.document.head.innerHTML.indexOf('#syncStatusPill{display:none') !== -1);
 }
 
-console.log('\n=== SCENARIO 2: no local mirror on this device (wrong device / never used before) ===');
+console.log('\n=== SCENARIO 2: no local mirror on this device (wrong device / never used before) — should just be an EMPTY normal app, not a dead end ===');
 {
   const FDBFactory = require('fake-indexeddb/lib/FDBFactory');
   const dom = new JSDOM(`
@@ -106,25 +106,70 @@ console.log('\n=== SCENARIO 2: no local mirror on this device (wrong device / ne
   global.navigator = win.navigator;
   global.crypto = { subtle: { digest: async () => new ArrayBuffer(32) } };
   global.fetch = async () => ({ ok: false, json: async () => ({}) });
-  global.localStorage = { getItem(){return null;}, setItem(){}, removeItem(){} };
-  win.localStorage = global.localStorage;
-  win.indexedDB = new FDBFactory(); // fresh, empty — nothing seeded
+  global.localStorage = win.localStorage; // jsdom's own real implementation — see test_offline_pause_reconciliation.js for why assigning a mock object here doesn't actually work
+  win.indexedDB = new FDBFactory(); // fresh, empty — nothing seeded, exactly a never-used device
   global.indexedDB = win.indexedDB;
 
   const names = ['practex-data-core.js','practex-import-content.js','practex-render-library.js','practex-learning-practice.js','practex-events-init.js'];
-  names.forEach(n => { try { win.eval(fs.readFileSync(path.join(__dirname, n), 'utf8')); } catch (e) {} });
+  let loadFailed = false;
+  names.forEach(n => { try { win.eval(fs.readFileSync(path.join(__dirname, n), 'utf8')); } catch (e) { console.error('LOAD ERROR in ' + n + ':', e.message); loadFailed = true; } });
+  assert('app files load cleanly', !loadFailed);
 
   const shimSrc = fs.readFileSync(path.join(__dirname, 'practex-offline-shim.js'), 'utf8');
   win.eval(shimSrc);
   await new Promise(r => setTimeout(r, 50));
 
-  assert('no crash with an empty/missing mirror', true); // if we got here without throwing, this already passed
-  const gateHtml = win.document.getElementById('authGate').innerHTML;
-  assert('auth gate shown with a clear explanation, not silently blank', win.document.getElementById('authGate').style.display === 'flex' && gateHtml.indexOf('No offline copy found') !== -1);
-  assert('app root stays hidden', win.document.getElementById('appRoot').style.display !== 'grid');
-  assert('does NOT use the old near-invisible light-on-light text color (the actual bug reported)', gateHtml.indexOf('#EAF0F5') === -1, gateHtml.slice(0,150));
-  assert('uses the real .auth-card styling instead of ad-hoc colors', gateHtml.indexOf('auth-card') !== -1);
-  assert('gives an actual way forward — links to the backup-import tool, not a dead end', gateHtml.indexOf('import-offline-backup.html') !== -1);
+  assert('no crash with a completely empty device', true); // if we got here without throwing, this already passed
+  assert('auth gate hidden — no blocking screen at all', win.document.getElementById('authGate').style.display === 'none' || win.document.getElementById('authGate').style.display === '');
+  assert('app root shown normally, same as any real boot', win.document.getElementById('appRoot').style.display === 'grid');
+  assert('a local identity was generated so this device has somewhere consistent to save to', win.state.currentUser && win.state.currentUser.id && win.state.currentUser.id.indexOf('offline-local-') === 0, win.state.currentUser);
+  assert('library starts genuinely empty, not fake/placeholder data', Array.isArray(win.state.mcqs) && win.state.mcqs.length === 0);
+  const appHtml = win.document.getElementById('appRoot').innerHTML;
+  assert('the real "nothing logged yet, go to Add source" empty state renders — same as a normal fresh account would show', appHtml.indexOf('Nothing logged yet') !== -1, appHtml.length);
+  assert('offline mode ALSO surfaces the backup-import option right there in that same message, not hidden behind a separate dead-end screen', appHtml.indexOf('import-offline-backup.html') !== -1);
+
+  // The generated identity should be durable — a second boot on the same
+  // (still-empty) device should reuse it, not silently regenerate a new one
+  // and orphan whatever gets added under the first one.
+  var db2 = await win.openDataMirrorDb();
+  var tx2 = db2.transaction(win.DATA_MIRROR_STORE_NAME, 'readonly');
+  var persisted = await win.requestToPromise(tx2.objectStore(win.DATA_MIRROR_STORE_NAME).get('current'));
+  assert('the generated empty identity was actually persisted locally, not just held in memory', persisted && persisted.userId === win.state.currentUser.id, persisted);
+}
+
+console.log('\n=== SCENARIO 3: the SAME empty-device generated identity is reused on a second boot, not regenerated ===');
+{
+  const FDBFactory = require('fake-indexeddb/lib/FDBFactory');
+  const dom = new JSDOM(`
+    <div id="loadingScreen" style="display:flex;"></div>
+    <div id="authGate" style="display:none;"></div>
+    <div id="appRoot" style="display:none;"></div>
+    <div id="toast"></div><div id="modalRoot"></div><div id="syncStatusPill"></div>
+  `, { runScripts: 'outside-only', url: 'https://example.com/library.html' });
+  const win = dom.window;
+  global.window = win; global.document = win.document; global.navigator = win.navigator;
+  global.crypto = { subtle: { digest: async () => new ArrayBuffer(32) } };
+  global.fetch = async () => ({ ok: false, json: async () => ({}) });
+  global.localStorage = win.localStorage;
+  win.indexedDB = new FDBFactory();
+  global.indexedDB = win.indexedDB;
+  const names = ['practex-data-core.js','practex-import-content.js','practex-render-library.js','practex-learning-practice.js','practex-events-init.js'];
+  names.forEach(n => win.eval(fs.readFileSync(path.join(__dirname, n), 'utf8')));
+
+  const shimSrc = fs.readFileSync(path.join(__dirname, 'practex-offline-shim.js'), 'utf8');
+  win.eval(shimSrc);
+  await new Promise(r => setTimeout(r, 50));
+  const firstId = win.state.currentUser.id;
+
+  // Simulate "Add source" having actually added a question in between boots.
+  win.state.mcqs.push({ id: 'x1', question: 'test', subject: 'S', chapterPath: ['C'], source: 'Book', tags: [], options: [], answer: [], explanation: '', images: [], answerImages: [], notes: [], flagged: false, learning: { history: [], due: Date.now() } });
+  await win.saveLibrary();
+
+  win.eval(shimSrc); // second boot, same device
+  await new Promise(r => setTimeout(r, 50));
+
+  assert('the same identity is reused on a second boot', win.state.currentUser.id === firstId, { first: firstId, second: win.state.currentUser.id });
+  assert('the question added between boots is still there — the second boot did not wipe it', win.state.mcqs.length === 1 && win.state.mcqs[0].id === 'x1', win.state.mcqs);
 }
 
 console.log('\n' + (failures === 0 ? '=== OFFLINE SHIM VERIFIED ===' : '=== ' + failures + ' FAILURE(S) — see above ==='));

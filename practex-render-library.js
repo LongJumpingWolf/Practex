@@ -1092,7 +1092,9 @@ function renderSidebar(){
   html += '<button class="toc-root-link' + (state.view==='browse' && !state.selectedPath ? ' active' : '') + '" data-action="clear-selection">' + icon('home',14) + ' Library (all subjects)</button>';
   html += '<div class="toc">';
   if (!subjectKeys.length) {
-    html += '<div class="toc-empty">Nothing logged yet. Go to <strong>Add source</strong> to import your first set of OCR\'d MCQs.</div>';
+    html += '<div class="toc-empty">Nothing logged yet. Go to <strong>Add source</strong> to import your first set of OCR\'d MCQs.' +
+      (window.PRACTEX_OFFLINE_MODE ? '<br><br>Have a <code>practex_backup.json</code> from another device? <a href="import-offline-backup.html">Import it here</a> instead.' : '') +
+      '</div>';
   } else {
     subjectKeys.forEach(function(sk){
       html += renderTocNode(tree[sk], [sk], true);
